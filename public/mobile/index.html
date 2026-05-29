@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Aura Tenant Mobile App</title>
+  <!-- Google Fonts: Inter and Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons (CDN) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Mobile Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- =============================================================
+       1. AUTH SHIELD / LOGIN VIEW (Translucent Overlay)
+       ============================================================= -->
+  <div id="mobile-auth-shield" class="mobile-overlay active">
+    <div class="auth-card glass">
+      <div class="brand">
+        <span class="logo-sparkle">✨</span>
+        <h2>Aura Mobile</h2>
+        <p class="subtitle">Tenant Workspace Access</p>
+      </div>
+
+      <form id="form-mobile-login">
+        <div class="form-group">
+          <label for="m-login-email">Email Address</label>
+          <input type="email" id="m-login-email" class="mobile-input" required placeholder="manager@company.com">
+        </div>
+        <div class="form-group">
+          <label for="m-login-password">Password</label>
+          <input type="password" id="m-login-password" class="mobile-input" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn-mobile btn-primary-mobile">
+          <span>Authorize Access</span>
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       2. MOBILE PORTAL FRAMEWAY
+       ============================================================= -->
+  <div id="mobile-portal" class="mobile-portal-container" style="display: none;">
+    
+    <!-- Mobile App Header -->
+    <header class="mobile-header glass">
+      <div class="header-left">
+        <span class="logo-sparkle">✨</span>
+        <div>
+          <h4 id="m-header-company">Loading Workspace</h4>
+          <span class="badge-tier" id="m-header-tier">Sandbox</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="icon-btn-mobile" id="btn-m-logout" title="Log out">
+          <i data-lucide="log-out" style="color: var(--color-danger);"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Dynamic Screens Viewports -->
+    <main class="mobile-viewport">
+      
+      <!-- SCREEN: DASHBOARD -->
+      <section class="mobile-screen active" id="scr-home">
+        <!-- Quick Welcome -->
+        <div class="welcome-banner">
+          <h3>Hello, <span id="m-user-name">Manager</span></h3>
+          <p class="text-muted">Here is your workspace status today</p>
+        </div>
+
+        <!-- System Online Banner -->
+        <div class="online-indicator-card glass">
+          <div class="indicator-header">
+            <div class="pulse-wrapper">
+              <span class="pulse-dot"></span>
+              <span style="font-weight: 500; font-size: 0.85rem; color: #10b981;">AI Agent Active</span>
+            </div>
+            <span class="m-status-name" id="m-indicator-agent-name">Aura</span>
+          </div>
+          <p class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">Inbound Twilio numbers and browser sandbox are active.</p>
+        </div>
+
+        <!-- Metrics Cards Mini-Grid -->
+        <div class="m-metrics-grid">
+          <div class="m-metric-card glass">
+            <span class="m-metric-label">Active Calls</span>
+            <div class="m-metric-value" id="m-stat-active-calls">0</div>
+          </div>
+          <div class="m-metric-card glass">
+            <span class="m-metric-label">Mins Used</span>
+            <div class="m-metric-value" id="m-stat-minutes">0.0</div>
+          </div>
+        </div>
+
+        <!-- Live Streams/Logs Section -->
+        <div class="m-section">
+          <div class="section-title">
+            <h5>Recent Call History</h5>
+          </div>
+          <div class="m-call-history-list" id="m-calls-list">
+            <!-- Loaded dynamically -->
+            <p class="empty-text">No calls recorded today.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN: APPOINTMENTS -->
+      <section class="mobile-screen" id="scr-bookings">
+        <div class="welcome-banner">
+          <h3>Appointments</h3>
+          <p class="text-muted">Manage scheduled client bookings</p>
+        </div>
+
+        <!-- Appointments Search -->
+        <div class="m-search-box">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="search-m-bookings" class="mobile-input" placeholder="Search customer bookings...">
+        </div>
+
+        <!-- Bookings Timeline List -->
+        <div class="m-bookings-list" id="m-bookings-list">
+          <!-- Loaded dynamically -->
+          <p class="empty-text">No appointments found.</p>
+        </div>
+
+        <!-- FAB: Add Booking -->
+        <button class="mobile-fab" id="btn-m-add-booking" title="Schedule Manually">
+          <i data-lucide="plus"></i>
+        </button>
+      </section>
+
+      <!-- SCREEN: CRM HUB -->
+      <section class="mobile-screen" id="scr-crm">
+        <div class="welcome-banner">
+          <h3>CRM & Contacts</h3>
+          <p class="text-muted">Search customers and pipelines</p>
+        </div>
+
+        <!-- CRM Tab togglers -->
+        <div class="m-sub-tabs">
+          <div class="m-sub-tab active" data-subtab="contacts"><i data-lucide="users"></i> Contacts</div>
+          <div class="m-sub-tab" data-subtab="deals"><i data-lucide="dollar-sign"></i> Deals</div>
+        </div>
+
+        <!-- CRM Contents -->
+        <div class="m-crm-content">
+          <!-- Sub-Pane: Contacts -->
+          <div class="m-crm-subpane active" id="m-sub-contacts">
+            <div class="m-search-box">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" id="search-m-contacts" class="mobile-input" placeholder="Search contacts...">
+            </div>
+            <div class="m-contacts-list" id="m-contacts-list">
+              <!-- Loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Sub-Pane: Deals -->
+          <div class="m-crm-subpane" id="m-sub-deals">
+            <div class="m-deals-list" id="m-deals-list">
+              <!-- Loaded dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN: SETTINGS -->
+      <section class="mobile-screen" id="scr-settings">
+        <div class="welcome-banner">
+          <h3>AI Settings</h3>
+          <p class="text-muted">Configure your virtual receptionist</p>
+        </div>
+
+        <form id="form-mobile-settings" class="mobile-form glass">
+          <div class="form-group">
+            <label for="m-set-company">Company / Spa Name</label>
+            <input type="text" id="m-set-company" class="mobile-input" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="m-set-agent-name">AI Receptionist Name</label>
+            <input type="text" id="m-set-agent-name" class="mobile-input" required>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-voice">Voice Character</label>
+            <select id="m-set-voice" class="mobile-input">
+              <option value="alloy">Alloy (Balanced)</option>
+              <option value="sage">Sage (Warm / Professional)</option>
+              <option value="shimmer">Shimmer (Professional)</option>
+              <option value="echo">Echo (Male Balanced)</option>
+              <option value="ash">Ash (Casual)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-accent">Voice Accent / Language</label>
+            <select id="m-set-accent" class="mobile-input">
+              <option value="default">Default Accent (Neutral US)</option>
+              <option value="singlish">Singaporean (Singlish)</option>
+              <option value="chinese-english">Chinese English Accent</option>
+              <option value="chinese-mandarin">Chinese Mandarin (Spoken in Mandarin)</option>
+              <option value="malaysian-english">Malaysian English Accent</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-system-mode">System Scheduling Mode</label>
+            <select id="m-set-system-mode" class="mobile-input">
+              <option value="service">Clinic / Service / Staff Booking</option>
+              <option value="restaurant">Restaurant / Table Seating Reservation</option>
+              <option value="hotel">🏨 Hotel / Room Reservation</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-max-duration">Max Call Duration</label>
+            <select id="m-set-max-duration" class="mobile-input">
+              <option value="5">5 Minutes</option>
+              <option value="7">7 Minutes</option>
+              <option value="10">10 Minutes</option>
+              <option value="15">15 Minutes</option>
+              <option value="20">20 Minutes</option>
+              <option value="30">30 Minutes</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-silence-timeout">Max Silence Timeout (No Answer)</label>
+            <select id="m-set-silence-timeout" class="mobile-input">
+              <option value="30">30 Seconds</option>
+              <option value="60">1 Minute</option>
+              <option value="90">1.5 Minutes</option>
+              <option value="120">2 Minutes</option>
+              <option value="180">3 Minutes</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-transfer">Human Backup Number</label>
+            <input type="tel" id="m-set-transfer" class="mobile-input" placeholder="e.g. +15551234567">
+            <small class="hint">Forward calls when AI requests help</small>
+          </div>
+
+          <div class="form-group">
+            <label for="m-set-website-url">Company Website URL(s)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="m-set-website-url" class="mobile-input" placeholder="e.g. https://site.com, https://site.com/faq" style="flex: 1; margin: 0;">
+              <button type="button" id="btn-m-crawl-website" class="btn-mobile btn-primary-mobile" style="width: auto; padding: 0 12px; margin: 0; min-height: auto; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                <i data-lucide="globe" style="width: 14px; height: 14px;"></i> Crawl
+              </button>
+            </div>
+            <div id="m-crawl-status-container" style="display: none; margin-top: 8px; padding: 8px; border-radius: 6px; background: rgba(255,255,255,0.05); font-size: 0.75rem; border: 1px solid var(--border-glass);">
+              <span id="m-crawl-status-text" style="color: var(--color-primary); font-weight: 500;">Idle</span>
+            </div>
+          </div>
+
+          <div class="form-group" id="m-set-resources-group">
+            <label for="m-set-resources">Resources / Staff (Comma-separated)</label>
+            <input type="text" id="m-set-resources" class="mobile-input" placeholder="Therapist A, Therapist B">
+          </div>
+
+          <!-- Restaurant Tables configuration grid/list inside settings screen -->
+          <div class="form-group" id="m-set-tables-group" style="display: none; border-top: 1px solid var(--border-glass); margin-top: 15px; padding-top: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <label style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); margin: 0;">Restaurant Tables</label>
+              <button type="button" class="btn-mobile btn-primary-mobile" id="btn-m-open-table-sheet" style="padding: 6px 12px; font-size: 0.75rem; width: auto; margin: 0; min-height: auto; display: flex; align-items: center; gap: 4px;">
+                <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add Table
+              </button>
+            </div>
+            <div id="m-tables-list-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+              <!-- Loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Hotel Rooms configuration grid/list inside settings screen -->
+          <div class="form-group" id="m-set-rooms-group" style="display: none; border-top: 1px solid var(--border-glass); margin-top: 15px; padding-top: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <label style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); margin: 0;">Hotel Rooms</label>
+              <button type="button" class="btn-mobile btn-primary-mobile" id="btn-m-open-room-sheet" style="padding: 6px 12px; font-size: 0.75rem; width: auto; margin: 0; min-height: auto; display: flex; align-items: center; gap: 4px;">
+                <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add Room
+              </button>
+            </div>
+            <div id="m-rooms-list-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+              <!-- Loaded dynamically -->
+            </div>
+          </div>
+
+          <!-- Weekly Working Hours -->
+          <div style="border-top: 1px solid var(--border-glass); margin-top: 15px; padding-top: 15px;">
+            <label style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); display: block; margin-bottom: 10px;">Weekly Working Hours</label>
+            <div id="m-working-hours-container" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Monday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-monday" class="m-work-day-checkbox" checked> Mon
+                </label>
+                <input type="time" id="m-work-start-monday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="09:00">
+                <input type="time" id="m-work-end-monday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="17:00">
+              </div>
+              <!-- Tuesday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-tuesday" class="m-work-day-checkbox" checked> Tue
+                </label>
+                <input type="time" id="m-work-start-tuesday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="09:00">
+                <input type="time" id="m-work-end-tuesday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="17:00">
+              </div>
+              <!-- Wednesday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-wednesday" class="m-work-day-checkbox" checked> Wed
+                </label>
+                <input type="time" id="m-work-start-wednesday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="09:00">
+                <input type="time" id="m-work-end-wednesday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="17:00">
+              </div>
+              <!-- Thursday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-thursday" class="m-work-day-checkbox" checked> Thu
+                </label>
+                <input type="time" id="m-work-start-thursday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="09:00">
+                <input type="time" id="m-work-end-thursday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="17:00">
+              </div>
+              <!-- Friday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-friday" class="m-work-day-checkbox" checked> Fri
+                </label>
+                <input type="time" id="m-work-start-friday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="09:00">
+                <input type="time" id="m-work-end-friday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="17:00">
+              </div>
+              <!-- Saturday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-saturday" class="m-work-day-checkbox"> Sat
+                </label>
+                <input type="time" id="m-work-start-saturday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="10:00">
+                <input type="time" id="m-work-end-saturday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="14:00">
+              </div>
+              <!-- Sunday -->
+              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: white; cursor: pointer;">
+                  <input type="checkbox" id="m-work-day-sunday" class="m-work-day-checkbox"> Sun
+                </label>
+                <input type="time" id="m-work-start-sunday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="10:00">
+                <input type="time" id="m-work-end-sunday" class="mobile-input" style="padding: 6px 8px; font-size: 0.75rem;" value="14:00">
+              </div>
+            </div>
+          </div>
+
+          <!-- Breaks and Gap -->
+          <div style="border-top: 1px solid var(--border-glass); margin-top: 15px; padding-top: 15px; display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
+            <div class="form-group">
+              <label>Lunch Break</label>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <input type="time" id="m-break-start" class="mobile-input" style="padding: 8px; font-size: 0.75rem;" value="12:00">
+                <span style="font-size: 0.7rem; color: var(--text-muted);">to</span>
+                <input type="time" id="m-break-end" class="mobile-input" style="padding: 8px; font-size: 0.75rem;" value="13:00">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="m-appointment-gap">Buffer Gap</label>
+              <select id="m-appointment-gap" class="mobile-input" style="padding: 8px 12px; font-size: 0.75rem;">
+                <option value="0">None</option>
+                <option value="10">10m</option>
+                <option value="15" selected>15m</option>
+                <option value="30">30m</option>
+                <option value="45">45m</option>
+                <option value="60">60m</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Google Calendar Sync section -->
+          <div style="border-top: 1px solid var(--border-glass); margin-top: 15px; padding-top: 15px;">
+            <label style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); display: block; margin-bottom: 10px;">Google Calendar Sync</label>
+            <div id="m-gcal-status-container" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 10px; border: 1px solid var(--border-glass);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="calendar" style="color: #4285F4; width: 20px; height: 20px;"></i>
+                <div>
+                  <div id="m-gcal-status-text" style="font-weight: 600; color: white; font-size: 0.85rem;">Disconnected</div>
+                  <div id="m-gcal-status-subtext" style="font-size: 0.7rem; color: var(--text-muted);">Sync appointments in real-time</div>
+                </div>
+              </div>
+              <button type="button" class="btn-mobile btn-secondary-mobile" id="btn-m-connect-gcal" style="padding: 6px 12px; font-size: 0.75rem; width: auto; margin: 0; min-height: auto;">Connect</button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-mobile btn-primary-mobile mt-4" id="btn-m-save-settings">
+            <i data-lucide="save"></i>
+            <span>Save Settings</span>
+          </button>
+        </form>
+      </section>
+
+    </main>
+
+    <!-- Bottom Nav Bar -->
+    <nav class="mobile-nav glass">
+      <button class="nav-item active" data-target="home">
+        <i data-lucide="layout-dashboard"></i>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" data-target="bookings">
+        <i data-lucide="calendar"></i>
+        <span>Bookings</span>
+      </button>
+      <button class="nav-item" data-target="crm">
+        <i data-lucide="users"></i>
+        <span>CRM</span>
+      </button>
+      <button class="nav-item" data-target="settings">
+        <i data-lucide="settings"></i>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- =============================================================
+       3. MODAL SHEET: ADD APPOINTMENT (iOS Style Slide Up)
+       ============================================================= -->
+  <div id="m-sheet-booking" class="mobile-sheet-overlay">
+    <div class="mobile-sheet glass">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h4>Schedule Booking</h4>
+        <button class="close-sheet-btn" id="btn-m-close-sheet"><i data-lucide="x"></i></button>
+      </div>
+
+      <form id="form-m-booking" class="sheet-body">
+        <div class="form-group">
+          <label for="m-appt-name">Customer Name *</label>
+          <input type="text" id="m-appt-name" class="mobile-input" required placeholder="Charlie Brown">
+        </div>
+        <div class="form-group">
+          <label for="m-appt-phone">Phone Number *</label>
+          <input type="tel" id="m-appt-phone" class="mobile-input" required placeholder="+15551234567">
+        </div>
+        
+        <div class="form-row-mobile">
+          <div class="form-group" id="m-appt-date-group">
+            <label for="m-appt-date" id="m-appt-date-label">Date *</label>
+            <input type="date" id="m-appt-date" class="mobile-input" required>
+          </div>
+          <div class="form-group" id="m-appt-checkout-group" style="display: none;">
+            <label for="m-appt-checkout-date">Check-Out Date *</label>
+            <input type="date" id="m-appt-checkout-date" class="mobile-input">
+          </div>
+          <div class="form-group" id="m-appt-time-group">
+            <label for="m-appt-time" id="m-appt-time-label">Time *</label>
+            <input type="time" id="m-appt-time" class="mobile-input" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="m-appt-service" id="m-appt-service-label">Service *</label>
+          <select id="m-appt-service" class="mobile-input" required>
+            <option value="">-- Select Service --</option>
+            <option value="Swedish Massage">Swedish Massage</option>
+            <option value="Deep Tissue Massage">Deep Tissue Massage</option>
+            <option value="Facial Treatment">Facial Treatment</option>
+            <option value="Aromatherapy">Aromatherapy</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="m-appt-resource" id="m-appt-resource-label">Staff / Resource *</label>
+          <select id="m-appt-resource" class="mobile-input" required></select>
+        </div>
+
+        <div class="form-group" id="m-appt-party-row" style="display: none;">
+          <label for="m-appt-party-size">Party Size (Number of Guests) *</label>
+          <input type="number" id="m-appt-party-size" class="mobile-input" min="1" value="2" required>
+        </div>
+
+        <div class="form-group">
+          <label for="m-appt-notes">Special Notes</label>
+          <textarea id="m-appt-notes" class="mobile-input text-area" rows="2" placeholder="e.g. Prefers light pressure"></textarea>
+        </div>
+
+        <button type="submit" class="btn-mobile btn-primary-mobile mt-4">
+          <i data-lucide="check"></i>
+          <span>Confirm Booking</span>
+        </button>
+      </form>
+    </div>
+  </div>
+  <!-- =============================================================
+       4. MODAL SHEET: CALL DETAILS & TRANSCRIPT (iOS Style Slide Up)
+       ============================================================= -->
+  <div id="m-sheet-call-detail" class="mobile-sheet-overlay">
+    <div class="mobile-sheet glass">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h4>Call Transcript</h4>
+        <button class="close-sheet-btn" id="btn-m-close-call-sheet"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="sheet-body" style="padding-top: 10px; overflow-y: auto;">
+        <div class="m-call-meta-box glass" style="padding: 12px; border-radius: 12px; margin-bottom: 16px; background: rgba(0,0,0,0.2);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <strong id="m-call-detail-phone" style="font-size: 1rem;">+15551234567</strong>
+            <span class="call-status-pill" id="m-call-detail-status" style="font-size: 0.65rem;">completed</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+            <span id="m-call-detail-time">June 15, 10:00 AM</span>
+            <span id="m-call-detail-duration">Duration: 45s</span>
+          </div>
+        </div>
+
+        <div class="m-call-summary-box" style="margin-bottom: 20px; display: none;" id="m-call-detail-summary-wrapper">
+          <h5 style="font-size: 0.75rem; text-transform: uppercase; color: var(--color-primary); letter-spacing: 0.5px; margin-bottom: 6px;">AI Summary</h5>
+          <p id="m-call-detail-summary" style="font-size: 0.85rem; line-height: 1.4; color: var(--text-color); background: rgba(139, 92, 246, 0.05); border: 1px dashed rgba(139, 92, 246, 0.2); padding: 10px 12px; border-radius: 10px;"></p>
+        </div>
+
+        <div>
+          <h5 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 10px;">Conversation Feed</h5>
+          <div id="m-call-detail-transcript" style="display: flex; flex-direction: column; gap: 12px; max-height: 300px; overflow-y: auto; padding-right: 4px;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SHEET: CONNECT GCAL MOBILE -->
+  <div id="m-sheet-gcal" class="mobile-sheet-overlay">
+    <div class="mobile-sheet glass">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h4>Connect Google Calendar</h4>
+        <button class="close-sheet-btn" id="btn-m-close-gcal-sheet"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-m-connect-gcal" class="sheet-body">
+        <div class="form-group">
+          <label for="m-gcal-email">Google Email Address</label>
+          <input type="email" id="m-gcal-email" class="mobile-input" required placeholder="user@gmail.com">
+        </div>
+        <button type="submit" class="btn-mobile btn-primary-mobile mt-4">
+          <i data-lucide="check"></i>
+          <span>Authorize & Connect</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL SHEET: ADD/EDIT RESTAURANT TABLE MOBILE -->
+  <div id="m-sheet-table" class="mobile-sheet-overlay">
+    <div class="mobile-sheet glass">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h4 id="m-table-sheet-title">Add Restaurant Table</h4>
+        <button type="button" class="close-sheet-btn" id="btn-m-close-table-sheet"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-m-table" class="sheet-body">
+        <input type="hidden" id="m-table-id-input">
+        <div class="form-group">
+          <label for="m-table-number-input">Table Number / Identifier</label>
+          <input type="text" id="m-table-number-input" class="mobile-input" placeholder="e.g. Table 5" required>
+        </div>
+        <div class="form-group">
+          <label for="m-table-seats-input">Number of Seats (Capacity)</label>
+          <input type="number" id="m-table-seats-input" class="mobile-input" min="1" placeholder="e.g. 4" required>
+        </div>
+        <button type="submit" class="btn-mobile btn-primary-mobile mt-4">
+          <i data-lucide="check"></i>
+          <span>Save Table</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL SHEET: ADD/EDIT HOTEL ROOM MOBILE -->
+  <div id="m-sheet-room" class="mobile-sheet-overlay">
+    <div class="mobile-sheet glass">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h4 id="m-room-sheet-title">Add Hotel Room</h4>
+        <button type="button" class="close-sheet-btn" id="btn-m-close-room-sheet"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-m-room" class="sheet-body">
+        <input type="hidden" id="m-room-id-input">
+        <div class="form-group">
+          <label for="m-room-number-input">Room Number / Identifier</label>
+          <input type="text" id="m-room-number-input" class="mobile-input" placeholder="e.g. Room 101" required>
+        </div>
+        <div class="form-group">
+          <label for="m-room-type-input">Room Type</label>
+          <select id="m-room-type-input" class="mobile-input" required>
+            <option value="Single Room">Single Room</option>
+            <option value="Double Room">Double Room</option>
+            <option value="Deluxe Suite">Deluxe Suite</option>
+            <option value="Family Room">Family Room</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-room-price-input">Price per Night ($)</label>
+          <input type="number" id="m-room-price-input" class="mobile-input" min="0" placeholder="e.g. 150" required>
+        </div>
+        <button type="submit" class="btn-mobile btn-primary-mobile mt-4">
+          <i data-lucide="check"></i>
+          <span>Save Room</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Mobile Scripts -->
+  <script src="app.js?v=1.0.2"></script>
+</body>
+</html>

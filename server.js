@@ -1,0 +1,2883 @@
+import express from 'express';
+import { WebSocketServer, WebSocket } from 'ws';
+import http from 'http';
+import url from 'url';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import twilio from 'twilio';
+import { RestClient as signalwire } from '@signalwire/compatibility-api';
+import cors from 'cors';
+import os from 'os';
+import { spawn } from 'child_process';
+
+import {
+  initDb,
+  getSettings,
+  updateSettings,
+  getAppointments,
+  addAppointment,
+  deleteAppointment,
+  checkAvailability,
+  addCallLog,
+  updateCallStatus,
+  updateCallSummary,
+  appendCallTranscript,
+  getCallLogs,
+  getServices,
+  addService,
+  deleteService,
+  bulkInsertServices,
+  updateService,
+  
+  // CRM Imports
+  getContacts,
+  findContactByPhone,
+  addContact,
+  updateContactLeadStage,
+  deleteContact,
+  getDeals,
+  addDeal,
+  updateDealStage,
+  deleteDeal,
+  getActivities,
+  addActivity,
+
+  // SaaS Imports
+  registerTenant,
+  authenticateTenant,
+  getTenantUsage,
+  updateTenantSubscription,
+  findTenantByTwilioNumber,
+  isAdminTenant,
+  getAllTenantsWithUsage,
+  updateTenantByAdmin,
+  getTenantStatus,
+  getActiveCallsCount,
+  getActiveCallsCountForTenant,
+  getPlatformActivities,
+  buyOverageMinutes,
+  updateOverageReminderSettings,
+  checkLowCreditReminderTrigger,
+  logTenantActivity,
+
+  // Accounting Imports
+  getAccountingMetrics,
+  getAccountingInvoices,
+  addAccountingInvoice,
+  getAccountingBills,
+  addAccountingBill,
+  getAccountingPayments,
+  addAccountingPayment,
+  getAccountingExpenses,
+  addAccountingExpense,
+  getAccountingContacts,
+  addAccountingContact,
+  getAccountingItems,
+  addAccountingItem,
+  getAccountingAccounts,
+  addAccountingAccount,
+  getAccountingQuotations,
+  addAccountingQuotation,
+  deleteAccountingQuotation,
+
+
+  // Team & Calendar Imports
+  getWorkspaceUsers,
+  addWorkspaceUser,
+  deleteWorkspaceUser,
+  getUserCalendarSettings,
+  updateUserCalendarSettings,
+  connectUserGoogleCalendar,
+  disconnectUserGoogleCalendar,
+
+  // Restaurant Tables Imports
+  getRestaurantTables,
+  addRestaurantTable,
+  deleteRestaurantTable,
+  updateRestaurantTable,
+
+  // Hotel Rooms Imports
+  getHotelRooms,
+  addHotelRoom,
+  deleteHotelRoom,
+  updateHotelRoom,
+
+  // Payments
+  updateAppointmentPaymentStatus,
+  getAppointmentById,
+  isTenantLocked
+} from './database.js';
+
+import Stripe from 'stripe';
+
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 5050;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+// Subdomain Routing Middleware
+app.use((req, res, next) => {
+  const hostname = req.hostname || '';
+  if (hostname.startsWith('app.')) {
+    // Serve the dedicated web app
+    express.static(path.join(__dirname, 'public-app'))(req, res, next);
+  } else {
+    // Serve the marketing landing page
+    express.static(path.join(__dirname, 'public'))(req, res, next);
+  }
+});
+
+// =============================================================
+// PUBLIC CHECKOUT ENDPOINTS (No Dashboard Auth Required)
+// =============================================================
+
+// Serve the checkout HTML page for a specific appointment ID
+app.get('/checkout/:appointmentId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
+});
+
+// Fetch checkout details (appointment info & tenant public settings)
+app.get('/api/checkout/:appointmentId', async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const appointment = await getAppointmentById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const settings = await getSettings(appointment.tenant_id);
+    res.json({
+      id: appointment.id,
+      customer_name: appointment.customer_name,
+      customer_phone: appointment.customer_phone,
+      service: appointment.service,
+      price: appointment.price || 0,
+      date: appointment.date,
+      time: appointment.time,
+      payment_status: appointment.payment_status || 'unpaid',
+      company_name: settings.company_name || 'Our Business',
+      payment_gateway_provider: settings.payment_gateway_provider || 'sandbox',
+      stripe_publishable_key: settings.payment_gateway_provider === 'stripe' ? settings.stripe_publishable_key : ''
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Process public checkout payment
+app.post('/api/checkout/:appointmentId/pay', async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const appointment = await getAppointmentById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    if (appointment.payment_status === 'paid') {
+      return res.status(400).json({ error: 'This appointment has already been paid.' });
+    }
+
+    const settings = await getSettings(appointment.tenant_id);
+    const provider = settings.payment_gateway_provider || 'sandbox';
+
+    if (provider === 'stripe') {
+      const { paymentMethodId } = req.body;
+      if (!paymentMethodId) {
+        return res.status(400).json({ error: 'Payment method is required for Stripe payments.' });
+      }
+      if (!settings.stripe_secret_key) {
+        return res.status(400).json({ error: 'Merchant payment configuration is incomplete (missing Stripe credentials).' });
+      }
+
+      // Initialize Stripe with the tenant's secret key
+      const stripeInstance = new Stripe(settings.stripe_secret_key);
+      const amountCents = Math.round((appointment.price || 80) * 100);
+
+      const paymentIntent = await stripeInstance.paymentIntents.create({
+        amount: amountCents,
+        currency: 'usd',
+        payment_method: paymentMethodId,
+        confirm: true,
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never'
+        }
+      });
+
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ error: `Payment failed with status: ${paymentIntent.status}` });
+      }
+    } else {
+      // Simulate sandbox delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Update appointment payment status in DB
+    const updatedAppt = await updateAppointmentPaymentStatus(appointment.tenant_id, appointment.id, 'paid');
+
+    // Find and update matching Kanban Deal
+    try {
+      const contact = await findContactByPhone(appointment.tenant_id, appointment.customer_phone);
+      if (contact) {
+        const deals = await getDeals(appointment.tenant_id);
+        const match = deals.find(d => 
+          d.contact_id === contact.id && 
+          d.close_date === appointment.date && 
+          d.stage !== 'closedwon'
+        );
+        if (match) {
+          await updateDealStage(appointment.tenant_id, match.id, 'closedwon');
+        }
+      }
+    } catch (dealErr) {
+      console.error('Error auto-updating CRM Deal to Closed Won:', dealErr);
+    }
+
+    // Log Activity
+    await logTenantActivity(
+      appointment.tenant_id,
+      'payment_received',
+      `Payment received: $${(appointment.price || 0).toFixed(2)} from ${appointment.customer_name} via ${provider.toUpperCase()}`
+    );
+
+    // Broadcast WebSocket updates
+    broadcastToDashboard(appointment.tenant_id, 'refresh_appointments', updatedAppt);
+    broadcastToDashboard(appointment.tenant_id, 'refresh_crm', {});
+
+    res.json({ success: true, appointment: updatedAppt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authentication required. Please login.' });
+  }
+
+  let tenantId = null;
+  let userId = null;
+
+  if (authHeader.includes(':')) {
+    const parts = authHeader.split(':');
+    tenantId = parseInt(parts[0]);
+    userId = parseInt(parts[1]);
+  } else {
+    tenantId = parseInt(authHeader);
+  }
+
+  if (isNaN(tenantId)) {
+    return res.status(400).json({ error: 'Invalid authentication token.' });
+  }
+  
+  try {
+    const status = await getTenantStatus(tenantId);
+    if (!status) {
+      return res.status(401).json({ error: 'Account does not exist.' });
+    }
+
+    const lockStatus = await isTenantLocked(tenantId);
+    if (lockStatus.locked) {
+      const allowedPaths = [
+        '/api/saas/billing',
+        '/api/saas/billing/upgrade',
+        '/api/saas/billing/buy-overage',
+        '/api/auth/profile'
+      ];
+      if (!allowedPaths.includes(req.path)) {
+        return res.status(403).json({
+          error: 'Account Restricted: Your workspace is restricted due to outstanding due payments (Tier Subscription fee or 0 minute credit balance). Please make a payment to unlock your account.',
+          locked: true,
+          reason: lockStatus.reason
+        });
+      }
+    }
+
+    // Fallback: If no userId was parsed from composite token, get the owner user id
+    if (!userId) {
+      const users = await getWorkspaceUsers(tenantId);
+      const owner = users.find(u => u.role === 'owner') || users[0];
+      userId = owner ? owner.id : null;
+    }
+
+    req.tenantId = tenantId;
+    req.userId = userId;
+    req.isAdmin = status.is_admin === 1;
+
+    // SaaS Owner Impersonation mode
+    if (req.isAdmin && req.headers['x-impersonate-tenant-id']) {
+      const impId = parseInt(req.headers['x-impersonate-tenant-id']);
+      if (!isNaN(impId)) {
+        const impStatus = await getTenantStatus(impId);
+        if (impStatus) {
+          req.tenantId = impId;
+        }
+      }
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function requireAdmin(req, res, next) {
+  if (!req.isAdmin) {
+    return res.status(403).json({ error: 'Access Denied: Administrative privileges required.' });
+  }
+  next();
+}
+
+// Resolve Twilio Client (with Mock fallback for testing & local development)
+function getTwilioClient() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  
+  if (accountSid && accountSid.startsWith('AC') && authToken) {
+    return twilio(accountSid, authToken);
+  }
+  
+  return {
+    messages: {
+      create: async (opts) => {
+        console.log(`[Twilio Mock] Send Message: From=${opts.from}, To=${opts.to}, Body="${opts.body}"`);
+        return { sid: 'SMmock_' + Math.random().toString(36).substring(2, 10) };
+      }
+    },
+    calls: {
+      create: async (opts) => {
+        console.log(`[Twilio Mock] Create Call: From=${opts.from}, To=${opts.to}, Url="${opts.url}"`);
+        return { sid: 'CAmock_' + Math.random().toString(36).substring(2, 10) };
+      }
+    }
+  };
+}
+
+// Resolve SignalWire Compatibility Client
+function getSignalWireClient() {
+  const projectId = process.env.SIGNALWIRE_PROJECT_ID;
+  const apiToken = process.env.SIGNALWIRE_API_TOKEN;
+  const spaceUrl = process.env.SIGNALWIRE_SPACE_URL;
+
+  if (projectId && apiToken && spaceUrl) {
+    return signalwire(projectId, apiToken, { signalwireSpaceUrl: spaceUrl });
+  }
+
+  // Fallback to Twilio client if SignalWire credentials are not set
+  return getTwilioClient();
+}
+
+// =============================================================
+// AUTHENTICATION & REGISTRATION ENDPOINTS
+// =============================================================
+
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, companyName } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+  try {
+    const tenant = await registerTenant({ name, email, password, company_name: companyName });
+    res.json({ success: true, tenant });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  try {
+    const tenant = await authenticateTenant(email, password);
+    if (tenant.subscription_status === 'suspended') {
+      return res.status(403).json({ error: 'Account Suspended: Your access has been deactivated by the system administrator.' });
+    }
+    res.json({ success: true, token: `${tenant.id}:${tenant.userId}`, tenant });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SAAS BILLING & USAGE LIMITS
+// =============================================================
+
+app.get('/api/saas/billing', requireAuth, async (req, res) => {
+  try {
+    const usage = await getTenantUsage(req.tenantId);
+    
+    // Limits definition
+    const limits = {
+      free: { minutes: 15, contacts: 15, appointments: 5 },
+      starter: { minutes: 100, contacts: 100, appointments: 9999 },
+      professional: { minutes: 1000, contacts: 99999, appointments: 99999 },
+      enterprise: { minutes: 999999, contacts: 999999, appointments: 999999 }
+    };
+
+    const lockStatus = await isTenantLocked(req.tenantId);
+    res.json({
+      usage,
+      limits: limits[usage.tier],
+      locked: lockStatus.locked,
+      lock_reason: lockStatus.reason
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
+  const { tier, billing_cycle } = req.body;
+  const cycle = billing_cycle || 'monthly';
+  if (!['free', 'starter', 'professional', 'enterprise'].includes(tier)) {
+    return res.status(400).json({ error: 'Invalid subscription tier' });
+  }
+  if (!['monthly', 'annual'].includes(cycle)) {
+    return res.status(400).json({ error: 'Invalid billing cycle' });
+  }
+  try {
+    const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
+    
+    // Auto-assign phone number if they upgraded to a paid plan
+    if (tier !== 'free') {
+      try {
+        await autoAssignPhoneNumberForTenant(req.tenantId);
+      } catch (phoneErr) {
+        console.error('Non-blocking error auto-assigning phone number on upgrade:', phoneErr);
+      }
+    }
+
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/saas/billing/buy-overage', requireAuth, async (req, res) => {
+  const blocks = req.body && req.body.blocks !== undefined ? parseInt(req.body.blocks) : 1;
+  if (isNaN(blocks) || blocks < 1 || blocks > 100) {
+    return res.status(400).json({ error: 'Blocks count must be an integer between 1 and 100.' });
+  }
+  try {
+    const usage = await buyOverageMinutes(req.tenantId, blocks);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/saas/billing/reminder-settings', requireAuth, async (req, res) => {
+  const { overage_reminder_limit } = req.body;
+  const threshold = parseFloat(overage_reminder_limit);
+  if (isNaN(threshold) || threshold < 0) {
+    return res.status(400).json({ error: 'Reminder limit must be a positive number.' });
+  }
+  try {
+    const usage = await updateOverageReminderSettings(req.tenantId, threshold);
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Resolve the server's local network IP for QR code and mobile app cross-device testing
+app.get('/api/network-ip', (req, res) => {
+  try {
+    const interfaces = os.networkInterfaces();
+    let localIp = 'localhost';
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          localIp = iface.address;
+          break;
+        }
+      }
+      if (localIp !== 'localhost') break;
+    }
+    res.json({ ip: localIp });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Expose the public Twilio demo phone number for the landing page
+app.get('/api/demo-number', (req, res) => {
+  res.json({ number: process.env.TWILIO_PHONE_NUMBER || '+1 (520) 353-8181' });
+});
+
+// =============================================================
+// SUPER ADMIN OPERATIONS
+// =============================================================
+
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const tenants = await getAllTenantsWithUsage();
+    
+    // Aggregate metrics
+    let totalTenants = tenants.length;
+    let totalMinutes = 0;
+    let estimatedMrr = 0;
+    
+    tenants.forEach(t => {
+      totalMinutes += t.usage_minutes || 0;
+      if (t.subscription_tier === 'starter') {
+        const price = (t.billing_cycle === 'annual') ? 79 : 99;
+        estimatedMrr += price;
+      } else if (t.subscription_tier === 'professional') {
+        const price = (t.billing_cycle === 'annual') ? 799 : 999;
+        estimatedMrr += price;
+      } else if (t.subscription_tier === 'enterprise') {
+        const price = (t.billing_cycle === 'annual') ? 2000 : 2500;
+        estimatedMrr += price;
+      }
+    });
+    
+    const activeCalls = await getActiveCallsCount();
+
+    res.json({
+      totalTenants,
+      totalMinutes,
+      estimatedMrr,
+      activeCalls
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/tenants', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const list = await getAllTenantsWithUsage();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/tenants/:id', requireAuth, requireAdmin, async (req, res) => {
+  const targetId = parseInt(req.params.id);
+  const { subscription_tier, subscription_status, billing_cycle } = req.body;
+  
+  if (!['free', 'starter', 'professional', 'enterprise'].includes(subscription_tier)) {
+    return res.status(400).json({ error: 'Invalid subscription tier' });
+  }
+  if (!['active', 'suspended'].includes(subscription_status)) {
+    return res.status(400).json({ error: 'Invalid subscription status' });
+  }
+  const cycle = billing_cycle || 'monthly';
+  if (!['monthly', 'annual'].includes(cycle)) {
+    return res.status(400).json({ error: 'Invalid billing cycle' });
+  }
+  
+  try {
+    const usage = await updateTenantByAdmin(targetId, { subscription_tier, subscription_status, billing_cycle: cycle });
+    
+    // Force refresh dashboard UI of upgraded/downgraded client
+    broadcastToDashboard(targetId, 'refresh_crm', {});
+    
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/activities', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const list = await getPlatformActivities();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SCOPED REST API ENDPOINTS
+// =============================================================
+
+app.get('/api/settings', requireAuth, async (req, res) => {
+  try {
+    const settings = await getSettings(req.tenantId);
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function autoAssignPhoneNumberForTenant(tenantId) {
+  try {
+    const settings = await getSettings(tenantId);
+    if (settings && settings.twilio_phone_number && settings.twilio_phone_number.trim() !== '') {
+      console.log(`[Telephony] Tenant ${tenantId} already has a phone number assigned: ${settings.twilio_phone_number}`);
+      return settings.twilio_phone_number;
+    }
+
+    const country = 'US';
+    const PORT = process.env.PORT || 5050;
+    const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
+    const client = getSignalWireClient();
+    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+
+    let selectedNumber = '';
+    if (isMock) {
+      selectedNumber = `+1 (800) 555-0199`;
+      console.log(`[Telephony Mock] Auto-assigned number ${selectedNumber} for Tenant ${tenantId}`);
+    } else {
+      const available = await client.availablePhoneNumbers(country).local.list({
+        limit: 1
+      });
+      if (available.length === 0) {
+        throw new Error('No available numbers found in client pool.');
+      }
+      selectedNumber = available[0].phoneNumber;
+      await client.incomingPhoneNumbers.create({
+        phoneNumber: selectedNumber,
+        voiceUrl: `${ngrokUrl}/incoming-call`,
+        voiceMethod: 'POST'
+      });
+      console.log(`[Telephony] Auto-assigned real number ${selectedNumber} for Tenant ${tenantId}`);
+    }
+
+    if (selectedNumber) {
+      await updateSettings(tenantId, { twilio_phone_number: selectedNumber });
+      return selectedNumber;
+    }
+  } catch (err) {
+    console.error(`Error auto-assigning phone number for tenant ${tenantId}:`, err);
+    throw err;
+  }
+}
+
+app.post('/api/settings', requireAuth, async (req, res) => {
+  try {
+    const existing = await getSettings(req.tenantId);
+    
+    // Clear obsolete crawled content if URL changes
+    if (req.body.website_url !== undefined && req.body.website_url !== existing.website_url) {
+      req.body.crawled_content = '';
+    }
+    
+    const merged = { ...existing, ...req.body };
+    const updated = await updateSettings(req.tenantId, merged);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// HTML Tag Stripper Helper for Website Scraping
+function extractTextFromHtml(html) {
+  if (!html) return '';
+  
+  // 1. Remove script, style, head, svg, and comment sections
+  let text = html
+    .replace(/<head[^]*?<\/head>/gi, '')
+    .replace(/<script[^]*?<\/script>/gi, '')
+    .replace(/<style[^]*?<\/style>/gi, '')
+    .replace(/<svg[^]*?<\/svg>/gi, '')
+    .replace(/<noscript[^]*?<\/noscript>/gi, '')
+    .replace(/<!--[^]*?-->/g, '');
+  
+  // 2. Replace common block elements with newlines to preserve spacing
+  text = text
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+    
+  // 3. Strip remaining HTML tags
+  text = text.replace(/<[^>]*>/g, ' ');
+  
+  // 4. Decode common HTML entities
+  const entities = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&quot;': '"',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&#039;': "'",
+    '&rsquo;': "'",
+    '&lsquo;': "'",
+    '&ldquo;': '"',
+    '&rdquo;': '"',
+    '&ndash;': '-',
+    '&mdash;': '--'
+  };
+  
+  for (const [entity, replacement] of Object.entries(entities)) {
+    text = text.replace(new RegExp(entity, 'g'), replacement);
+  }
+  
+  // 5. Clean up multiple whitespaces and empty lines
+  text = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .join('\n');
+    
+  // Limit length to prevent token blowing (10,000 characters)
+  if (text.length > 10000) {
+    text = text.substring(0, 10000) + '\n\n[Content truncated due to length limits...]';
+  }
+  
+  return text;
+}
+
+// REST API endpoint to crawl website URL(s) and extract content for agent settings
+app.post('/api/settings/crawl', requireAuth, async (req, res) => {
+  const { websiteUrl } = req.body;
+  if (!websiteUrl) {
+    return res.status(400).json({ error: 'Website URL is required.' });
+  }
+
+  // Parse comma-separated list of URLs
+  const urls = websiteUrl.split(',').map(u => u.trim()).filter(Boolean);
+  if (urls.length === 0) {
+    return res.status(400).json({ error: 'Please enter at least one valid website URL.' });
+  }
+
+  // Validate each URL
+  const validatedUrls = [];
+  for (const urlStr of urls) {
+    try {
+      const parsed = new URL(urlStr);
+      validatedUrls.push(parsed);
+    } catch (e) {
+      return res.status(400).json({ error: `Invalid URL format: "${urlStr}". Please ensure all URLs start with http:// or https://` });
+    }
+  }
+
+  try {
+    console.log(`Starting parallel crawl for tenant ${req.tenantId} across ${validatedUrls.length} pages`);
+
+    // Fetch pages in parallel using Promise.all
+    const crawlPromises = validatedUrls.map(async (url) => {
+      try {
+        // Set an 8s fetch timeout per page to avoid blocking main thread
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        const response = await fetch(url.href, {
+          headers: {
+            'User-Agent': 'VoiceDesk-Crawler/1.0 (+http://localhost:5050)'
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          return {
+            url: url.href,
+            success: false,
+            error: `HTTP status ${response.status}: ${response.statusText}`
+          };
+        }
+
+        const html = await response.text();
+        const extractedText = extractTextFromHtml(html);
+
+        if (!extractedText || extractedText.trim().length === 0) {
+          return {
+            url: url.href,
+            success: false,
+            error: 'No readable text content could be extracted.'
+          };
+        }
+
+        return {
+          url: url.href,
+          success: true,
+          content: extractedText
+        };
+      } catch (err) {
+        console.error(`Failed to crawl URL ${url.href}:`, err);
+        const errType = err.name === 'AbortError' ? 'Request timed out (limit: 8 seconds)' : err.message;
+        return {
+          url: url.href,
+          success: false,
+          error: errType
+        };
+      }
+    });
+
+    const results = await Promise.all(crawlPromises);
+
+    // Group successes and errors
+    const successes = results.filter(r => r.success);
+    const errors = results.filter(r => !r.success);
+
+    if (successes.length === 0) {
+      const errorMsg = errors.map(e => `- ${e.url}: ${e.error}`).join('\n');
+      return res.status(400).json({ error: `Failed to crawl all specified URLs:\n${errorMsg}` });
+    }
+
+    // Concatenate text contents with source boundaries
+    const concatenatedText = successes.map(s => {
+      return `--- START CONTENT FROM ${s.url} ---\n${s.content}\n--- END CONTENT FROM ${s.url} ---`;
+    }).join('\n\n');
+
+    // Limit length to prevent token blowing (15,000 characters)
+    let finalCombinedText = concatenatedText;
+    if (finalCombinedText.length > 15000) {
+      finalCombinedText = finalCombinedText.substring(0, 15000) + '\n\n[Content truncated due to length limits...]';
+    }
+
+    // Save crawl results
+    const settings = await getSettings(req.tenantId);
+    // Store the cleaned comma-separated list of URLs
+    settings.website_url = validatedUrls.map(u => u.href).join(', ');
+    settings.crawled_content = finalCombinedText;
+    const updatedSettings = await updateSettings(req.tenantId, settings);
+
+    const successMessage = `Successfully crawled ${successes.length} page(s).` + 
+      (errors.length > 0 ? ` Note: Failed to crawl ${errors.length} page(s).` : '');
+
+    res.json({
+      success: true,
+      message: `${successMessage} Extracted ${finalCombinedText.length} characters in total.`,
+      website_url: settings.website_url,
+      crawled_content: finalCombinedText,
+      preview: finalCombinedText.substring(0, 600) + (finalCombinedText.length > 600 ? '...' : '')
+    });
+
+  } catch (err) {
+    console.error(`Error processing crawls for tenant ${req.tenantId}:`, err);
+    res.status(500).json({ error: `Failed to process website crawl: ${err.message}` });
+  }
+});
+
+// =============================================================
+// TEAM CALENDARS & MULTI-USER API ROUTES
+// =============================================================
+
+app.get('/api/team', requireAuth, async (req, res) => {
+  try {
+    const list = await getWorkspaceUsers(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/team', requireAuth, async (req, res) => {
+  const { name, email, password, role } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required.' });
+  }
+  try {
+    const user = await addWorkspaceUser(req.tenantId, { name, email, password, role });
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(user);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/team/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const result = await deleteWorkspaceUser(req.tenantId, userId);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/user/profile', requireAuth, async (req, res) => {
+  try {
+    const profile = await getUserCalendarSettings(req.userId);
+    profile.id = req.userId;
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/team/:id/calendar', requireAuth, async (req, res) => {
+  const { working_hours, break_periods, appointment_gap } = req.body;
+  try {
+    const userId = parseInt(req.params.id);
+    const updated = await updateUserCalendarSettings(userId, { working_hours, break_periods, appointment_gap });
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SERVICES AND PRICING API ROUTES
+// =============================================================
+
+app.get('/api/services', requireAuth, async (req, res) => {
+  try {
+    const list = await getServices(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/services', requireAuth, async (req, res) => {
+  const { name, price, duration, description } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Service name is required.' });
+  }
+  try {
+    const result = await addService(req.tenantId, { name, price, duration, description });
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/services/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const result = await deleteService(req.tenantId, id);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/services/:id', requireAuth, async (req, res) => {
+  const { name, price, duration, description } = req.body;
+  const id = parseInt(req.params.id);
+  if (!name) {
+    return res.status(400).json({ error: 'Service name is required.' });
+  }
+  try {
+    const result = await updateService(req.tenantId, id, { name, price, duration, description });
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/services/bulk', requireAuth, async (req, res) => {
+  const services = req.body;
+  if (!Array.isArray(services)) {
+    return res.status(400).json({ error: 'Invalid data format, expected array.' });
+  }
+  try {
+    const result = await bulkInsertServices(req.tenantId, services);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// RESTAURANT TABLES API ROUTES
+// =============================================================
+
+app.get('/api/restaurant/tables', requireAuth, async (req, res) => {
+  try {
+    const list = await getRestaurantTables(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/restaurant/tables', requireAuth, async (req, res) => {
+  const { table_number, seats } = req.body;
+  if (!table_number || !seats) {
+    return res.status(400).json({ error: 'Table number and seats are required.' });
+  }
+  try {
+    const table = await addRestaurantTable(req.tenantId, { table_number, seats });
+    res.json(table);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/restaurant/tables/:id', requireAuth, async (req, res) => {
+  try {
+    const tableId = parseInt(req.params.id);
+    const result = await deleteRestaurantTable(req.tenantId, tableId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/restaurant/tables/:id', requireAuth, async (req, res) => {
+  const { table_number, seats } = req.body;
+  try {
+    const tableId = parseInt(req.params.id);
+    const result = await updateRestaurantTable(req.tenantId, tableId, { table_number, seats });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// HOTEL ROOMS REST API ENDPOINTS
+// =============================================================
+
+app.get('/api/hotel/rooms', requireAuth, async (req, res) => {
+  try {
+    const list = await getHotelRooms(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/hotel/rooms', requireAuth, async (req, res) => {
+  const { room_number, room_type, price_per_night } = req.body;
+  if (!room_number || !room_type || price_per_night === undefined) {
+    return res.status(400).json({ error: 'Room number, type, and price per night are required.' });
+  }
+  try {
+    const room = await addHotelRoom(req.tenantId, { room_number, room_type, price_per_night });
+    res.json(room);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/hotel/rooms/:id', requireAuth, async (req, res) => {
+  try {
+    const roomId = parseInt(req.params.id);
+    const result = await deleteHotelRoom(req.tenantId, roomId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/hotel/rooms/:id', requireAuth, async (req, res) => {
+  const { room_number, room_type, price_per_night } = req.body;
+  try {
+    const roomId = parseInt(req.params.id);
+    const result = await updateHotelRoom(req.tenantId, roomId, { room_number, room_type, price_per_night });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/team/:id/gcal/connect', requireAuth, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Google Calendar Email is required.' });
+  try {
+    const userId = parseInt(req.params.id);
+    const updated = await connectUserGoogleCalendar(userId, email);
+    res.json({ success: true, user: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/team/:id/gcal/disconnect', requireAuth, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const updated = await disconnectUserGoogleCalendar(userId);
+    res.json({ success: true, user: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// APPOINTMENTS
+// =============================================================
+
+app.get('/api/appointments', requireAuth, async (req, res) => {
+  try {
+    const list = await getAppointments(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/appointments', requireAuth, async (req, res) => {
+  try {
+    const appointment = await addAppointment(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_appointments', appointment);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    
+    // Broadcast Google Calendar sync toast alert
+    if (appointment.gcal_synced) {
+      broadcastToDashboard(req.tenantId, 'google_calendar_sync', {
+        appointmentId: appointment.id,
+        customerName: appointment.customer_name,
+        service: appointment.service,
+        date: appointment.date,
+        time: appointment.time,
+        resourceName: appointment.resource_name,
+        googleEmail: appointment.google_email
+      });
+    }
+    
+    res.json(appointment);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/appointments/:id', requireAuth, async (req, res) => {
+  try {
+    await deleteAppointment(req.tenantId, req.params.id);
+    broadcastToDashboard(req.tenantId, 'refresh_appointments', { deletedId: req.params.id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/calls', requireAuth, async (req, res) => {
+  try {
+    const logs = await getCallLogs(req.tenantId);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Outbound Call scoping
+app.post('/api/call/outbound', requireAuth, async (req, res) => {
+  const { phoneNumber } = req.body;
+  if (!phoneNumber) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  // Validate SaaS minute limits before calling
+  const usage = await getTenantUsage(req.tenantId);
+  const limits = { free: 15, starter: 100, professional: 1000, enterprise: 999999 };
+  const planLimit = limits[usage.tier] || 0;
+  const totalLimit = planLimit + (usage.prepaid_overage_minutes || 0);
+  if (usage.usage_minutes >= totalLimit) {
+    return res.status(403).json({ error: 'SaaS Limit Exceeded: You have run out of calling minutes. Please buy overage minutes or upgrade your subscription.' });
+  }
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const signalwireProject = process.env.SIGNALWIRE_PROJECT_ID;
+  const isMock = (!accountSid || !accountSid.startsWith('AC')) && !signalwireProject;
+  const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER;
+  const ngrokUrl = process.env.NGROK_URL;
+
+  if (!isMock && (!fromNumber || !ngrokUrl)) {
+    return res.status(500).json({
+      error: 'Telephony configurations (SIGNALWIRE_PHONE_NUMBER/TWILIO_PHONE_NUMBER) and NGROK_URL must be defined for live calls.'
+    });
+  }
+
+  const activeFromNumber = fromNumber || '+15550001111';
+  const activeNgrokUrl = ngrokUrl || `http://localhost:${PORT}`;
+
+  try {
+    const client = getSignalWireClient();
+    // Pass tenantId inside TwiML URL so the callback scopes it
+    const webhookUrl = `${activeNgrokUrl}/outbound-call-twiml?phoneNumber=${encodeURIComponent(phoneNumber)}&tenantId=${req.tenantId}`;
+    
+    console.log(`Initiating outbound call for Tenant ${req.tenantId} to ${phoneNumber}...`);
+    const call = await client.calls.create({
+      url: webhookUrl,
+      to: phoneNumber,
+      from: activeFromNumber
+    });
+    
+    res.json({ success: true, callSid: call.sid });
+  } catch (err) {
+    console.error('Error initiating outbound call:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Telephony Provisioning API
+app.get('/api/telephony/search-numbers', requireAuth, async (req, res) => {
+  const country = req.query.country || 'US';
+  const areaCode = req.query.areaCode || '';
+  
+  try {
+    const client = getSignalWireClient();
+    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+    
+    if (isMock) {
+      // Mock some available numbers for local development/testing
+      const mockNumbers = [
+        { phoneNumber: `+1 (${areaCode || '800'}) 555-0199` },
+        { phoneNumber: `+1 (${areaCode || '800'}) 555-0144` },
+        { phoneNumber: `+1 (${areaCode || '800'}) 555-0177` }
+      ];
+      return res.json(mockNumbers);
+    }
+
+    const available = await client.availablePhoneNumbers(country).local.list({
+      areaCode: areaCode || undefined,
+      limit: 10
+    });
+    
+    res.json(available.map(num => ({ phoneNumber: num.phoneNumber })));
+  } catch (err) {
+    console.error('Error searching available numbers:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/telephony/provision-number', requireAuth, async (req, res) => {
+  const { phoneNumber } = req.body;
+  if (!phoneNumber) {
+    return res.status(400).json({ error: 'Phone number parameter is required.' });
+  }
+
+  const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+  try {
+    const client = getSignalWireClient();
+    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+
+    if (!isMock) {
+      // Programmatically purchase the number on behalf of the tenant
+      // and point its inbound voice webhook directly to our server's /incoming-call URL
+      await client.incomingPhoneNumbers.create({
+        phoneNumber: phoneNumber,
+        voiceUrl: `${ngrokUrl}/incoming-call`,
+        voiceMethod: 'POST'
+      });
+    } else {
+      console.log(`[Telephony Mock] Purchased number ${phoneNumber} on behalf of Tenant ${req.tenantId} and pointed to ${ngrokUrl}/incoming-call`);
+    }
+
+    // Save the purchased number to the Tenant's settings
+    await updateSettings(req.tenantId, { twilio_phone_number: phoneNumber });
+    
+    res.json({ success: true, phoneNumber });
+  } catch (err) {
+    console.error('Error provisioning phone number:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/telephony/auto-assign', requireAuth, async (req, res) => {
+  const country = req.body.country || 'US';
+  const areaCode = req.body.areaCode || '';
+  const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+  try {
+    const client = getSignalWireClient();
+    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+
+    let selectedNumber = '';
+
+    if (isMock) {
+      selectedNumber = `+1 (${areaCode || '800'}) 555-0199`;
+      console.log(`[Telephony Mock] Auto-assigned number ${selectedNumber} for Tenant ${req.tenantId}`);
+    } else {
+      // 1. Search for first available number
+      const available = await client.availablePhoneNumbers(country).local.list({
+        areaCode: areaCode || undefined,
+        limit: 1
+      });
+
+      if (available.length === 0) {
+        return res.status(404).json({ error: 'No available numbers found to auto-assign.' });
+      }
+
+      selectedNumber = available[0].phoneNumber;
+
+      // 2. Provision the selected number
+      await client.incomingPhoneNumbers.create({
+        phoneNumber: selectedNumber,
+        voiceUrl: `${ngrokUrl}/incoming-call`,
+        voiceMethod: 'POST'
+      });
+    }
+
+    // 3. Save the number to settings
+    await updateSettings(req.tenantId, { twilio_phone_number: selectedNumber });
+
+    res.json({ success: true, phoneNumber: selectedNumber });
+  } catch (err) {
+    console.error('Error in auto-assigning phone number:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SCOPED CRM API ENDPOINTS
+// =============================================================
+
+app.get('/api/crm/contacts', requireAuth, async (req, res) => {
+  try {
+    const list = await getContacts(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/crm/contacts', requireAuth, async (req, res) => {
+  try {
+    const contact = await addContact(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(contact);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/crm/contacts/:id', requireAuth, async (req, res) => {
+  try {
+    await deleteContact(req.tenantId, req.params.id);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/crm/contacts/:id/insights', requireAuth, async (req, res) => {
+  const contactId = req.params.id;
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OpenAI API key is missing' });
+  }
+
+  try {
+    const activities = await getActivities(req.tenantId, contactId);
+    
+    let summaryData = `Contact Activities Log:\n`;
+    activities.forEach(act => {
+      summaryData += `[${act.created_at}] ${act.type.toUpperCase()}: ${act.title} - ${act.description}\n`;
+    });
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an advanced CRM intelligence tool. Given the activity logs, summarize: 1. Customer profile and preferences. 2. General sentiment (Positive, Neutral, Negative). 3. Relationship Health Score (1-100). 4. Recommended next sales/service action. Format output nicely with headers.'
+          },
+          {
+            role: 'user',
+            content: summaryData
+          }
+        ],
+        max_tokens: 400
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      res.json({ insights: data.choices?.[0]?.message?.content || 'No insights generated.' });
+    } else {
+      res.status(500).json({ error: 'OpenAI insights generation failed' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/crm/deals', requireAuth, async (req, res) => {
+  try {
+    const list = await getDeals(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/crm/deals', requireAuth, async (req, res) => {
+  try {
+    const deal = await addDeal(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(deal);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/crm/deals/:id/stage', requireAuth, async (req, res) => {
+  try {
+    const updated = await updateDealStage(req.tenantId, req.params.id, req.body.stage);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SAAS SCOPED BASIC ACCOUNTING ADDON ENDPOINTS
+// =============================================================
+app.get('/api/accounting/metrics', requireAuth, async (req, res) => {
+  try {
+    const metrics = await getAccountingMetrics(req.tenantId);
+    res.json(metrics);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/quotations', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingQuotations(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/quotations', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingQuotation(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/accounting/quotations/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await deleteAccountingQuotation(req.tenantId, id);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/invoices', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingInvoices(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/invoices', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingInvoice(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/bills', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingBills(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/bills', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingBill(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/payments', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingPayments(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/payments', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingPayment(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/expenses', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingExpenses(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/expenses', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingExpense(req.tenantId, req.body);
+    broadcastToDashboard(req.tenantId, 'refresh_accounting', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/contacts', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingContacts(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/contacts', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingContact(req.tenantId, req.body);
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/items', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingItems(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/items', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingItem(req.tenantId, req.body);
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounting/accounts', requireAuth, async (req, res) => {
+  try {
+    const list = await getAccountingAccounts(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/accounting/accounts', requireAuth, async (req, res) => {
+  try {
+    const record = await addAccountingAccount(req.tenantId, req.body);
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// SAAS SCOPED AI CRM COPILOT
+// =============================================================
+app.post('/api/crm/copilot', requireAuth, async (req, res) => {
+  const { message } = req.body;
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Instruction is required' });
+  }
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OpenAI API key is missing' });
+  }
+
+  // Validate Starter/Professional tier before using AI CRM Copilot
+  const usage = await getTenantUsage(req.tenantId);
+  if (usage.tier === 'free') {
+    return res.status(403).json({ error: 'Subscription Upgrade Required: The AI CRM Copilot is only available on STARTER and PROFESSIONAL Tiers. Please upgrade to use this feature.' });
+  }
+
+  const actionsPerformed = [];
+
+  const tools = [
+    {
+      type: 'function',
+      function: {
+        name: 'list_contacts',
+        description: 'Get list of CRM contacts to match names or see info.'
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'create_contact',
+        description: 'Create a new contact record in the CRM.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Full name' },
+            email: { type: 'string', description: 'Email address' },
+            phone: { type: 'string', description: 'E.164 format phone number (e.g. +15558889999)' },
+            company_name: { type: 'string', description: 'Company name' },
+            lead_stage: { type: 'string', enum: ['lead', 'opportunity', 'customer', 'subscriber'], description: 'Default status' }
+          },
+          required: ['name', 'phone']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'list_deals',
+        description: 'List all sales pipeline deals.'
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'create_deal',
+        description: 'Create a new deal for an existing contact.',
+        parameters: {
+          type: 'object',
+          properties: {
+            contact_id: { type: 'integer', description: 'The database integer ID of the contact' },
+            name: { type: 'string', description: 'Deal description (e.g. Swedish Massage Booking)' },
+            amount: { type: 'number', description: 'Dollar value' },
+            stage: { type: 'string', enum: ['appointmentscheduled', 'qualified', 'quotesent', 'closedwon', 'closedlost'], description: 'Stage name' },
+            close_date: { type: 'string', description: 'Closing date YYYY-MM-DD' }
+          },
+          required: ['contact_id', 'name', 'amount']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'move_deal',
+        description: 'Shift deal stage in pipeline.',
+        parameters: {
+          type: 'object',
+          properties: {
+            deal_id: { type: 'integer', description: 'The deal database ID' },
+            stage: { type: 'string', enum: ['appointmentscheduled', 'qualified', 'quotesent', 'closedwon', 'closedlost'], description: 'Target stage column' }
+          },
+          required: ['deal_id', 'stage']
+        }
+      }
+    }
+  ];
+
+  try {
+    let messages = [
+      {
+        role: 'system',
+        content: `You are Hubie, the AI CRM Copilot. You help spa managers search, create, and manage contacts and deals. Use tool calls to manipulate SQLite data, then explain what you did. Always verify names by running list_contacts if the user does not supply IDs. Note: You are running on behalf of Tenant ID ${req.tenantId}.`
+      },
+      { role: 'user', content: message }
+    ];
+
+    let keepGoing = true;
+    let iterations = 0;
+    let finalResponseContent = '';
+
+    while (keepGoing && iterations < 5) {
+      iterations++;
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+          tools
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API Error: ${await response.text()}`);
+      }
+
+      const result = await response.json();
+      const choice = result.choices[0];
+      const resMsg = choice.message;
+      messages.push(resMsg);
+
+      if (resMsg.tool_calls && resMsg.tool_calls.length > 0) {
+        for (const call of resMsg.tool_calls) {
+          const name = call.function.name;
+          const args = JSON.parse(call.function.arguments);
+          let output = {};
+
+          try {
+            if (name === 'list_contacts') {
+              output = await getContacts(req.tenantId);
+            } else if (name === 'create_contact') {
+              const c = await addContact(req.tenantId, args);
+              output = c;
+              actionsPerformed.push({ action: 'contact_created', data: c });
+            } else if (name === 'list_deals') {
+              output = await getDeals(req.tenantId);
+            } else if (name === 'create_deal') {
+              const d = await addDeal(req.tenantId, args);
+              output = d;
+              actionsPerformed.push({ action: 'deal_created', data: d });
+            } else if (name === 'move_deal') {
+              const d = await updateDealStage(req.tenantId, args.deal_id, args.stage);
+              output = d;
+              actionsPerformed.push({ action: 'deal_moved', data: d });
+            }
+          } catch (err) {
+            output = { error: err.message };
+          }
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(output)
+          });
+        }
+      } else {
+        finalResponseContent = resMsg.content;
+        keepGoing = false;
+      }
+    }
+
+    if (actionsPerformed.length > 0) {
+      broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    }
+
+    res.json({ reply: finalResponseContent, actions: actionsPerformed });
+  } catch (err) {
+    console.error('CRM Copilot execution failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// TWILIO INBOUND ROUTERS WITH SAAS TENANCY RESOLUTION
+// =============================================================
+
+// Webhook: Incoming WhatsApp Message (Triggers automated Outbound Callback call)
+app.post('/incoming-whatsapp', async (req, res) => {
+  const fromWhatsApp = req.body.From || ''; // e.g. "whatsapp:+6587654321"
+  const toWhatsApp = req.body.To || '';     // e.g. "whatsapp:+14155238886"
+  const body = req.body.Body || '';
+  
+  console.log(`Incoming WhatsApp message from ${fromWhatsApp} to ${toWhatsApp}: "${body}"`);
+  
+  // Respond to Twilio immediately
+  res.type('text/xml');
+  res.send('<Response></Response>');
+
+  try {
+    const cleanTo = toWhatsApp.replace('whatsapp:', '').trim();
+    const cleanFrom = fromWhatsApp.replace('whatsapp:', '').trim();
+    
+    if (!cleanTo || !cleanFrom) {
+      console.log('Invalid WhatsApp To/From numbers.');
+      return;
+    }
+    
+    // Resolve tenant by the dialed Twilio WhatsApp number
+    const tenantId = await findTenantByTwilioNumber(cleanTo);
+    if (!tenantId) {
+      console.log(`No active SaaS tenant registered for WhatsApp number ${cleanTo}. Cannot trigger callback.`);
+      return;
+    }
+
+    const lockStatus = await isTenantLocked(tenantId);
+    if (lockStatus.locked) {
+      console.log(`WhatsApp callback blocked: Tenant ${tenantId} is locked due to outstanding payments (${lockStatus.reason}).`);
+      return;
+    }
+
+    // Quota Limit Check
+    const usage = await getTenantUsage(tenantId);
+    const limits = { free: 15, starter: 100, professional: 1000, enterprise: 999999 };
+    const planLimit = limits[usage.tier] || 0;
+    const totalLimit = planLimit + (usage.prepaid_overage_minutes || 0);
+    if (usage.usage_minutes >= totalLimit) {
+      console.log(`Tenant ${tenantId} WhatsApp call-back blocked due to call minutes limit.`);
+      return;
+    }
+
+    const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || '+15550001111';
+    const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+    const twilioClient = getTwilioClient();
+    const signalwireClient = getSignalWireClient();
+
+    // 1. Send WhatsApp confirmation message back via Twilio
+    try {
+      console.log(`Sending WhatsApp response confirmation to ${fromWhatsApp}...`);
+      await twilioClient.messages.create({
+        from: toWhatsApp,
+        to: fromWhatsApp,
+        body: `Thanks for your message! 🌟 Our AI Receptionist is calling you right now to assist. Please pick up the call! 📞`
+      });
+    } catch (msgErr) {
+      console.error('Failed to send WhatsApp confirmation message:', msgErr.message);
+    }
+
+    // 2. Initiate Outbound Call to customer via SignalWire
+    const webhookUrl = `${ngrokUrl}/outbound-call-twiml?phoneNumber=${encodeURIComponent(cleanFrom)}&tenantId=${tenantId}`;
+    console.log(`Initiating automatic WhatsApp callback call to ${cleanFrom} for Tenant ${tenantId}...`);
+    
+    await signalwireClient.calls.create({
+      url: webhookUrl,
+      to: cleanFrom,
+      from: fromNumber
+    });
+    
+    console.log(`Successfully initiated WhatsApp callback call to ${cleanFrom}`);
+  } catch (err) {
+    console.error('Failed to process WhatsApp callback call:', err);
+  }
+});
+
+// TwiML Webhook: Inbound Call
+app.post('/incoming-call', async (req, res) => {
+  const twilioNumber = req.body.To || '';
+  const phoneNumber = req.body.From || 'unknown';
+  const domain = req.headers.host;
+  
+  console.log(`Inbound call received on Twilio number: ${twilioNumber} from: ${phoneNumber}`);
+  
+  res.type('text/xml');
+  
+  try {
+    const tenantId = await findTenantByTwilioNumber(twilioNumber);
+    if (!tenantId) {
+      console.log(`No active SaaS tenant registered for phone number ${twilioNumber}. Playing fallback TwiML.`);
+      res.send(`
+        <Response>
+          <Say>Thank you for calling. This phone number has not been configured in our voice SaaS portal yet. Please sign up and register your Twilio number.</Say>
+        </Response>
+      `);
+      return;
+    }
+
+    const lockStatus = await isTenantLocked(tenantId);
+    if (lockStatus.locked) {
+      console.log(`Tenant ${tenantId} call blocked: Account is restricted due to outstanding payments (${lockStatus.reason}).`);
+      res.send(`
+        <Response>
+          <Say>Thank you for calling. We are sorry, but this service is temporarily restricted due to outstanding payments. Please contact support.</Say>
+        </Response>
+      `);
+      return;
+    }
+
+    // Check call concurrency limits (max 2 active calls per tenant)
+    const activeCallsCount = await getActiveCallsCountForTenant(tenantId);
+    if (activeCallsCount >= 2) {
+      console.log(`Tenant ${tenantId} call blocked: Concurrency limit reached (${activeCallsCount} active calls). Redirecting to human transfer.`);
+      const settings = await getSettings(tenantId);
+      const transferNumber = settings.transfer_phone_number || '';
+      if (transferNumber) {
+        res.send(`
+          <Response>
+            <Say>All our AI operators are currently busy. Transferring you to our representative.</Say>
+            <Dial>${transferNumber}</Dial>
+          </Response>
+        `);
+      } else {
+        res.send(`
+          <Response>
+            <Say>All our AI operators are currently busy. Please call back later. Thank you.</Say>
+            <Hangup />
+          </Response>
+        `);
+      }
+      return;
+    }
+
+    let contactName = '';
+    let leadStage = '';
+    const contact = await findContactByPhone(tenantId, phoneNumber);
+    if (contact) {
+      contactName = contact.name;
+      leadStage = contact.lead_stage;
+    }
+
+    // Connect to WebSocket passing tenantId
+    res.send(`
+      <Response>
+        <Say>Thank you for calling. Please note that this call is recorded and transcribed for quality and verification purposes.</Say>
+        <Connect>
+          <Stream url="wss://${domain}/media-stream">
+            <Parameter name="tenantId" value="${tenantId}" />
+            <Parameter name="phoneNumber" value="${phoneNumber}" />
+            <Parameter name="direction" value="inbound" />
+            <Parameter name="contactName" value="${contactName}" />
+            <Parameter name="leadStage" value="${leadStage}" />
+          </Stream>
+        </Connect>
+      </Response>
+    `);
+  } catch (err) {
+    console.error('Error resolving tenant on inbound call:', err);
+    res.send(`<Response><Say>A system error occurred. Please try calling back later.</Say></Response>`);
+  }
+});
+
+// Outbound Call TwiML Webhook
+app.post('/outbound-call-twiml', async (req, res) => {
+  const phoneNumber = req.query.phoneNumber || 'unknown';
+  const tenantId = parseInt(req.query.tenantId);
+  const domain = req.headers.host;
+  
+  console.log(`Outbound call webhook triggered for Tenant ${tenantId} calling customer: ${phoneNumber}`);
+  
+  res.type('text/xml');
+
+  if (isNaN(tenantId)) {
+    res.send(`<Response><Say>Authentication failed. Tenant ID missing.</Say></Response>`);
+    return;
+  }
+
+  let contactName = '';
+  let leadStage = '';
+
+  try {
+    const contact = await findContactByPhone(tenantId, phoneNumber);
+    if (contact) {
+      contactName = contact.name;
+      leadStage = contact.lead_stage;
+    }
+  } catch (e) {
+    console.error('Failed to lookup contact on outbound callback:', e);
+  }
+
+  res.send(`
+    <Response>
+      <Say>Hello. This is an automated call from our virtual voice assistant. Please note that this call is recorded and transcribed for quality purposes.</Say>
+      <Connect>
+        <Stream url="wss://${domain}/media-stream">
+          <Parameter name="tenantId" value="${tenantId}" />
+          <Parameter name="phoneNumber" value="${phoneNumber}" />
+          <Parameter name="direction" value="outbound" />
+          <Parameter name="contactName" value="${contactName}" />
+          <Parameter name="leadStage" value="${leadStage}" />
+        </Stream>
+      </Connect>
+    </Response>
+  `);
+});
+
+// Transfer Call TwiML Webhook
+app.post('/transfer-call-twiml', async (req, res) => {
+  const tenantId = parseInt(req.query.tenantId);
+  const reason = req.query.reason || 'AI requested transfer';
+  res.type('text/xml');
+
+  if (isNaN(tenantId)) {
+    res.send(`<Response><Say>Transfer failed. Tenant ID missing.</Say></Response>`);
+    return;
+  }
+
+  try {
+    const settings = await getSettings(tenantId);
+    const transferNumber = settings.transfer_phone_number || '';
+
+    if (!transferNumber) {
+      console.log(`Tenant ${tenantId} transfer failed: No transfer_phone_number configured.`);
+      res.send(`
+        <Response>
+          <Say>I am sorry, we cannot answer your question right now, and no transfer number is configured. Please leave a message or call back later. Thank you.</Say>
+          <Hangup />
+        </Response>
+      `);
+      return;
+    }
+
+    console.log(`Redirecting call to transfer number: ${transferNumber} (Reason: ${reason})`);
+    
+    res.send(`
+      <Response>
+        <Say>Please hold while we transfer your call to a representative.</Say>
+        <Dial>${transferNumber}</Dial>
+      </Response>
+    `);
+  } catch (err) {
+    console.error('Error rendering transfer TwiML:', err);
+    res.send(`<Response><Say>A system error occurred during transfer.</Say></Response>`);
+  }
+});
+
+// HTTP Server
+const server = http.createServer(app);
+
+// WebSockets Config
+const mediaStreamWss = new WebSocketServer({ noServer: true });
+const dashboardWss = new WebSocketServer({ noServer: true });
+const liveDemoWss = new WebSocketServer({ noServer: true });
+
+// Live Demo / Gemini Omni WebSocket Proxy
+liveDemoWss.on('connection', (ws) => {
+  console.log('Client connected to live-demo (Gemini Omni proxy).');
+  
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY; // Fallback or direct key
+  if (!geminiApiKey) {
+    console.error('CRITICAL: GEMINI_API_KEY is not defined in environment variables.');
+    ws.close(1011, 'GEMINI_API_KEY is missing on server');
+    return;
+  }
+  
+  // Connect to Google Gemini Multimodal Live API via WebSockets (v1alpha)
+  const geminiUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${geminiApiKey}`;
+  const geminiWs = new WebSocket(geminiUrl);
+  
+  geminiWs.on('open', () => {
+    console.log('Connected to Google Gemini Multimodal Live API WebSocket.');
+    
+    // Send initial configuration setup payload
+    const setupMsg = {
+      setup: {
+        model: "models/gemini-2.0-flash-exp",
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Puck" // Friendly, clean professional voice
+              }
+            }
+          }
+        }
+      }
+    };
+    geminiWs.send(JSON.stringify(setupMsg));
+  });
+  
+  geminiWs.on('message', (data) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data);
+    }
+  });
+  
+  geminiWs.on('close', (code, reason) => {
+    console.log(`Gemini WebSocket closed. Code: ${code}, Reason: ${reason}`);
+    ws.close();
+  });
+  
+  geminiWs.on('error', (err) => {
+    console.error('Gemini WebSocket error:', err);
+    ws.close();
+  });
+  
+  ws.on('message', (message) => {
+    if (geminiWs.readyState === WebSocket.OPEN) {
+      geminiWs.send(message);
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log('Client disconnected from live-demo.');
+    if (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING) {
+      geminiWs.close();
+    }
+  });
+});
+
+// Live dashboard clients pool
+const dashboardClients = new Set();
+
+dashboardWss.on('connection', (ws) => {
+  dashboardClients.add(ws);
+  console.log(`Dashboard socket connected. Tenant: ${ws.tenantId || 'unauth'}. Pool size:`, dashboardClients.size);
+  
+  ws.on('close', () => {
+    dashboardClients.delete(ws);
+  });
+});
+
+// Scoped Broadcast: Sends only to dashboard clients of a specific tenant
+function broadcastToDashboard(tenantId, event, data) {
+  const payload = JSON.stringify({ event, data });
+  dashboardClients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN && client.tenantId === tenantId) {
+      client.send(payload);
+    }
+  });
+}
+
+// Media Stream WebSocket (Bridges Twilio Audio to OpenAI Realtime API)
+mediaStreamWss.on('connection', (ws) => {
+  console.log('Twilio Media Stream WebSocket connection established.');
+  
+  let tenantId = null;
+  let streamSid = '';
+  let callSid = '';
+  let phoneNumber = '';
+  let direction = '';
+  let contactName = '';
+  let leadStage = '';
+  let openaiWs = null;
+  let currentTurnText = '';
+  let startTime = Date.now();
+  let durationLimitTimeout = null;
+  let silenceTimeout = null;
+  let resetSilenceTimeout = () => {};
+
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      if (data.event === 'start') {
+        tenantId = parseInt(data.start.customParameters?.tenantId);
+        streamSid = data.streamSid;
+        callSid = data.start.callSid;
+        phoneNumber = data.start.customParameters?.phoneNumber || 'unknown';
+        direction = data.start.customParameters?.direction || 'inbound';
+        contactName = data.start.customParameters?.contactName || '';
+        leadStage = data.start.customParameters?.leadStage || '';
+        
+        if (isNaN(tenantId)) {
+          console.error('Call stream aborted: Invalid or missing Tenant ID.');
+          ws.close();
+          return;
+        }
+
+        console.log(`Tenant ${tenantId} call active: Sid=${callSid}, From=${phoneNumber}, Client=${contactName || 'New Client'}`);
+        
+        // Quota Check
+        const usage = await getTenantUsage(tenantId);
+        const limits = { free: 15, starter: 100, professional: 1000, enterprise: 999999 };
+        const planLimit = limits[usage.tier] || 0;
+        const totalLimit = planLimit + (usage.prepaid_overage_minutes || 0);
+        if (usage.usage_minutes >= totalLimit) {
+          console.log(`Tenant ${tenantId} call blocked due to overage limits.`);
+          // Send TwiML or close websocket early
+          ws.close();
+          return;
+        }
+
+        // Log call record
+        await addCallLog(tenantId, {
+          call_sid: callSid,
+          direction,
+          phone_number: phoneNumber,
+          status: 'active'
+        });
+        
+        // Broadcast to tenant dashboard
+        broadcastToDashboard(tenantId, 'call_started', {
+          callSid,
+          streamSid,
+          phoneNumber,
+          direction,
+          status: 'active',
+          startTime: new Date().toISOString()
+        });
+
+        // Initialize connection to OpenAI Realtime API
+        const settings = await getSettings(tenantId);
+
+        // Setup Call Duration Limit Timeout
+        const maxDurationMins = parseInt(settings.max_call_duration) || 10;
+        console.log(`Setting call duration limit to ${maxDurationMins} minutes for Tenant ${tenantId}, CallSid=${callSid}`);
+        durationLimitTimeout = setTimeout(async () => {
+          console.log(`Call ${callSid} auto-terminated: exceeded max duration of ${maxDurationMins} minutes.`);
+          const client = getSignalWireClient();
+          const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+          if (!isMock && callSid) {
+            try {
+              await client.calls(callSid).update({ status: 'completed' });
+            } catch (e) {
+              console.error('Failed to terminate over-duration call:', e);
+            }
+          }
+          ws.close();
+        }, maxDurationMins * 60 * 1000);
+
+        // Setup Silence Timeout Function
+        const maxSilenceSecs = parseInt(settings.max_no_speech_timeout) || 30;
+        resetSilenceTimeout = () => {
+          if (silenceTimeout) {
+            clearTimeout(silenceTimeout);
+            silenceTimeout = null;
+          }
+          if (ws.readyState === 1) {
+            silenceTimeout = setTimeout(async () => {
+              console.log(`Call ${callSid} auto-terminated: caller silence exceeded ${maxSilenceSecs} seconds.`);
+              const client = getSignalWireClient();
+              const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+              if (!isMock && callSid) {
+                try {
+                  await client.calls(callSid).update({ status: 'completed' });
+                } catch (e) {
+                  console.error('Failed to terminate silent call:', e);
+                }
+              }
+              ws.close();
+            }, maxSilenceSecs * 1000);
+          }
+        };
+
+        // Start initial silence timeout
+        resetSilenceTimeout();
+        const dbModel = settings.openai_model || 'gpt-4o-mini-realtime-preview';
+        const MODEL_MAPPING = {
+          'gpt-4o-mini-realtime-preview': 'gpt-realtime-mini',
+          'gpt-4o-realtime-preview': 'gpt-realtime-2',
+          'gpt-4o-realtime-preview-2024-12-17': 'gpt-realtime-2',
+          'gpt-4o-realtime-preview-2024-10-01': 'gpt-realtime-2'
+        };
+        const model = MODEL_MAPPING[dbModel] || dbModel;
+        const apiKey = process.env.OPENAI_API_KEY;
+        
+        if (!apiKey) {
+          console.error('CRITICAL: OPENAI_API_KEY is not defined in your environment variables.');
+          ws.close();
+          return;
+        }
+
+        console.log(`Connecting OpenAI Realtime API (${model}) for Tenant ${tenantId}...`);
+        openaiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=${model}`, {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`
+          }
+        });
+
+        openaiWs.on('open', async () => {
+          console.log(`Connected to OpenAI Realtime API for call ${callSid}`);
+          
+          let systemInstructions = '';
+
+          // Accent & Language Specific Instructions (Prepended for priority)
+          if (settings.voice_accent === 'singlish') {
+            systemInstructions += `ACCENT/DIALECT RULE - SINGLISH:\n- You MUST speak English with a natural Singaporean (Singlish) accent and pacing.\n- To achieve this, write and structure your response text using Singaporean sentence structures, grammatical patterns, and colloquial particles.\n- Use words like 'lah', 'lor', 'meh', 'leh', 'can' naturally at the end of sentences (e.g., 'Sure, can do that for you lah.', 'What time you want lor?', 'Are you sure meh?').\n- Use local terms like 'booking' instead of 'reservation', and phrase questions directly (e.g., 'You want Swedish massage or facial?').\n- Maintain a highly polite, helpful, and professional receptionist demeanor, but sound like a native Singaporean local speaking Singlish.\n\n`;
+          } else if (settings.voice_accent === 'chinese-english') {
+            systemInstructions += `ACCENT/DIALECT RULE - CHINESE ENGLISH (CHINGLISH):\n- You MUST speak English with a polite, native Chinese accent (cadence and rhythm of a Mandarin speaker speaking English).\n- To achieve this, structure your response text using typical Chinese-English phrasing and pacing.\n- Use simple grammatical transitions and repeat words for confirmation/emphasis (e.g., 'Okay, can, can, no problem.', 'Hello, yes, how can I help you?', 'We have very good Swedish massage, yes.').\n- Keep sentences shorter and pacing clear, mimicking the intonation patterns of a polite native Chinese receptionist speaking English.\n\n`;
+          } else if (settings.voice_accent === 'chinese-mandarin') {
+            systemInstructions += `ACCENT/DIALECT RULE - CHINESE MANDARIN:\n- You MUST speak and respond entirely in fluent Mandarin Chinese (普通话).\n- Translate all instructions, system instructions, services, and conversation details to standard Mandarin Chinese.\n- Write all outputs using simplified Chinese characters (简体字).\n- Keep your tone polite, warm, and professional, using standard Chinese business greetings and honorifics (e.g., '您好，欢迎致电...', '请问您怎么称呼？', '好的，没问题。').\n\n`;
+          } else if (settings.voice_accent === 'malaysian-english') {
+            systemInstructions += `ACCENT/DIALECT RULE - MALAYSIAN ENGLISH (MANGLISH):\n- You MUST speak English with a friendly Malaysian (Manglish) accent and cadence.\n- Structure your response text using local Malaysian conversational pacing and colloquial particles.\n- Use words like 'ah', 'lah', 'eh', 'can' naturally (e.g., 'Can, boss, what time you want ah?', 'We are open at 9am lah.').\n- Maintain a warm, welcoming, and polite receptionist tone, characteristic of a local Malaysian staff member.\n\n`;
+          }
+
+          systemInstructions += settings.system_prompt;
+          
+          // Append Services and Pricing dynamically
+          try {
+            const dbServices = await getServices(tenantId);
+            if (dbServices && dbServices.length > 0) {
+              const listStr = dbServices.map(s => `- ${s.name}: $${s.price} (${s.duration} mins) - ${s.description || 'No description'}`).join('\n');
+              systemInstructions += `\n\nOFFICIAL SERVICES & PRICING CATALOGUE:\n${listStr}\n\nUse this official catalog as your primary reference for pricing and booking duration.`;
+            }
+          } catch (svcErr) {
+            console.error('Error loading services for AI prompt:', svcErr);
+          }
+
+          if (settings.crawled_content) {
+            systemInstructions += `\n\nADDITIONAL BUSINESS, PRODUCTS, AND SERVICES INFORMATION (CRAWLED FROM ${settings.website_url || 'tenant website'}):\n${settings.crawled_content}`;
+          }
+          const agentName = settings.agent_name || 'Aura';
+          const companyName = settings.company_name || 'Aura Wellness Spa';
+
+          if (contactName) {
+            systemInstructions += `\n\nCRITICAL CONTEXT: You are talking to an existing client named "${contactName}" (Lead Stage: "${leadStage}"). Greet them back warmly by name! For example, say: "Hello ${contactName}, welcome back to ${companyName}..."`;
+          }
+          if (settings.system_mode === 'restaurant') {
+            systemInstructions += `\n\nRESTAURANT RESERVATION MODE CONTEXT:\n- You are a professional virtual host receptionist for the restaurant "${companyName}".\n- You help customers book table reservations.\n- ALWAYS ask the customer for the guest count/party size (how many people), date, and time of the reservation.\n- If they have a table preference, check if that table is available. Otherwise, just book whichever table is free.\n- You MUST call check_availability first before scheduling an appointment. Always pass party_size and optionally table_number.`;
+            
+            // Append dynamic tables listing if available
+            try {
+              // Wait, since we are inside a synchronous context or promise chain, let's wrap this in a way to fetch tables
+              // But settings.resources_list is already in scope, or we can instruct it generally. Let's list general table info.
+              systemInstructions += `\n- The dining slot duration is ${settings.appointment_gap || 90} minutes.`;
+            } catch (e) {}
+          } else if (settings.system_mode === 'hotel') {
+            systemInstructions += `\n\nHOTEL RESERVATION MODE CONTEXT:\n- You are a professional virtual front desk receptionist for the hotel "${companyName}".\n- You help customers book room stays.\n- ALWAYS ask the customer for their check-in date, check-out date (or number of nights), and room type preference (e.g. Single, Double, Deluxe Suite, Family Room), and guest count.\n- You MUST call check_availability first before scheduling an appointment. Always pass date (check-in), checkout_date, and optionally room_number or room_type under resource_name.\n- Standard check-in date format is YYYY-MM-DD. Checkout date format is YYYY-MM-DD.`;
+          } else if (settings.resources_list) {
+            systemInstructions += `\n\nAVAILABLE STAFF/RESOURCES: The active staff members, doctors, therapists, or tables available for booking are: ${settings.resources_list}. Ask the customer if they have a preference, or assign whichever resource is free. Check availability for that specific resource.`;
+          }
+
+          // Dynamic identity and company override to enforce settings
+          systemInstructions += `\n\nIDENTITY & BUSINESS OVERRIDE:\n- Your name is "${agentName}". You must ALWAYS refer to yourself as "${agentName}". Never call yourself "Aura" unless your configured name is indeed "Aura".\n- You represent "${companyName}". Always refer to the business as "${companyName}". Never refer to the business as "Aura Wellness Spa" unless the business name is set to that.`;
+
+          // Character-specific Dialect / Accent Injector
+          let characterAccentPrompt = '';
+          if (settings.voice === 'meiling' || settings.voice === 'jianguo') {
+            characterAccentPrompt = `ACCENT/DIALECT RULE - CHINA:\n- You represent a receptionist from China.\n- You MUST speak English with a polite, native Chinese accent (cadence and rhythm of a Mandarin speaker speaking English).\n- To achieve this, structure your response text using typical Chinese-English phrasing and pacing. Use simple grammatical transitions and repeat words for confirmation (e.g., 'Okay, can, can, no problem.', 'Hello, yes, how can I help you?', 'We have very good Swedish massage, yes.'). Keep sentences shorter and pacing clear.\n- (Note: If the customer speaks to you in Mandarin Chinese, you may respond in fluent Mandarin Chinese).\n\n`;
+          } else if (settings.voice === 'wing_yee' || settings.voice === 'ka_ho') {
+            characterAccentPrompt = `ACCENT/DIALECT RULE - HONG KONG:\n- You represent a receptionist from Hong Kong.\n- You MUST speak English with a clear Hong Kong / Cantonese accent (Honkish intonation and phrasing).\n- Keep your tone highly polite, formal, and professional, characteristic of a Hong Kong business representative.\n- (Note: If the customer speaks to you in Cantonese or Mandarin Chinese, you may respond in their preferred language fluently).\n\n`;
+          } else if (settings.voice === 'siti' || settings.voice === 'arif') {
+            characterAccentPrompt = `ACCENT/DIALECT RULE - MALAYSIA:\n- You represent a receptionist from Malaysia.\n- You MUST speak English with a friendly Malaysian accent (Manglish pacing).\n- Structure your response text using local Malaysian conversational pacing and colloquial particles naturally, such as 'ah', 'lah', 'eh', 'can' (e.g., 'Can, boss, what time you want ah?', 'We are open at 9am lah.').\n- Maintain a warm, welcoming, and polite receptionist tone.\n\n`;
+          } else if (settings.voice === 'priya' || settings.voice === 'aarav') {
+            characterAccentPrompt = `ACCENT/DIALECT RULE - INDIA:\n- You represent a receptionist from India.\n- You MUST speak English with a warm, polite, and clear Indian accent (Indian English rhythm and pronunciation).\n- Structure your phrasing to sound like a professional Indian receptionist, keeping it highly polite, respectful, and structured (e.g., using terms like 'Certainly, I can assist you with that.', 'Please let me check the availability.').\n\n`;
+          }
+
+          if (characterAccentPrompt) {
+            systemInstructions = characterAccentPrompt + systemInstructions;
+          }
+
+          // Send configuration settings to OpenAI
+          const voiceMapping = {
+            'fable': 'ballad',
+            'onyx': 'echo',
+            'nova': 'shimmer',
+            'meiling': 'coral',
+            'jianguo': 'echo',
+            'wing_yee': 'shimmer',
+            'ka_ho': 'ballad',
+            'siti': 'coral',
+            'arif': 'verse',
+            'priya': 'sage',
+            'aarav': 'echo'
+          };
+          const selectedVoice = settings.voice || 'alloy';
+          const realtimeVoice = voiceMapping[selectedVoice] || selectedVoice;
+
+          const sessionUpdate = {
+            type: 'session.update',
+            session: {
+              type: 'realtime',
+              output_modalities: ['audio'],
+              instructions: systemInstructions,
+              audio: {
+                input: {
+                  format: {
+                    type: 'audio/pcmu'
+                  },
+                  transcription: {
+                    model: 'whisper-1'
+                  },
+                  turn_detection: {
+                    type: 'server_vad',
+                    threshold: 0.5,
+                    prefix_padding_ms: 300,
+                    silence_duration_ms: 500
+                  }
+                },
+                output: {
+                  format: {
+                    type: 'audio/pcmu'
+                  },
+                  voice: realtimeVoice
+                }
+              },
+              tools: [
+                {
+                  type: 'function',
+                  name: 'check_availability',
+                  description: 'Check if a specific date and time slot, or hotel room stay, is available for a booking. Returns true if available, false if already booked.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      date: { type: 'string', description: 'The check-in date in YYYY-MM-DD format (e.g. 2026-05-25)' },
+                      time: { type: 'string', description: 'The check-in time in HH:MM format (24-hour, e.g. 14:30) (defaults to 14:00/2:00 PM for hotels if not specified).' },
+                      resource_name: { type: 'string', description: 'Specific staff name, table name, or room type/room number (e.g., Suite, Room 102) to check (optional).' },
+                      party_size: { type: 'integer', description: 'Number of guests/seats requested. Defaults to 1.', default: 1 },
+                      table_number: { type: 'string', description: 'Specific table number preference (optional). Relevant in Restaurant Mode.' },
+                      checkout_date: { type: 'string', description: 'The check-out date in YYYY-MM-DD format. Required in Hotel Mode.' },
+                      room_type: { type: 'string', description: 'Preferred room type (e.g., Single, Double, Deluxe Suite) (optional). Relevant in Hotel Mode.' },
+                      room_number: { type: 'string', description: 'Specific room number preference (optional). Relevant in Hotel Mode.' }
+                    },
+                    required: ['date']
+                  }
+                },
+                {
+                  type: 'function',
+                  name: 'schedule_appointment',
+                  description: 'Schedules a new reservation. Confirm availability with check_availability first.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      customer_name: { type: 'string', description: 'The full name of the customer' },
+                      customer_phone: { type: 'string', description: 'The phone number of the customer' },
+                      date: { type: 'string', description: 'The check-in date in YYYY-MM-DD format' },
+                      time: { type: 'string', description: 'The check-in time (e.g., 14:00) (defaults to 14:00 for hotels).' },
+                      service: { type: 'string', description: 'The service type, meal type, or stay type being booked (e.g., Deluxe Suite stay, Dinner, Swedish Massage)' },
+                      notes: { type: 'string', description: 'Any special requests or instructions (optional)' },
+                      resource_name: { type: 'string', description: 'Specific therapist, table, or room to book with (optional).' },
+                      party_size: { type: 'integer', description: 'Number of guests (optional, defaults to 1).', default: 1 },
+                      table_number: { type: 'string', description: 'Specific table number allocated/preferred (optional).' },
+                      checkout_date: { type: 'string', description: 'The check-out date in YYYY-MM-DD format. Required in Hotel Mode.' },
+                      room_number: { type: 'string', description: 'Specific room number allocated (optional).' }
+                    },
+                    required: ['customer_name', 'customer_phone', 'date', 'service']
+                  }
+                },
+                {
+                  type: 'function',
+                  name: 'transfer_to_human',
+                  description: 'Call this when the customer requests to speak to a human, is frustrated, or asks a question that the AI receptionist cannot answer.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      reason: { type: 'string', description: 'The reason why the call is being transferred.' }
+                    },
+                    required: ['reason']
+                  }
+                }
+              ]
+            }
+          };
+          
+          openaiWs.send(JSON.stringify(sessionUpdate));
+
+          // Play dynamic greeting
+          const greetingText = contactName 
+            ? `Introduce yourself: "Hello ${contactName}, welcome back to ${settings.company_name || 'Aura Wellness Spa'}! It is great to hear from you again. Please note that this call is recorded and transcribed for quality and verification purposes. How can I help you today?"`
+            : `Introduce yourself: "Thank you for calling ${settings.company_name || 'Aura Wellness Spa'}, my name is ${agentName}. Please note that this call is recorded and transcribed for quality and verification purposes. How can I help you today?"`;
+
+          openaiWs.send(JSON.stringify({
+            type: 'response.create',
+            response: {
+              instructions: greetingText
+            }
+          }));
+        });
+
+        openaiWs.on('message', async (openAiMsg) => {
+          try {
+            const event = JSON.parse(openAiMsg);
+            
+            if (event.type === 'error') {
+              console.error(`OpenAI Realtime API Error for call ${callSid}:`, JSON.stringify(event.error, null, 2));
+            }
+
+            // Handle audio output from OpenAI -> Twilio
+            if (event.type === 'response.output_audio.delta' && event.delta) {
+              ws.send(JSON.stringify({
+                event: 'media',
+                streamSid,
+                media: {
+                  payload: event.delta
+                }
+              }));
+            }
+
+            // Handle user transcription completed (Whisper)
+            if (event.type === 'conversation.item.input_audio_transcription.completed' && event.transcript) {
+              const text = event.transcript.trim();
+              if (text) {
+                await appendCallTranscript(callSid, 'user', text);
+                broadcastToDashboard(tenantId, 'transcript', {
+                  callSid,
+                  speaker: 'user',
+                  text
+                });
+              }
+            }
+
+            // Handle streaming assistant transcript delta
+            if (event.type === 'response.output_audio_transcript.delta' && event.delta) {
+              broadcastToDashboard(tenantId, 'transcript_delta', {
+                callSid,
+                speaker: 'assistant',
+                text: event.delta
+              });
+              currentTurnText += event.delta;
+            }
+
+            // Handle assistant transcript completed
+            if (event.type === 'response.output_audio_transcript.done' && event.transcript) {
+              resetSilenceTimeout();
+              const text = event.transcript.trim();
+              if (text) {
+                await appendCallTranscript(callSid, 'assistant', text);
+                broadcastToDashboard(tenantId, 'transcript', {
+                  callSid,
+                  speaker: 'assistant',
+                  text
+                });
+              }
+              currentTurnText = '';
+            }
+
+            // Handle function call execution requests
+            if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+              const { name, call_id, arguments: fnArgs } = event.item;
+              console.log(`Tenant ${tenantId} call execution function: ${name}`);
+              const args = JSON.parse(fnArgs);
+              let result = {};
+
+              try {
+                if (name === 'check_availability') {
+                  const partySize = args.party_size ? parseInt(args.party_size) : 1;
+                  const resName = args.table_number || args.resource_name || args.room_number || args.room_type || '';
+                  result = await checkAvailability(tenantId, args.date, args.time, resName, partySize, args.checkout_date);
+                } else if (name === 'schedule_appointment') {
+                  if (!args.customer_phone || args.customer_phone.toLowerCase() === 'caller') {
+                    args.customer_phone = phoneNumber;
+                  }
+                  const appointment = await addAppointment(tenantId, args);
+                  result = { scheduled: true, appointment };
+                  
+                  // Broadcast updates to dashboard
+                  broadcastToDashboard(tenantId, 'refresh_appointments', appointment);
+                  broadcastToDashboard(tenantId, 'refresh_crm', {});
+
+                  // Broadcast Google Calendar sync toast alert
+                  if (appointment.gcal_synced) {
+                    broadcastToDashboard(tenantId, 'google_calendar_sync', {
+                      appointmentId: appointment.id,
+                      customerName: appointment.customer_name,
+                      service: appointment.service,
+                      date: appointment.date,
+                      time: appointment.time,
+                      resourceName: appointment.resource_name,
+                      googleEmail: appointment.google_email
+                    });
+                  }
+                } else if (name === 'transfer_to_human') {
+                  const reason = args.reason || 'AI requested transfer';
+                  console.log(`Initiating call transfer to human for Tenant ${tenantId}, CallSid=${callSid}, Reason: ${reason}`);
+                  
+                  const client = getSignalWireClient();
+                  const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+                  const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+                  if (!isMock) {
+                    try {
+                      await client.calls(callSid).update({
+                        url: `${ngrokUrl}/transfer-call-twiml?tenantId=${tenantId}&reason=${encodeURIComponent(reason)}`
+                      });
+                      result = { success: true, message: "Redirecting customer call to human now." };
+                    } catch (redirectErr) {
+                      console.error('Failed to redirect live call:', redirectErr);
+                      result = { error: 'Failed to redirect live call: ' + redirectErr.message };
+                    }
+                  } else {
+                    console.log(`[Mock] Redirecting call ${callSid} to: ${ngrokUrl}/transfer-call-twiml?tenantId=${tenantId}`);
+                    result = { success: true, message: "[Mock] Redirecting call to human now." };
+                  }
+
+                  // Gracefully close WebRTC media stream socket after 1s to stop OpenAI API billing
+                  setTimeout(() => {
+                    if (ws && ws.readyState === 1) {
+                      console.log(`Closing media stream ws for CallSid=${callSid} following transfer.`);
+                      ws.close();
+                    }
+                  }, 1000);
+                }
+              } catch (err) {
+                console.error(`Tenant ${tenantId} error executing ${name}:`, err);
+                result = { error: err.message };
+              }
+
+              // Send function output back to OpenAI
+              openaiWs.send(JSON.stringify({
+                type: 'conversation.item.create',
+                item: {
+                  type: 'function_call_output',
+                  call_id,
+                  output: JSON.stringify(result)
+                }
+              }));
+
+              // Tell model to generate a response
+              openaiWs.send(JSON.stringify({
+                type: 'response.create'
+              }));
+            }
+
+            // Handle user interruption
+            if (event.type === 'input_audio_buffer.speech_started') {
+              resetSilenceTimeout();
+              ws.send(JSON.stringify({
+                event: 'clear',
+                streamSid
+              }));
+              openaiWs.send(JSON.stringify({
+                type: 'response.cancel'
+              }));
+            }
+
+          } catch (err) {
+            console.error('Error parsing OpenAI event:', err);
+          }
+        });
+
+        openaiWs.on('error', (err) => {
+          console.error(`OpenAI connection error for call ${callSid}:`, err);
+        });
+
+        openaiWs.on('close', (code, reason) => {
+          console.log(`OpenAI connection closed for call ${callSid}. Code: ${code}, Reason: ${reason ? reason.toString() : 'None'}`);
+          ws.close();
+        });
+
+      } else if (data.event === 'media' && data.media?.payload) {
+        if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
+          openaiWs.send(JSON.stringify({
+            type: 'input_audio_buffer.append',
+            audio: data.media.payload
+          }));
+        }
+      } else if (data.event === 'stop') {
+        ws.close();
+      }
+
+    } catch (err) {
+      console.error('Error processing Twilio WebSocket message:', err);
+    }
+  });
+
+  ws.on('close', async () => {
+    console.log('Twilio Media Stream closed.');
+    if (durationLimitTimeout) clearTimeout(durationLimitTimeout);
+    if (silenceTimeout) clearTimeout(silenceTimeout);
+    if (openaiWs) {
+      openaiWs.close();
+    }
+    
+    if (callSid && tenantId) {
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      await updateCallStatus(callSid, 'completed', duration);
+      
+      // Check and send low credit reminders
+      try {
+        const trigger = await checkLowCreditReminderTrigger(tenantId);
+        if (trigger) {
+          console.log(`[Low Credit Trigger] Tenant ${tenantId} reached threshold of ${trigger.limit} mins. Remaining: ${trigger.remaining} mins.`);
+          
+          // 1. Send simulated Email
+          console.log(`[Email Reminder] Sent to ${trigger.email}: Low Credit Warning! You have only ${trigger.remaining} minutes left on your Voice AI Receptionist account.`);
+          
+          // 2. Send simulated WhatsApp message
+          const settings = await getSettings(tenantId);
+          const tenantPhone = settings.twilio_phone_number || '+15551112222';
+          console.log(`[WhatsApp Reminder] Sent to ${tenantPhone}: Low Credit Warning! You have only ${trigger.remaining} minutes left on your Voice AI Receptionist account.`);
+          
+          // Send live WhatsApp via Twilio if configured
+          const accountSid = process.env.TWILIO_ACCOUNT_SID;
+          const fromWhatsApp = `whatsapp:${process.env.TWILIO_PHONE_NUMBER || '+14155238886'}`;
+          if (accountSid && accountSid.startsWith('AC') && tenantPhone) {
+            try {
+              const client = getTwilioClient();
+              await client.messages.create({
+                from: fromWhatsApp,
+                to: `whatsapp:${tenantPhone}`,
+                body: `Low Credit Warning! You have only ${trigger.remaining} minutes left on your Voice AI Receptionist account.`
+              });
+              console.log(`[WhatsApp Reminder] Successfully sent live WhatsApp message to ${tenantPhone}`);
+            } catch (err) {
+              console.error('Failed to send live WhatsApp low credit reminder:', err.message);
+            }
+          }
+          
+          // Log Activity
+          await logTenantActivity(tenantId, 'settings_update', `[Credit Warning Triggered] Email and WhatsApp reminder sent. Remaining minutes: ${trigger.remaining}`);
+          
+          // Broadcast to dashboard
+          broadcastToDashboard(tenantId, 'credit_warning', {
+            remaining: trigger.remaining,
+            limit: trigger.limit
+          });
+        }
+      } catch (err) {
+        console.error('Failed to process low credit reminder check:', err);
+      }
+      
+      // Notify dashboard
+      broadcastToDashboard(tenantId, 'call_ended', {
+        callSid,
+        duration,
+        status: 'completed'
+      });
+      
+      // Generate summary asynchronously
+      try {
+        await generateCallSummary(tenantId, callSid);
+      } catch (err) {
+        console.error('Failed to generate call summary:', err);
+      }
+    }
+  });
+});
+
+// Generate OpenAI summary of the conversation
+async function generateCallSummary(tenantId, callSid) {
+  try {
+    const dbCalls = await getCallLogs(tenantId);
+    const callObj = dbCalls.find(c => c.call_sid === callSid);
+    if (!callObj || !callObj.transcript) return;
+    
+    let transcriptArray = [];
+    try {
+      transcriptArray = JSON.parse(callObj.transcript);
+    } catch (e) {
+      console.error('Failed to parse transcript for summary:', e);
+      return;
+    }
+    
+    if (transcriptArray.length === 0) return;
+    
+    const transcriptText = transcriptArray
+      .map(entry => `${entry.speaker === 'user' ? 'Customer' : 'Receptionist'}: ${entry.text}`)
+      .join('\n');
+      
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional assistant summarizing a customer phone call with an AI Wellness Spa receptionist. Write a concise, 1-2 sentence summary of the call. Mention the caller\'s main request and the outcome (e.g. booked an appointment, asked about hours).'
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript:\n\n${transcriptText}`
+          }
+        ],
+        max_tokens: 100
+      })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      const summaryText = result.choices?.[0]?.message?.content?.trim() || 'No summary generated.';
+      await updateCallSummary(callSid, summaryText);
+      broadcastToDashboard(tenantId, 'call_summary_updated', { callSid, summary: summaryText });
+      broadcastToDashboard(tenantId, 'refresh_crm', {});
+    }
+  } catch (err) {
+    console.error('Error generating summary:', err);
+  }
+}
+
+// Upgrade WebSocket with query token parsing
+server.on('upgrade', (request, socket, head) => {
+  const parsedUrl = url.parse(request.url, true);
+  const pathname = parsedUrl.pathname;
+
+  if (pathname === '/media-stream') {
+    mediaStreamWss.handleUpgrade(request, socket, head, (ws) => {
+      mediaStreamWss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/dashboard-ws') {
+    // Extract token query parameter from ws upgrade request
+    const token = parsedUrl.query.token;
+    dashboardWss.handleUpgrade(request, socket, head, (ws) => {
+      ws.tenantId = token ? parseInt(token) : null;
+      dashboardWss.emit('connection', ws, request);
+    });
+  } else if (pathname === '/api/live-demo') {
+    liveDemoWss.handleUpgrade(request, socket, head, (ws) => {
+      liveDemoWss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+let tunnelProcess = null;
+
+// Start a public HTTPS tunnel via localhost.run for webhook forwarding in local dev
+function startSshTunnel() {
+  return new Promise((resolve) => {
+    const ngrokUrl = process.env.NGROK_URL;
+    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or lhr.life)
+    if (ngrokUrl && !ngrokUrl.includes('localhost') && !ngrokUrl.includes('127.0.0.1')) {
+      console.log(`Using existing public NGROK_URL: ${ngrokUrl}`);
+      return resolve(ngrokUrl);
+    }
+
+    console.log('Spawning automated public HTTPS tunnel via localhost.run...');
+    const ssh = spawn('ssh', [
+      '-o', 'StrictHostKeyChecking=no',
+      '-o', 'ServerAliveInterval=30',
+      '-R', `80:127.0.0.1:${PORT}`,
+      'nokey@localhost.run'
+    ]);
+
+    tunnelProcess = ssh;
+    let resolved = false;
+
+    ssh.stdout.on('data', (data) => {
+      const output = data.toString();
+      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.lhr\.life/);
+      if (match && !resolved) {
+        const tunnelUrl = match[0];
+        console.log(`\n🎉 Public Tunnel Active: ${tunnelUrl}`);
+        console.log(`Twilio webhook calls will route to ${tunnelUrl}/incoming-call or /outbound-call-twiml\n`);
+        process.env.NGROK_URL = tunnelUrl;
+        resolved = true;
+        resolve(tunnelUrl);
+      }
+    });
+
+    ssh.stderr.on('data', (data) => {
+      const errOutput = data.toString().trim();
+      if (errOutput && !errOutput.includes('Pseudo-terminal')) {
+        console.log(`[Tunnel Info] ${errOutput}`);
+      }
+    });
+
+    ssh.on('close', (code) => {
+      console.log(`Tunnel process disconnected (code ${code})`);
+      if (!resolved) resolve(null);
+    });
+
+    // Timeout fallback after 12 seconds
+    setTimeout(() => {
+      if (!resolved) {
+        console.warn('Tunnel setup timed out. Twilio outbound calls might fail without a public proxy.');
+        resolve(null);
+      }
+    }, 12000);
+  });
+}
+
+// Clean up child tunnel process on exit
+process.on('SIGINT', () => {
+  if (tunnelProcess) tunnelProcess.kill();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  if (tunnelProcess) tunnelProcess.kill();
+  process.exit(0);
+});
+
+// Initialize database and start HTTP Server
+initDb().then(async () => {
+  await startSshTunnel();
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n======================================================`);
+    console.log(`Voice AI SaaS Server listening on port ${PORT}`);
+    console.log(`- Web portal dashboard: http://localhost:${PORT}`);
+    if (process.env.NGROK_URL) {
+      console.log(`- Public HTTPS tunnel URL: ${process.env.NGROK_URL}`);
+    }
+    console.log(`======================================================\n`);
+  });
+}).catch(err => {
+  console.error('Database initialization failed. Server could not start.', err);
+});

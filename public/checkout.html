@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete Your Secure Booking Payment | VoiceDesk</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Stripe.js (loaded dynamically if merchant uses Stripe) -->
+  <script id="stripe-js-script"></script>
+  
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #131a2e;
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --bg-glass-hover: rgba(255, 255, 255, 0.06);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glass-bright: rgba(255, 255, 255, 0.15);
+      
+      --color-primary: #06b6d4;      /* Cyan */
+      --color-primary-hover: #0891b2;
+      --color-secondary: #8b5cf6;    /* Purple */
+      --color-secondary-hover: #7c3aed;
+      --color-success: #10b981;      /* Emerald Green */
+      --color-danger: #ef4444;       /* Red */
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dark: #475569;
+      
+      --font-display: 'Outfit', 'Inter', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --border-radius-lg: 16px;
+      --border-radius-md: 10px;
+      --border-radius-sm: 6px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      background-image: 
+        radial-gradient(at 10% 10%, rgba(6, 182, 212, 0.04) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.04) 0px, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .checkout-container {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 30px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .checkout-container {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+    }
+
+    /* Logo & Header */
+    .brand-header {
+      text-align: center;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+    }
+
+    .brand-header i {
+      color: var(--color-primary);
+      filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.5));
+    }
+
+    .brand-header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-header span {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Glass Panels */
+    .checkout-panel {
+      background: rgba(19, 26, 46, 0.5);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--border-radius-lg);
+      padding: 30px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .checkout-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border-glass);
+      padding-bottom: 15px;
+    }
+
+    .checkout-title i {
+      color: var(--color-primary);
+    }
+
+    /* Order Details List */
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .detail-label {
+      color: var(--text-muted);
+    }
+
+    .detail-value {
+      font-weight: 500;
+      color: var(--text-main);
+      text-align: right;
+    }
+
+    .merchant-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      color: var(--color-primary);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .price-total {
+      margin-top: auto;
+      border-top: 1px solid var(--border-glass);
+      padding-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .price-total-label {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .price-total-amount {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--color-primary);
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-glass);
+      color: var(--text-main);
+      padding: 12px 16px;
+      border-radius: var(--border-radius-md);
+      font-size: 14px;
+      outline: none;
+      transition: var(--transition-smooth);
+    }
+
+    .form-input:focus {
+      border-color: var(--color-primary);
+      background: rgba(255, 255, 255, 0.05);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.15);
+    }
+
+    /* Multi-column Inputs */
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    /* Stripe Card Element Container */
+    #stripe-card-element {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-glass);
+      padding: 14px 16px;
+      border-radius: var(--border-radius-md);
+      transition: var(--transition-smooth);
+    }
+
+    #stripe-card-element.StripeElement--focus {
+      border-color: var(--color-primary);
+      background: rgba(255, 255, 255, 0.05);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.15);
+    }
+
+    /* Pay Button */
+    .pay-btn {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      border: none;
+      color: #fff;
+      padding: 16px;
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: var(--border-radius-md);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      transition: var(--transition-smooth);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+    }
+
+    .pay-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(6, 182, 212, 0.45);
+    }
+
+    .pay-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .pay-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Secure Badge */
+    .secure-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 20px;
+    }
+
+    .secure-badge i {
+      color: var(--color-success);
+    }
+
+    /* Status States */
+    .state-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .state-icon {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 32px;
+    }
+
+    .state-icon.success {
+      background: rgba(16, 185, 129, 0.1);
+      border: 2px solid var(--color-success);
+      color: var(--color-success);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+    }
+
+    .state-icon.error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 2px solid var(--color-danger);
+      color: var(--color-danger);
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    }
+
+    .state-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .state-desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 320px;
+      margin-bottom: 30px;
+    }
+
+    /* Loading Overlay inside Button or Page */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Helper CSS */
+    .hidden {
+      display: none !important;
+    }
+
+    .error-banner {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      padding: 12px 16px;
+      border-radius: var(--border-radius-md);
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .gateway-notice {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-glass);
+      padding: 12px;
+      border-radius: var(--border-radius-md);
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .gateway-notice i {
+      color: var(--color-primary);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="brand-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 25px;">
+    <div class="logo-wrapper" style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--border-radius-md); background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass);">
+      <svg viewBox="0 0 32 32" style="width: 26px; height: 26px; fill: none; display: block;">
+        <circle cx="16" cy="16" r="6" fill="#ffffff" />
+        <ellipse cx="16" cy="16" rx="12" ry="4" stroke="#22c55e" stroke-width="2.5" transform="rotate(-30 16 16)" />
+      </svg>
+    </div>
+    <h1 style="font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; letter-spacing: -0.5px; text-transform: uppercase; display: flex; align-items: center; margin: 0; line-height: 1;">
+      <span style="color: #ffffff;">Voice</span><span style="color: #22c55e;">Desk</span><span style="color: var(--text-muted); font-size: 1.1rem; margin-left: 8px; font-weight: 500; text-transform: none;">Checkout</span>
+    </h1>
+  </div>
+
+  <!-- Loading State on Start -->
+  <div id="initial-loader" class="checkout-panel" style="width: 100%; max-width: 500px; align-items: center; padding: 60px 20px;">
+    <div class="spinner" style="width: 40px; height: 40px; border-width: 3px; border-top-color: var(--color-primary); margin-bottom: 20px;"></div>
+    <p style="color: var(--text-muted); font-size: 14px;">Retrieving secure checkout details...</p>
+  </div>
+
+  <!-- Error State on Start -->
+  <div id="initial-error" class="checkout-panel hidden" style="width: 100%; max-width: 500px; text-align: center; padding: 50px 30px;">
+    <div class="state-icon error" style="margin: 0 auto 20px;">
+      <i data-lucide="alert-triangle"></i>
+    </div>
+    <h2 class="state-title">Unable to Load Checkout</h2>
+    <p id="initial-error-text" class="state-desc" style="margin: 0 auto 20px;">The requested checkout session could not be found or has expired.</p>
+  </div>
+
+  <!-- Main Checkout Grid -->
+  <div id="checkout-grid" class="checkout-container hidden">
+    
+    <!-- Left panel: Form details -->
+    <div class="checkout-panel">
+      <h2 class="checkout-title">
+        <i data-lucide="credit-card"></i>
+        Payment Details
+      </h2>
+
+      <div id="error-alert" class="error-banner hidden">
+        <i data-lucide="x-circle" style="width: 18px; height: 18px; flex-shrink: 0;"></i>
+        <span id="error-message"></span>
+      </div>
+
+      <div class="gateway-notice">
+        <i data-lucide="info" style="width: 16px; height: 16px;"></i>
+        <span id="gateway-notice-text">Secured with merchant payment gateway.</span>
+      </div>
+
+      <form id="payment-form" onsubmit="handlePaymentSubmit(event)">
+        <!-- Customer Details (Static from Booking) -->
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label>Customer Name</label>
+            <input type="text" id="cust-name" class="form-input" readonly>
+          </div>
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" id="cust-phone" class="form-input" readonly>
+          </div>
+        </div>
+
+        <!-- Sandbox Inputs -->
+        <div id="sandbox-fields">
+          <div class="form-group">
+            <label>Cardholder Name</label>
+            <input type="text" id="sb-cardname" class="form-input" placeholder="e.g. John Doe" required>
+          </div>
+          <div class="form-group">
+            <label>Card Number</label>
+            <input type="text" id="sb-cardnumber" class="form-input" placeholder="•••• •••• •••• ••••" required maxlength="19" oninput="formatCardNumber(this)">
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Expiry Date</label>
+              <input type="text" id="sb-expiry" class="form-input" placeholder="MM/YY" required maxlength="5" oninput="formatExpiry(this)">
+            </div>
+            <div class="form-group">
+              <label>Security Code (CVV)</label>
+              <input type="password" id="sb-cvv" class="form-input" placeholder="•••" required maxlength="4">
+            </div>
+          </div>
+        </div>
+
+        <!-- Stripe Elements container -->
+        <div id="stripe-fields" class="hidden">
+          <div class="form-group">
+            <label>Credit or Debit Card</label>
+            <div id="stripe-card-element"></div>
+          </div>
+        </div>
+
+        <button type="submit" id="pay-button" class="pay-btn" style="width: 100%;">
+          <span id="btn-text">Pay Now</span>
+          <div id="btn-spinner" class="spinner hidden"></div>
+        </button>
+
+        <div class="secure-badge">
+          <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
+          <span>Secure SSL 256-bit Encrypted Transaction</span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Right panel: Order Summary -->
+    <div class="checkout-panel">
+      <h2 class="checkout-title">
+        <i data-lucide="shopping-bag"></i>
+        Order Summary
+      </h2>
+
+      <div style="margin-bottom: 25px;">
+        <span id="merchant-name-badge" class="merchant-badge">
+          <i data-lucide="store" style="width: 14px; height: 14px;"></i>
+          <span id="merchant-name">VoiceDesk Merchant</span>
+        </span>
+      </div>
+
+      <div class="detail-row">
+        <span class="detail-label">Service booked</span>
+        <span class="detail-value" id="summary-service">-</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Date & Time</span>
+        <span class="detail-value" id="summary-datetime">-</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Booking reference</span>
+        <span class="detail-value" id="summary-ref">-</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Standard Booking Price</span>
+        <span class="detail-value" id="summary-baseprice">-</span>
+      </div>
+
+      <div class="price-total">
+        <span class="price-total-label">Total Amount Due</span>
+        <span class="price-total-amount" id="summary-total">$0.00</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Success Overlay Panel -->
+  <div id="success-panel" class="checkout-panel hidden" style="width: 100%; max-width: 500px; text-align: center; padding: 40px 30px;">
+    <div class="state-container">
+      <div class="state-icon success">
+        <i data-lucide="check"></i>
+      </div>
+      <h2 class="state-title">Payment Successful!</h2>
+      <p class="state-desc">Your payment has been processed successfully. Your booking is confirmed and updated. Thank you!</p>
+      
+      <div style="width: 100%; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-glass); border-radius: var(--border-radius-md); padding: 15px; margin-bottom: 25px; text-align: left; font-size: 14px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Receipt to</span>
+          <span id="success-custname" style="font-weight: 500;">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Amount Paid</span>
+          <span id="success-amount" style="font-weight: 600; color: var(--color-primary);">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Reference ID</span>
+          <span id="success-ref" style="font-family: monospace;">-</span>
+        </div>
+      </div>
+
+      <p style="font-size: 12px; color: var(--text-muted);">You can now close this tab safely.</p>
+    </div>
+  </div>
+
+  <script>
+    let appointmentId = '';
+    let appointmentData = null;
+    let stripe = null;
+    let stripeCardElement = null;
+
+    // Extract appointment ID from pathname URL
+    function parseAppointmentId() {
+      const parts = window.location.pathname.split('/');
+      // The path format is /checkout/:appointmentId
+      // e.g. ["", "checkout", "12"]
+      const idIndex = parts.indexOf('checkout') + 1;
+      return parts[idIndex] || '';
+    }
+
+    async function initCheckout() {
+      lucide.createIcons();
+      appointmentId = parseAppointmentId();
+
+      if (!appointmentId) {
+        showInitialError('Invalid checkout URL. Missing booking reference ID.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/checkout/${appointmentId}`);
+        if (!response.ok) {
+          throw new Error(await response.text() || 'Booking could not be loaded.');
+        }
+
+        appointmentData = await response.json();
+        renderCheckoutDetails(appointmentData);
+      } catch (err) {
+        console.error('Checkout load error:', err);
+        showInitialError(err.message || 'Appointment not found or has been deleted.');
+      }
+    }
+
+    function showInitialError(msg) {
+      document.getElementById('initial-loader').classList.add('hidden');
+      document.getElementById('initial-error').classList.remove('hidden');
+      document.getElementById('initial-error-text').innerText = msg;
+    }
+
+    function renderCheckoutDetails(data) {
+      // Set static customer fields
+      document.getElementById('cust-name').value = data.customer_name;
+      document.getElementById('cust-phone').value = data.customer_phone;
+
+      // Set order summary cards
+      document.getElementById('merchant-name').innerText = data.company_name;
+      document.getElementById('summary-service').innerText = data.service;
+      document.getElementById('summary-datetime').innerText = `${data.date} at ${data.time}`;
+      document.getElementById('summary-ref').innerText = `#BK-${data.id}`;
+      document.getElementById('summary-baseprice').innerText = `$${data.price.toFixed(2)}`;
+      document.getElementById('summary-total').innerText = `$${data.price.toFixed(2)}`;
+
+      // Setup success page data as fallback
+      document.getElementById('success-custname').innerText = data.customer_name;
+      document.getElementById('success-amount').innerText = `$${data.price.toFixed(2)}`;
+      document.getElementById('success-ref').innerText = `#BK-${data.id}`;
+
+      // Check payment gateway provider
+      const provider = data.payment_gateway_provider || 'sandbox';
+      if (provider === 'stripe') {
+        document.getElementById('gateway-notice-text').innerText = 'Payments are securely processed via Stripe.';
+        setupStripe(data.stripe_publishable_key);
+      } else {
+        document.getElementById('gateway-notice-text').innerText = 'Simulated sandbox environment active.';
+        document.getElementById('initial-loader').classList.add('hidden');
+        document.getElementById('checkout-grid').classList.remove('hidden');
+      }
+    }
+
+    function setupStripe(publishableKey) {
+      if (!publishableKey) {
+        showInitialError('Merchant Stripe Publishable Key is not configured.');
+        return;
+      }
+
+      // Dynamically load Stripe script and initialize Elements
+      const stripeScript = document.getElementById('stripe-js-script');
+      stripeScript.src = 'https://js.stripe.com/v3/';
+      stripeScript.onload = () => {
+        try {
+          stripe = Stripe(publishableKey);
+          const elements = stripe.elements();
+          
+          // Premium glassmorphic styling mapping for Stripe Card Element
+          const style = {
+            base: {
+              color: '#f8fafc',
+              fontFamily: "'Inter', sans-serif",
+              fontSmoothing: 'antialiased',
+              fontSize: '14px',
+              '::placeholder': {
+                color: '#94a3b8'
+              }
+            },
+            invalid: {
+              color: '#ef4444',
+              iconColor: '#ef4444'
+            }
+          };
+
+          stripeCardElement = elements.create('card', { style });
+          stripeCardElement.mount('#stripe-card-element');
+
+          // Swap form views
+          document.getElementById('sandbox-fields').classList.add('hidden');
+          document.getElementById('stripe-fields').classList.remove('hidden');
+
+          // Make Sandbox inputs not required since they are hidden
+          document.getElementById('sb-cardname').removeAttribute('required');
+          document.getElementById('sb-cardnumber').removeAttribute('required');
+          document.getElementById('sb-expiry').removeAttribute('required');
+          document.getElementById('sb-cvv').removeAttribute('required');
+
+          document.getElementById('initial-loader').classList.add('hidden');
+          document.getElementById('checkout-grid').classList.remove('hidden');
+        } catch (e) {
+          console.error(e);
+          showInitialError('Stripe SDK initialization failed.');
+        }
+      };
+      stripeScript.onerror = () => {
+        showInitialError('Failed to load Stripe script from stripe.com.');
+      };
+    }
+
+    async function handlePaymentSubmit(event) {
+      event.preventDefault();
+      
+      const errorAlert = document.getElementById('error-alert');
+      const errorMessage = document.getElementById('error-message');
+      const payButton = document.getElementById('pay-button');
+      const btnSpinner = document.getElementById('btn-spinner');
+      const btnText = document.getElementById('btn-text');
+
+      errorAlert.classList.add('hidden');
+      payButton.disabled = true;
+      btnSpinner.classList.remove('hidden');
+      btnText.innerText = 'Processing Payment...';
+
+      try {
+        const provider = appointmentData.payment_gateway_provider || 'sandbox';
+        let body = {};
+
+        if (provider === 'stripe') {
+          // 1. Submit card details directly to Stripe, fetching paymentMethodId
+          const cardName = document.getElementById('cust-name').value;
+          const { paymentMethod, error } = await stripe.createPaymentMethod({
+            type: 'card',
+            card: stripeCardElement,
+            billing_details: {
+              name: cardName
+            }
+          });
+
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          body = { paymentMethodId: paymentMethod.id };
+        } else {
+          // Sandbox inputs validation (already done by HTML5 validation, but check values just in case)
+          const number = document.getElementById('sb-cardnumber').value.replace(/\s+/g, '');
+          if (number.length < 13) {
+            throw new Error('Please enter a valid credit card number.');
+          }
+        }
+
+        // 2. Submit payment method or simulator triggers to local pay endpoint
+        const payResponse = await fetch(`/api/checkout/${appointmentId}/pay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+
+        const payResult = await payResponse.json();
+        if (!payResponse.ok) {
+          throw new Error(payResult.error || 'Payment transaction rejected.');
+        }
+
+        // 3. Show Success view
+        document.getElementById('checkout-grid').classList.add('hidden');
+        document.getElementById('success-panel').classList.remove('hidden');
+        lucide.createIcons();
+      } catch (err) {
+        console.error('Payment Error:', err);
+        errorMessage.innerText = err.message || 'Payment processing encountered an error.';
+        errorAlert.classList.remove('hidden');
+        
+        // Reset button
+        payButton.disabled = false;
+        btnSpinner.classList.add('hidden');
+        btnText.innerText = 'Pay Now';
+      }
+    }
+
+    // Input Helpers
+    function formatCardNumber(input) {
+      let value = input.value.replace(/\D/g, '');
+      let formatted = '';
+      for (let i = 0; i < value.length; i++) {
+        if (i > 0 && i % 4 === 0) formatted += ' ';
+        formatted += value[i];
+      }
+      input.value = formatted;
+    }
+
+    function formatExpiry(input) {
+      let value = input.value.replace(/\D/g, '');
+      if (value.length > 2) {
+        input.value = value.substring(0, 2) + '/' + value.substring(2, 4);
+      } else {
+        input.value = value;
+      }
+    }
+
+    window.onload = initCheckout;
+  </script>
+</body>
+</html>
