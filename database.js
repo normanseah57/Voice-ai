@@ -81,6 +81,9 @@ export const initDb = async () => {
       subscription_status TEXT DEFAULT 'active',
       usage_minutes REAL DEFAULT 0,
       is_admin INTEGER DEFAULT 0,
+      custom_minute_limit INTEGER DEFAULT NULL,
+      custom_contact_limit INTEGER DEFAULT NULL,
+      custom_appointment_limit INTEGER DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -115,6 +118,50 @@ export const initDb = async () => {
   } catch (e) {
     // Column already exists, ignore
   }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN custom_minute_limit INTEGER DEFAULT NULL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN custom_contact_limit INTEGER DEFAULT NULL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN custom_appointment_limit INTEGER DEFAULT NULL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN custom_overage_rate REAL DEFAULT NULL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN next_payment_due DATETIME DEFAULT NULL');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Global Settings Table
+  await run(`
+    CREATE TABLE IF NOT EXISTS global_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+
+  // Seed default global overage rate
+  await run(`
+    INSERT OR IGNORE INTO global_settings (key, value)
+    VALUES ('global_overage_rate', '0.35')
+  `);
 
   try {
     await run('ALTER TABLE settings ADD COLUMN transfer_phone_number TEXT');
@@ -831,13 +878,28 @@ export const authenticateTenant = async (email, password) => {
   };
 };
 
+export const getGlobalOverageRate = async () => {
+  const row = await get("SELECT value FROM global_settings WHERE key = 'global_overage_rate'");
+  return row ? parseFloat(row.value) : 0.35;
+};
+
+export const updateGlobalOverageRate = async (rate) => {
+  const rateVal = parseFloat(rate);
+  if (isNaN(rateVal) || rateVal < 0) throw new Error('Overage rate must be a non-negative number.');
+  await run("INSERT OR REPLACE INTO global_settings (key, value) VALUES ('global_overage_rate', ?)", [String(rateVal)]);
+  await logTenantActivity(null, 'settings_update', `Super Admin updated global usage charge rate to $${rateVal.toFixed(2)}/min`);
+  return rateVal;
+};
+
 export const getTenantUsage = async (tenant_id) => {
-  const tenant = await get('SELECT subscription_tier, billing_cycle, prepaid_overage_minutes, overage_reminder_limit, usage_minutes, subscription_status FROM tenants WHERE id = ?', [tenant_id]);
+  const tenant = await get('SELECT subscription_tier, billing_cycle, prepaid_overage_minutes, overage_reminder_limit, usage_minutes, subscription_status, custom_minute_limit, custom_contact_limit, custom_appointment_limit, custom_overage_rate, next_payment_due FROM tenants WHERE id = ?', [tenant_id]);
   if (!tenant) throw new Error('Tenant not found');
 
   const apptsCount = await get('SELECT COUNT(*) as count FROM appointments WHERE tenant_id = ?', [tenant_id]);
   const contactsCount = await get('SELECT COUNT(*) as count FROM contacts WHERE tenant_id = ?', [tenant_id]);
   const dealsCount = await get('SELECT COUNT(*) as count FROM deals WHERE tenant_id = ?', [tenant_id]);
+  
+  const globalRate = await getGlobalOverageRate();
 
   return {
     tier: tenant.subscription_tier,
@@ -848,13 +910,30 @@ export const getTenantUsage = async (tenant_id) => {
     subscription_status: tenant.subscription_status || 'active',
     usage_appointments: apptsCount.count,
     usage_contacts: contactsCount.count,
-    usage_deals: dealsCount.count
+    usage_deals: dealsCount.count,
+    custom_minute_limit: tenant.custom_minute_limit ?? null,
+    custom_contact_limit: tenant.custom_contact_limit ?? null,
+    custom_appointment_limit: tenant.custom_appointment_limit ?? null,
+    custom_overage_rate: tenant.custom_overage_rate ?? null,
+    overage_rate: tenant.custom_overage_rate ?? globalRate,
+    next_payment_due: tenant.next_payment_due ?? null
   };
 };
 
 export const updateTenantSubscription = async (tenant_id, tier, billing_cycle = 'monthly') => {
-  await run('UPDATE tenants SET subscription_tier = ?, billing_cycle = ?, subscription_status = \'active\' WHERE id = ?', [tier, billing_cycle, tenant_id]);
-  await logTenantActivity(tenant_id, 'billing_upgrade', `Upgraded subscription plan to ${tier.toUpperCase()} (${billing_cycle.toUpperCase()})`);
+  const cycle = billing_cycle || 'monthly';
+  let nextPaymentDue = null;
+  if (tier !== 'free') {
+    const daysToAdd = cycle === 'annual' ? 365 : 30;
+    const now = new Date();
+    now.setDate(now.getDate() + daysToAdd);
+    nextPaymentDue = now.toISOString();
+  }
+  await run(
+    'UPDATE tenants SET subscription_tier = ?, billing_cycle = ?, subscription_status = \'active\', next_payment_due = ? WHERE id = ?',
+    [tier, cycle, nextPaymentDue, tenant_id]
+  );
+  await logTenantActivity(tenant_id, 'billing_upgrade', `Upgraded subscription plan to ${tier.toUpperCase()} (${cycle.toUpperCase()})`);
   return getTenantUsage(tenant_id);
 };
 
@@ -1781,6 +1860,10 @@ export const getAllTenantsWithUsage = async () => {
       t.usage_minutes, 
       t.is_admin,
       t.created_at,
+      t.custom_minute_limit,
+      t.custom_contact_limit,
+      t.custom_appointment_limit,
+      t.custom_overage_rate,
       (SELECT COUNT(*) FROM contacts WHERE tenant_id = t.id) as contacts_count,
       (SELECT COUNT(*) FROM appointments WHERE tenant_id = t.id) as appointments_count
     FROM tenants t
@@ -1796,6 +1879,28 @@ export const updateTenantByAdmin = async (tenantId, { subscription_tier, subscri
     WHERE id = ?
   `, [subscription_tier, subscription_status, cycle, tenantId]);
   await logTenantActivity(tenantId, 'suspension_toggle', `Admin modified workspace: Tier=${subscription_tier.toUpperCase()}, Status=${subscription_status.toUpperCase()}, Cycle=${cycle.toUpperCase()}`);
+  return getTenantUsage(tenantId);
+};
+
+/**
+ * Super Admin: Override per-tenant usage rate limits.
+ * Pass null to remove a custom override and revert to the plan default.
+ */
+export const updateTenantLimitsByAdmin = async (tenantId, { custom_minute_limit, custom_contact_limit, custom_appointment_limit, custom_overage_rate }) => {
+  const mins = custom_minute_limit !== null && custom_minute_limit !== undefined && custom_minute_limit !== '' ? parseInt(custom_minute_limit) : null;
+  const contacts = custom_contact_limit !== null && custom_contact_limit !== undefined && custom_contact_limit !== '' ? parseInt(custom_contact_limit) : null;
+  const appts = custom_appointment_limit !== null && custom_appointment_limit !== undefined && custom_appointment_limit !== '' ? parseInt(custom_appointment_limit) : null;
+  const rate = custom_overage_rate !== null && custom_overage_rate !== undefined && custom_overage_rate !== '' ? parseFloat(custom_overage_rate) : null;
+  await run(`
+    UPDATE tenants
+    SET custom_minute_limit = ?, custom_contact_limit = ?, custom_appointment_limit = ?, custom_overage_rate = ?
+    WHERE id = ?
+  `, [mins, contacts, appts, rate, tenantId]);
+  await logTenantActivity(
+    tenantId,
+    'admin_limit_override',
+    `Admin set custom usage limits: Minutes=${mins ?? 'default'}, Contacts=${contacts ?? 'default'}, Appointments=${appts ?? 'default'}, OverageRate=${rate ?? 'default'}`
+  );
   return getTenantUsage(tenantId);
 };
 
@@ -2027,7 +2132,10 @@ export const updateHotelRoom = async (tenantId, roomId, { room_number, room_type
 export const buyOverageMinutes = async (tenant_id, blocksCount = 1) => {
   const blocks = Math.max(1, parseInt(blocksCount) || 1);
   const minutesToAdd = blocks * 100;
-  const cost = blocks * 35;
+  
+  const usage = await getTenantUsage(tenant_id);
+  const cost = minutesToAdd * usage.overage_rate;
+
   await run(`
     UPDATE tenants 
     SET prepaid_overage_minutes = prepaid_overage_minutes + ?,
@@ -2083,12 +2191,17 @@ export const getAppointmentById = async (id) => {
 };
 
 export const isTenantLocked = async (tenant_id) => {
-  const tenant = await get('SELECT subscription_tier, subscription_status, prepaid_overage_minutes, usage_minutes, is_admin FROM tenants WHERE id = ?', [tenant_id]);
+  const tenant = await get('SELECT subscription_tier, subscription_status, prepaid_overage_minutes, usage_minutes, is_admin, next_payment_due FROM tenants WHERE id = ?', [tenant_id]);
   if (!tenant) return { locked: false };
   if (tenant.is_admin === 1) return { locked: false }; // Admin is never locked
 
-  // Check condition 1: Subscription status is unpaid or suspended
-  if (tenant.subscription_status === 'suspended' || tenant.subscription_status === 'unpaid') {
+  // Check condition 1: Subscription status is unpaid or suspended, or next_payment_due is in the past
+  const isOverdue = tenant.subscription_tier !== 'free' && tenant.next_payment_due && new Date(tenant.next_payment_due) < new Date();
+  if (tenant.subscription_status === 'suspended' || tenant.subscription_status === 'unpaid' || isOverdue) {
+    if (tenant.subscription_status === 'active') {
+      await run("UPDATE tenants SET subscription_status = 'suspended' WHERE id = ?", [tenant_id]);
+      await logTenantActivity(tenant_id, 'suspension_toggle', `Workspace automatically suspended due to late payment (due date was ${tenant.next_payment_due})`);
+    }
     return { locked: true, reason: 'subscription_unpaid' };
   }
 
@@ -2101,6 +2214,29 @@ export const isTenantLocked = async (tenant_id) => {
   }
 
   return { locked: false };
+};
+
+export const checkSubscriptionGracePeriodsAndSuspend = async () => {
+  // Find all active paid tenants whose next_payment_due is in the past
+  const overdueTenants = await all(`
+    SELECT id, name, next_payment_due 
+    FROM tenants 
+    WHERE subscription_tier != 'free' 
+      AND subscription_status = 'active' 
+      AND next_payment_due IS NOT NULL 
+      AND next_payment_due < datetime('now')
+  `);
+  for (const tenant of overdueTenants) {
+    await run("UPDATE tenants SET subscription_status = 'suspended' WHERE id = ?", [tenant.id]);
+    await logTenantActivity(tenant.id, 'suspension_toggle', `Workspace automatically suspended by system due to late payment (due date was ${tenant.next_payment_due})`);
+  }
+  return overdueTenants;
+};
+
+export const simulateLatePaymentInDb = async (tenant_id) => {
+  await run("UPDATE tenants SET next_payment_due = datetime('now', '-1 day') WHERE id = ?", [tenant_id]);
+  await checkSubscriptionGracePeriodsAndSuspend();
+  return getTenantUsage(tenant_id);
 };
 
 // ==========================================
@@ -2358,6 +2494,66 @@ export const addAccountingQuotation = async (tenant_id, { quotation_number, cont
 
 export const deleteAccountingQuotation = async (tenant_id, id) => {
   return await run('DELETE FROM accounting_quotations WHERE id = ? AND tenant_id = ?', [id, tenant_id]);
+};
+
+// ==========================================
+// GLOBAL SUPER ADMIN VIEWS HELPERS
+// ==========================================
+
+export const getAllContactsWithTenant = async () => {
+  return await all(`
+    SELECT c.*, t.name as tenant_name, t.company_name as tenant_company 
+    FROM contacts c 
+    JOIN tenants t ON c.tenant_id = t.id 
+    ORDER BY c.created_at DESC
+  `);
+};
+
+export const getAllAppointmentsWithTenant = async () => {
+  return await all(`
+    SELECT a.*, t.name as tenant_name, t.company_name as tenant_company 
+    FROM appointments a 
+    JOIN tenants t ON a.tenant_id = t.id 
+    ORDER BY a.appointment_date DESC, a.appointment_time DESC
+  `);
+};
+
+export const getAllCallsWithTenant = async () => {
+  return await all(`
+    SELECT c.*, t.name as tenant_name, t.company_name as tenant_company 
+    FROM calls c 
+    JOIN tenants t ON c.tenant_id = t.id 
+    ORDER BY c.start_time DESC
+  `);
+};
+
+export const getAllInvoicesWithTenant = async () => {
+  return await all(`
+    SELECT i.*, t.name as tenant_name, t.company_name as tenant_company, c.name as customer_name
+    FROM accounting_invoices i 
+    JOIN tenants t ON i.tenant_id = t.id 
+    LEFT JOIN accounting_contacts c ON i.contact_id = c.id
+    ORDER BY i.date DESC
+  `);
+};
+
+export const getAllBillsWithTenant = async () => {
+  return await all(`
+    SELECT b.*, t.name as tenant_name, t.company_name as tenant_company, c.name as vendor_name
+    FROM accounting_bills b 
+    JOIN tenants t ON b.tenant_id = t.id 
+    LEFT JOIN accounting_contacts c ON b.contact_id = c.id
+    ORDER BY b.date DESC
+  `);
+};
+
+export const getAllPaymentsWithTenant = async () => {
+  return await all(`
+    SELECT p.*, t.name as tenant_name, t.company_name as tenant_company 
+    FROM accounting_payments p 
+    JOIN tenants t ON p.tenant_id = t.id 
+    ORDER BY p.date DESC
+  `);
 };
 
 

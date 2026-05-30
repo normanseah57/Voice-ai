@@ -13,7 +13,7 @@
   <!-- SheetJS Library for CSV/XLS/XLSX File Parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=1.0.3">
+  <link rel="stylesheet" href="style.css?v=1.0.4">
   <style>
     /* Animated Voice Visualizer Waveform */
     .wave-bar.animate {
@@ -667,8 +667,8 @@
   </div>
 
   <!-- Modal: Request For A Demo Option Picker -->
-  <div class="modal-overlay" id="request-demo-modal">
-    <div class="modal-card glass" style="width: 500px; max-height: 80vh; display: flex; flex-direction: column;">
+  <div class="modal-overlay" id="request-demo-modal" onclick="if(event.target===this) closeRequestDemoModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 500px; max-height: 80vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
       <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
         <h3 style="color: white; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px;">
           <i data-lucide="help-circle" style="color: var(--color-primary); width: 22px; height: 22px;"></i>
@@ -713,8 +713,8 @@
   </div>
 
   <!-- Modal: Phone Call Audio Demo Player -->
-  <div class="modal-overlay" id="call-demo-modal">
-    <div class="modal-card glass" style="width: 90%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;">
+  <div class="modal-overlay" id="call-demo-modal" onclick="if(event.target===this) closeCallDemoModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
       <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
         <h3 style="color: white; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px;">
           <i data-lucide="phone-call" style="color: var(--color-primary); width: 22px; height: 22px;" class="pulse-icon-menu"></i>
@@ -866,6 +866,11 @@
           <span class="status-dot green" id="ws-status-dot"></span>
           <span id="ws-status-text">Connecting Server...</span>
         </div>
+        <div class="streak-badge" id="streak-badge" title="Consecutive days your AI handled calls">
+          <span class="streak-flame">🔥</span>
+          <span class="streak-count" id="streak-count">0</span>
+          <span class="streak-label">day streak</span>
+        </div>
       </div>
     </aside>
 
@@ -879,7 +884,7 @@
       
       <!-- HEADER -->
       <header class="content-header">
-        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" style="display: none; background: none; border: none; color: white; cursor: pointer; padding: 6px; align-items: center; justify-content: center; margin-right: 12px; outline: none;">
+        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()">
           <i data-lucide="menu" style="width: 24px; height: 24px;"></i>
         </button>
         <div class="header-title">
@@ -903,6 +908,22 @@
         
         <!-- PANE: OVERVIEW -->
         <section class="pane active" id="pane-overview">
+          <!-- Global Tenant Filter for Super Admin (Overview Pane) -->
+          <div class="admin-only-field glass mb-4" style="display: none; width: 100%; padding: 12px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--border-glass); margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="shield" style="width: 18px; height: 18px; color: var(--color-primary);"></i>
+                <span style="font-weight: 600; font-size: 0.9rem; color: white;">Global SaaS Overview</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Scope records to:</span>
+                <select id="overview-tenant-filter" class="form-input" onchange="handleGlobalTenantFilterChange(this)" style="width: 220px; height: 36px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                  <option value="">All Tenants</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
           <!-- Metric Cards -->
           <div class="metrics-grid">
             <div class="metric-card glass">
@@ -933,6 +954,33 @@
             </div>
           </div>
 
+          <!-- AI Saved You Hero Banner -->
+          <div class="savings-hero-card glass" id="savings-hero-card">
+            <div class="savings-hero-left">
+              <div class="savings-sparkle">✨</div>
+              <div class="savings-text">
+                <h3 id="savings-headline">Your AI is working for you</h3>
+                <p class="savings-sub" id="savings-sub">Loading today's savings...</p>
+              </div>
+            </div>
+            <div class="savings-stats">
+              <div class="savings-stat">
+                <span class="savings-val" id="savings-calls">0</span>
+                <span class="savings-lbl">calls handled</span>
+              </div>
+              <div class="savings-divider"></div>
+              <div class="savings-stat">
+                <span class="savings-val" id="savings-hours">0h 0m</span>
+                <span class="savings-lbl">time saved</span>
+              </div>
+              <div class="savings-divider"></div>
+              <div class="savings-stat">
+                <span class="savings-val" id="savings-dollars">$0</span>
+                <span class="savings-lbl">cost saved</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Quick Access Sections -->
           <div class="dashboard-sections">
             <!-- Active Call Quick-View / Launcher -->
@@ -953,7 +1001,7 @@
                   </div>
                   <div class="agent-intro">
                     <h4 id="display-company-name">Aura Wellness Spa</h4>
-                    <p class="text-muted">Aura Voice AI Assistant</p>
+                    <p class="text-muted" id="display-ai-persona-name">AI Voice Receptionist</p>
                   </div>
                 </div>
                 <div class="quick-info-list">
@@ -980,6 +1028,76 @@
                 <p class="text-center text-muted py-4">No appointments scheduled yet.</p>
               </div>
             </div>
+          </div>
+
+          <!-- Bottom Row: Health Score + Live Activity Feed -->
+          <div class="overview-bottom-row">
+
+            <!-- Business Health Score -->
+            <div class="section-card glass health-score-card">
+              <div class="section-header">
+                <h3>AI Health Score</h3>
+                <span class="badge" id="health-grade-badge">Calculating...</span>
+              </div>
+              <div class="health-score-body">
+                <div class="health-gauge-wrap">
+                  <svg class="health-gauge-svg" viewBox="0 0 120 120" id="health-gauge-svg">
+                    <circle class="gauge-track" cx="60" cy="60" r="48" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+                    <circle class="gauge-fill" id="gauge-fill-circle" cx="60" cy="60" r="48" fill="none" stroke="url(#gaugeGrad)" stroke-width="10"
+                      stroke-dasharray="301.6" stroke-dashoffset="301.6" stroke-linecap="round"
+                      transform="rotate(-90 60 60)"/>
+                    <defs>
+                      <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#06b6d4"/>
+                        <stop offset="100%" stop-color="#10b981"/>
+                      </linearGradient>
+                    </defs>
+                    <text x="60" y="55" text-anchor="middle" fill="white" font-size="22" font-weight="700" id="gauge-score-text">--</text>
+                    <text x="60" y="73" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="9">/100</text>
+                  </svg>
+                </div>
+                <div class="health-breakdown">
+                  <div class="health-item">
+                    <span class="health-dot cyan"></span>
+                    <span class="health-item-label">Answer Rate</span>
+                    <span class="health-item-val" id="health-answer-rate">--%</span>
+                  </div>
+                  <div class="health-item">
+                    <span class="health-dot green"></span>
+                    <span class="health-item-label">Booking Rate</span>
+                    <span class="health-item-val" id="health-booking-rate">--%</span>
+                  </div>
+                  <div class="health-item">
+                    <span class="health-dot purple"></span>
+                    <span class="health-item-label">Avg Duration</span>
+                    <span class="health-item-val" id="health-avg-duration">-- min</span>
+                  </div>
+                  <div class="health-item">
+                    <span class="health-dot gold"></span>
+                    <span class="health-item-label">Setup Score</span>
+                    <span class="health-item-val" id="health-setup-score">--%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Activity Feed -->
+            <div class="section-card glass activity-feed-card">
+              <div class="section-header">
+                <h3>Live Activity Feed</h3>
+                <span class="pulse-badge cyan" id="activity-live-badge">
+                  <span class="pulse-dot"></span> Live
+                </span>
+              </div>
+              <div class="activity-feed-list" id="activity-feed-list">
+                <div class="activity-empty" id="activity-empty-state">
+                  <span style="font-size:2rem;">📡</span>
+                  <p>Waiting for activity...</p>
+                  <p class="text-muted" style="font-size:0.8rem;">Events appear here in real time</p>
+                </div>
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -1019,8 +1137,11 @@
             <div class="appointments-list-container glass">
               <div class="pane-section-header">
                 <h3>Scheduled Appointments</h3>
-                <div class="filter-group">
-                  <input type="text" placeholder="Search bookings..." class="form-input search-input" id="search-appointments">
+                <div class="filter-group" style="display: flex; gap: 8px; align-items: center;">
+                  <select id="appointments-tenant-filter" class="form-input admin-only-field" onchange="handleGlobalTenantFilterChange(this)" style="display: none; width: 160px; height: 38px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                    <option value="">All Tenants</option>
+                  </select>
+                  <input type="text" placeholder="Search bookings..." class="form-input search-input" id="search-appointments" style="margin-bottom: 0;">
                 </div>
               </div>
               
@@ -1127,7 +1248,10 @@
                 <div class="glass">
                   <div class="pane-section-header">
                     <h3>Contacts Database</h3>
-                    <div class="header-actions">
+                    <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+                      <select id="crm-tenant-filter" class="form-input admin-only-field" onchange="handleGlobalTenantFilterChange(this)" style="display: none; width: 170px; height: 36px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                        <option value="">All Tenants</option>
+                      </select>
                       <button class="btn btn-primary" id="btn-add-contact-modal">
                         <i data-lucide="user-plus"></i> Add Contact
                       </button>
@@ -1262,9 +1386,14 @@
         <!-- PANE: CALL HISTORY -->
         <section class="pane" id="pane-history">
           <div class="history-container glass">
-            <div class="pane-section-header">
-              <h3>Past Call Records</h3>
-              <p class="text-muted">Click on a call to view the full AI-generated summary and transcript</p>
+            <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3>Past Call Records</h3>
+                <p class="text-muted" style="margin-bottom: 0;">Click on a call to view the full AI-generated summary and transcript</p>
+              </div>
+              <select id="history-tenant-filter" class="form-input admin-only-field" onchange="handleGlobalTenantFilterChange(this)" style="display: none; width: 175px; height: 36px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                <option value="">All Tenants</option>
+              </select>
             </div>
             
             <div class="history-list" id="call-logs-container">
@@ -2282,13 +2411,31 @@
 
         <!-- PANE: SAAS BILLING & USAGE -->
         <section class="pane" id="pane-billing">
+          <!-- Global Tenant Filter for Super Admin (Billing Pane) -->
+          <div class="admin-only-field glass mb-4" style="display: none; width: 100%; padding: 12px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--border-glass); margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="shield" style="width: 18px; height: 18px; color: var(--color-primary);"></i>
+                <span style="font-weight: 600; font-size: 0.9rem; color: white;">Global SaaS Billing View</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Scope records to:</span>
+                <select id="billing-tenant-filter" class="form-input" onchange="handleGlobalTenantFilterChange(this)" style="width: 220px; height: 36px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                  <option value="">All Tenants</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="billing-layout">
             
             <!-- Left Side: Current Limits Quotas -->
             <div class="billing-card-main glass">
               <div class="pane-section-header">
                 <h3>Subscription Quota & Usage</h3>
-                 <span class="lead-stage-pill customer" id="billing-tier-badge" style="padding: 6px 14px; font-size: 0.85rem;">Sandbox Plan</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                  <span class="lead-stage-pill customer" id="billing-tier-badge" style="padding: 6px 14px; font-size: 0.85rem;">Sandbox Plan</span>
+                  <span id="billing-renewal-date" style="font-size: 0.75rem; color: var(--text-muted);">Renewal: N/A</span>
+                </div>
               </div>
               
               <div class="quota-list mt-4">
@@ -2362,6 +2509,20 @@
                     <button type="submit" class="btn btn-primary" style="padding: 9px 16px; font-size: 0.85rem; height: 38px;">Save Settings</button>
                   </div>
                 </form>
+                
+                <!-- Developer Simulation Sandbox -->
+                <div class="developer-sandbox-box mt-4" style="margin-top: 20px; border-top: 1px dashed rgba(239, 68, 68, 0.3); padding-top: 20px;">
+                  <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                    <i data-lucide="flask-conical" style="width: 16px; height: 16px; color: #ef4444;"></i>
+                    <h4 style="font-size: 0.9rem; font-weight: 600; color: #ef4444; margin: 0;">Developer Testing Tools</h4>
+                  </div>
+                  <p class="text-muted" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">
+                    Simulate billing system failure by backdating the subscription's next payment due date, which triggers immediate account suspension.
+                  </p>
+                  <button type="button" class="btn btn-ghost" style="border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; font-size: 0.8rem; padding: 6px 12px; height: 32px; display: inline-flex; align-items: center; gap: 6px;" onclick="simulateLatePayment()">
+                    <i data-lucide="alert-triangle" style="width: 14px; height: 14px;"></i> Simulate Late Payment Suspension
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -2417,6 +2578,21 @@
 
         <!-- PANE: ACCOUNTING -->
         <section class="pane" id="pane-accounting">
+          <!-- Global Tenant Filter for Super Admin (Accounting Pane) -->
+          <div class="admin-only-field glass mb-4" style="display: none; width: 100%; padding: 12px 20px; border-radius: var(--border-radius-md); border: 1px solid var(--border-glass); margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="shield" style="width: 18px; height: 18px; color: var(--color-primary);"></i>
+                <span style="font-weight: 600; font-size: 0.9rem; color: white;">Global SaaS Ledger View</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Scope records to:</span>
+                <select id="accounting-tenant-filter" class="form-input" onchange="handleGlobalTenantFilterChange(this)" style="width: 220px; height: 36px; padding: 6px 12px; font-size: 0.85rem; background-color: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                  <option value="">All Tenants</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="accounting-container">
             
             <!-- Metrics Row -->
@@ -3177,6 +3353,7 @@
                       <th>Status</th>
                       <th>Call Usage</th>
                       <th>Database Volume</th>
+                      <th>Usage Limits</th>
                       <th class="text-right" style="width: 280px;">Actions</th>
                     </tr>
                   </thead>
@@ -3198,6 +3375,26 @@
                 <!-- Loaded dynamically via app.js -->
                 <p class="text-center text-muted py-4">No activities logged yet.</p>
               </div>
+            </div>
+          </div>
+          
+          <!-- Global SaaS Configuration -->
+          <div class="section-card glass" style="margin-top: 24px; width: 100%;">
+            <div class="pane-section-header">
+              <h3>Global SaaS Configuration</h3>
+              <p class="text-muted" style="font-size: 0.85rem;">Manage default system-wide variables and pricing rates</p>
+            </div>
+            <div style="display: flex; gap: 20px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
+              <div class="form-group" style="margin: 0; flex: 1; min-width: 250px; max-width: 350px;">
+                <label style="font-size: 0.8rem; margin-bottom: 6px; display: block; color: var(--text-muted);">Global Overage Rate ($/minute)</label>
+                <div style="display: flex; align-items: center; position: relative;">
+                  <span style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.9rem;">$</span>
+                  <input type="number" id="global-overage-rate-input" class="form-input" step="0.01" min="0.00" value="0.35" style="padding-left: 24px; width: 100%;">
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="saveGlobalSettings()">
+                <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save Global Settings
+              </button>
             </div>
           </div>
         </section>
@@ -3276,62 +3473,120 @@
     </div>
   </div>
 
-  <!-- MODAL: REGISTER / SIGN IN SAAS -->
-  <div class="modal-overlay" id="saas-auth-modal">
-    <div class="modal-card glass" style="width: 90%; max-width: 400px;">
+  <!-- MODAL: SUPER ADMIN - USAGE RATE LIMITS -->
+  <div class="modal-overlay" id="admin-limits-modal">
+    <div class="modal-card glass" style="width: 90%; max-width: 560px;">
       <div class="modal-header">
-        <h3 id="auth-modal-title">Sign In to VoiceDesk</h3>
-        <button class="btn-close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, rgba(251,191,36,0.2), rgba(245,158,11,0.1)); border: 1px solid rgba(251,191,36,0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i data-lucide="gauge" style="width: 16px; height: 16px; color: #fbbf24;"></i>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.1rem;">Adjust Usage Rate Limits</h3>
+            <p class="text-muted" id="admin-limits-tenant-name" style="font-size: 0.8rem; margin: 2px 0 0;"></p>
+          </div>
+        </div>
+        <button class="btn-close" onclick="closeAdminLimitsModal()"><i data-lucide="x"></i></button>
       </div>
-      
-      <!-- Tab Toggles -->
-      <div class="auth-tabs mb-4" style="display: flex; border-bottom: 1px solid var(--border-glass); margin-bottom: 20px;">
-        <div class="auth-tab active" id="auth-tab-login" onclick="toggleAuthTab('login')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Login</div>
-        <div class="auth-tab" id="auth-tab-register" onclick="toggleAuthTab('register')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Create Account</div>
+
+      <div class="modal-body" style="padding-top: 20px;">
+        <div style="background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 10px;">
+          <i data-lucide="info" style="width: 14px; height: 14px; color: #fbbf24; margin-top: 2px; flex-shrink: 0;"></i>
+          <p style="font-size: 0.82rem; color: rgba(255,255,255,0.75); margin: 0; line-height: 1.5;">
+            Custom limits override the tenant's subscription plan defaults. Leave a field <strong>empty</strong> to revert to the plan default. Changes take effect immediately.
+          </p>
+        </div>
+
+        <input type="hidden" id="admin-limits-tenant-id">
+        <input type="hidden" id="admin-limits-tenant-tier">
+
+        <!-- Minute Limit -->
+        <div class="limit-field-group">
+          <div class="limit-field-header">
+            <div class="limit-icon" style="background: rgba(6,182,212,0.15); color: #06b6d4;">
+              <i data-lucide="phone-call" style="width: 14px; height: 14px;"></i>
+            </div>
+            <div>
+              <div class="limit-label">AI Call Minutes</div>
+              <div class="limit-sublabel">Plan default: <span id="admin-limits-default-minutes" class="limit-default-badge">—</span></div>
+            </div>
+            <button class="limit-reset-btn" onclick="resetAdminLimit('minute')" title="Reset to plan default">
+              <i data-lucide="rotate-ccw" style="width: 11px; height: 11px;"></i> Reset
+            </button>
+          </div>
+          <div class="limit-input-row">
+            <input type="number" id="admin-limits-minutes" class="form-input limit-input" min="0" placeholder="Leave empty for plan default" style="flex: 1;">
+            <span class="limit-unit">minutes</span>
+          </div>
+        </div>
+
+        <!-- Contact Limit -->
+        <div class="limit-field-group">
+          <div class="limit-field-header">
+            <div class="limit-icon" style="background: rgba(168,85,247,0.15); color: #a855f7;">
+              <i data-lucide="users" style="width: 14px; height: 14px;"></i>
+            </div>
+            <div>
+              <div class="limit-label">CRM Contacts</div>
+              <div class="limit-sublabel">Plan default: <span id="admin-limits-default-contacts" class="limit-default-badge">—</span></div>
+            </div>
+            <button class="limit-reset-btn" onclick="resetAdminLimit('contact')" title="Reset to plan default">
+              <i data-lucide="rotate-ccw" style="width: 11px; height: 11px;"></i> Reset
+            </button>
+          </div>
+          <div class="limit-input-row">
+            <input type="number" id="admin-limits-contacts" class="form-input limit-input" min="0" placeholder="Leave empty for plan default" style="flex: 1;">
+            <span class="limit-unit">contacts</span>
+          </div>
+        </div>
+
+        <!-- Appointment Limit -->
+        <div class="limit-field-group">
+          <div class="limit-field-header">
+            <div class="limit-icon" style="background: rgba(34,197,94,0.15); color: #22c55e;">
+              <i data-lucide="calendar-check" style="width: 14px; height: 14px;"></i>
+            </div>
+            <div>
+              <div class="limit-label">Appointments</div>
+              <div class="limit-sublabel">Plan default: <span id="admin-limits-default-appointments" class="limit-default-badge">—</span></div>
+            </div>
+            <button class="limit-reset-btn" onclick="resetAdminLimit('appointment')" title="Reset to plan default">
+              <i data-lucide="rotate-ccw" style="width: 11px; height: 11px;"></i> Reset
+            </button>
+          </div>
+          <div class="limit-input-row">
+            <input type="number" id="admin-limits-appointments" class="form-input limit-input" min="0" placeholder="Leave empty for plan default" style="flex: 1;">
+            <span class="limit-unit">bookings</span>
+          </div>
+        <!-- Custom Overage Charge Rate -->
+        <div class="limit-field-group">
+          <div class="limit-field-header">
+            <div class="limit-icon" style="background: rgba(239,68,68,0.15); color: #ef4444;">
+              <i data-lucide="dollar-sign" style="width: 14px; height: 14px;"></i>
+            </div>
+            <div>
+              <div class="limit-label">Custom Overage Rate</div>
+              <div class="limit-sublabel">System default: <span id="admin-limits-default-overage" class="limit-default-badge">—</span></div>
+            </div>
+            <button class="limit-reset-btn" onclick="resetAdminLimit('overage')" title="Reset to global default">
+              <i data-lucide="rotate-ccw" style="width: 11px; height: 11px;"></i> Reset
+            </button>
+          </div>
+          <div class="limit-input-row" style="position: relative; display: flex; align-items: center;">
+            <span style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.85rem;">$</span>
+            <input type="number" id="admin-limits-overage" class="form-input limit-input" min="0" step="0.01" placeholder="Leave empty for global default" style="padding-left: 24px; flex: 1;">
+            <span class="limit-unit">/minute</span>
+          </div>
+        </div>
       </div>
 
-      <!-- FORM: LOGIN -->
-      <form id="form-saas-login">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="login-email">Email Address</label>
-            <input type="email" id="login-email" class="form-input" required placeholder="e.g. manager@spa.com">
-          </div>
-          <div class="form-group">
-            <label for="login-password">Password</label>
-            <input type="password" id="login-password" class="form-input" required placeholder="••••••••">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary btn-block">Log In</button>
-        </div>
-      </form>
-
-      <!-- FORM: REGISTER -->
-      <form id="form-saas-register" style="display: none;">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="reg-name">Your Full Name</label>
-            <input type="text" id="reg-name" class="form-input" required placeholder="e.g. John Doe">
-          </div>
-          <div class="form-group">
-            <label for="reg-email">Email Address</label>
-            <input type="email" id="reg-email" class="form-input" required placeholder="e.g. manager@spa.com">
-          </div>
-          <div class="form-group">
-            <label for="reg-password">Password</label>
-            <input type="password" id="reg-password" class="form-input" required placeholder="At least 6 characters">
-          </div>
-          <div class="form-group">
-            <label for="reg-company">Company Name</label>
-            <input type="text" id="reg-company" class="form-input" required placeholder="e.g. Aura Wellness Spa">
-          </div>
-        </div>
-        <div class="modal-footer">
-           <button type="submit" class="btn btn-primary btn-block">Register & Start Sandbox</button>
-        </div>
-      </form>
-
+      <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--border-glass); margin-top: 4px;">
+        <button class="btn btn-ghost" onclick="closeAdminLimitsModal()">Cancel</button>
+        <button class="btn btn-primary" id="admin-limits-save-btn" onclick="saveAdminLimits()">
+          <i data-lucide="save" style="width: 14px; height: 14px;"></i>
+          Save Custom Limits
+        </button>
+      </div>
     </div>
   </div>
 
@@ -3544,7 +3799,62 @@
     </div>
   </div>
 
+  <!-- MODAL: REGISTER / SIGN IN SAAS (placed at body level to avoid overflow trap) -->
+  <div class="modal-overlay" id="saas-auth-modal" onclick="if(event.target===this) closeAuthModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 400px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="auth-modal-title">Sign In to VoiceDesk</h3>
+        <button class="btn-close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
+      </div>
+      <!-- Tab Toggles -->
+      <div class="auth-tabs mb-4" style="display: flex; border-bottom: 1px solid var(--border-glass); margin-bottom: 20px;">
+        <div class="auth-tab active" id="auth-tab-login" onclick="toggleAuthTab('login')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Login</div>
+        <div class="auth-tab" id="auth-tab-register" onclick="toggleAuthTab('register')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Create Account</div>
+      </div>
+      <!-- FORM: LOGIN -->
+      <form id="form-saas-login">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="login-email">Email Address</label>
+            <input type="email" id="login-email" class="form-input" required placeholder="e.g. manager@spa.com">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" class="form-input" required placeholder="••••••••">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary btn-block">Log In</button>
+        </div>
+      </form>
+      <!-- FORM: REGISTER -->
+      <form id="form-saas-register" style="display: none;">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="reg-name">Your Full Name</label>
+            <input type="text" id="reg-name" class="form-input" required placeholder="e.g. John Doe">
+          </div>
+          <div class="form-group">
+            <label for="reg-email">Email Address</label>
+            <input type="email" id="reg-email" class="form-input" required placeholder="e.g. manager@spa.com">
+          </div>
+          <div class="form-group">
+            <label for="reg-password">Password</label>
+            <input type="password" id="reg-password" class="form-input" required placeholder="At least 6 characters">
+          </div>
+          <div class="form-group">
+            <label for="reg-company">Company Name</label>
+            <input type="text" id="reg-company" class="form-input" required placeholder="e.g. Aura Wellness Spa">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary btn-block">Register &amp; Start Sandbox</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Local Script Injection -->
-  <script src="app.js?v=1.0.3"></script>
+  <script src="app.js?v=1.0.4"></script>
 </body>
 </html>

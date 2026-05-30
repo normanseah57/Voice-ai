@@ -60,6 +60,17 @@ import {
   updateOverageReminderSettings,
   checkLowCreditReminderTrigger,
   logTenantActivity,
+  updateTenantLimitsByAdmin,
+  getGlobalOverageRate,
+  updateGlobalOverageRate,
+  checkSubscriptionGracePeriodsAndSuspend,
+  simulateLatePaymentInDb,
+  getAllContactsWithTenant,
+  getAllAppointmentsWithTenant,
+  getAllCallsWithTenant,
+  getAllInvoicesWithTenant,
+  getAllBillsWithTenant,
+  getAllPaymentsWithTenant,
 
   // Accounting Imports
   getAccountingMetrics,
@@ -125,14 +136,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Subdomain Routing Middleware
 app.use((req, res, next) => {
-  const hostname = req.hostname || '';
-  if (hostname.startsWith('app.')) {
-    // Serve the dedicated web app
-    express.static(path.join(__dirname, 'public-app'))(req, res, next);
-  } else {
-    // Serve the marketing landing page
-    express.static(path.join(__dirname, 'public'))(req, res, next);
+  // Disable caching for JS and CSS to ensure clients always get latest code
+  if (req.url.endsWith('.js') || req.url.endsWith('.css')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
   }
+  // Serve the main application directory (public/) for both root and app subdomains
+  express.static(path.join(__dirname, 'public'))(req, res, next);
 });
 
 // =============================================================
@@ -412,22 +423,40 @@ app.post('/api/auth/login', async (req, res) => {
 // SAAS BILLING & USAGE LIMITS
 // =============================================================
 
+/**
+ * Resolves the effective usage limits for a tenant.
+ * Custom limits set by Super Admin always override the plan defaults.
+ */
+function resolveTenantLimits(usage) {
+  const planDefaults = {
+    free:         { minutes: 15,     contacts: 15,    appointments: 5 },
+    starter:      { minutes: 100,    contacts: 100,   appointments: 9999 },
+    professional: { minutes: 1000,   contacts: 99999, appointments: 99999 },
+    enterprise:   { minutes: 999999, contacts: 999999, appointments: 999999 }
+  };
+  const defaults = planDefaults[usage.tier] || planDefaults.free;
+  return {
+    minutes:      usage.custom_minute_limit      != null ? usage.custom_minute_limit      : defaults.minutes,
+    contacts:     usage.custom_contact_limit     != null ? usage.custom_contact_limit     : defaults.contacts,
+    appointments: usage.custom_appointment_limit != null ? usage.custom_appointment_limit : defaults.appointments,
+    // Expose which ones are overridden
+    custom_minute_limit:      usage.custom_minute_limit      ?? null,
+    custom_contact_limit:     usage.custom_contact_limit     ?? null,
+    custom_appointment_limit: usage.custom_appointment_limit ?? null,
+    plan_default_minutes:      defaults.minutes,
+    plan_default_contacts:     defaults.contacts,
+    plan_default_appointments: defaults.appointments
+  };
+}
+
 app.get('/api/saas/billing', requireAuth, async (req, res) => {
   try {
     const usage = await getTenantUsage(req.tenantId);
-    
-    // Limits definition
-    const limits = {
-      free: { minutes: 15, contacts: 15, appointments: 5 },
-      starter: { minutes: 100, contacts: 100, appointments: 9999 },
-      professional: { minutes: 1000, contacts: 99999, appointments: 99999 },
-      enterprise: { minutes: 999999, contacts: 999999, appointments: 999999 }
-    };
-
+    const limits = resolveTenantLimits(usage);
     const lockStatus = await isTenantLocked(req.tenantId);
     res.json({
       usage,
-      limits: limits[usage.tier],
+      limits,
       locked: lockStatus.locked,
       lock_reason: lockStatus.reason
     });
@@ -486,6 +515,16 @@ app.post('/api/saas/billing/reminder-settings', requireAuth, async (req, res) =>
   }
   try {
     const usage = await updateOverageReminderSettings(req.tenantId, threshold);
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/saas/billing/simulate-late-payment', requireAuth, async (req, res) => {
+  try {
+    const usage = await simulateLatePaymentInDb(req.tenantId);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
     res.json({ success: true, usage });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -597,6 +636,113 @@ app.get('/api/admin/activities', requireAuth, requireAdmin, async (req, res) => 
   try {
     const list = await getPlatformActivities();
     res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Super Admin: Set per-tenant custom usage rate limits.
+ * Accepts custom_minute_limit, custom_contact_limit, custom_appointment_limit.
+ * Pass null or empty string to clear a custom override and revert to plan default.
+ */
+app.put('/api/admin/tenants/:id/limits', requireAuth, requireAdmin, async (req, res) => {
+  const targetId = parseInt(req.params.id);
+  if (isNaN(targetId)) {
+    return res.status(400).json({ error: 'Invalid tenant ID.' });
+  }
+  const { custom_minute_limit, custom_contact_limit, custom_appointment_limit, custom_overage_rate } = req.body;
+  // Validate: each must be a positive integer or null/empty (clear override)
+  const validateField = (val, name) => {
+    if (val === null || val === undefined || val === '') return true;
+    const n = parseInt(val);
+    if (isNaN(n) || n < 0) return `${name} must be a non-negative integer or empty to use plan default.`;
+    return true;
+  };
+  const validateFloat = (val, name) => {
+    if (val === null || val === undefined || val === '') return true;
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0) return `${name} must be a non-negative number or empty to use default.`;
+    return true;
+  };
+  const errs = [
+    validateField(custom_minute_limit, 'Minute limit'),
+    validateField(custom_contact_limit, 'Contact limit'),
+    validateField(custom_appointment_limit, 'Appointment limit'),
+    validateFloat(custom_overage_rate, 'Overage rate override')
+  ].filter(e => e !== true);
+  if (errs.length) return res.status(400).json({ error: errs.join(' ') });
+
+  try {
+    const usage = await updateTenantLimitsByAdmin(targetId, { 
+      custom_minute_limit, 
+      custom_contact_limit, 
+      custom_appointment_limit,
+      custom_overage_rate 
+    });
+    broadcastToDashboard(targetId, 'refresh_crm', {});
+    res.json({ success: true, usage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/global-settings', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const rate = await getGlobalOverageRate();
+    res.json({ global_overage_rate: rate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/global-settings', requireAuth, requireAdmin, async (req, res) => {
+  const { global_overage_rate } = req.body;
+  const rate = parseFloat(global_overage_rate);
+  if (isNaN(rate) || rate < 0) {
+    return res.status(400).json({ error: 'Global overage rate must be a non-negative number.' });
+  }
+  try {
+    await updateGlobalOverageRate(rate);
+    res.json({ success: true, global_overage_rate: rate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/contacts', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const contacts = await getAllContactsWithTenant();
+    res.json(contacts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/appointments', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const appointments = await getAllAppointmentsWithTenant();
+    res.json(appointments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/calls', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const calls = await getAllCallsWithTenant();
+    res.json(calls);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/accounting', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const invoices = await getAllInvoicesWithTenant();
+    const bills = await getAllBillsWithTenant();
+    const payments = await getAllPaymentsWithTenant();
+    res.json({ invoices, bills, payments });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1167,11 +1313,10 @@ app.post('/api/call/outbound', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Phone number is required' });
   }
 
-  // Validate SaaS minute limits before calling
+  // Validate SaaS minute limits before calling (respects custom admin overrides)
   const usage = await getTenantUsage(req.tenantId);
-  const limits = { free: 15, starter: 100, professional: 1000, enterprise: 999999 };
-  const planLimit = limits[usage.tier] || 0;
-  const totalLimit = planLimit + (usage.prepaid_overage_minutes || 0);
+  const limits = resolveTenantLimits(usage);
+  const totalLimit = limits.minutes + (usage.prepaid_overage_minutes || 0);
   if (usage.usage_minutes >= totalLimit) {
     return res.status(403).json({ error: 'SaaS Limit Exceeded: You have run out of calling minutes. Please buy overage minutes or upgrade your subscription.' });
   }
@@ -2888,6 +3033,21 @@ initDb().then(async () => {
     }
     console.log(`======================================================\n`);
   });
+
+  // Start automated subscription check loop
+  setInterval(async () => {
+    try {
+      const suspended = await checkSubscriptionGracePeriodsAndSuspend();
+      if (suspended.length > 0) {
+        console.log(`[Billing System] Auto-suspended ${suspended.length} overdue tenants.`);
+        for (const t of suspended) {
+          broadcastToDashboard(t.id, 'refresh_crm', {});
+        }
+      }
+    } catch (err) {
+      console.error('[Billing System Error] Failed to run automated checks:', err);
+    }
+  }, 15000); // Check every 15 seconds
 }).catch(err => {
   console.error('Database initialization failed. Server could not start.', err);
 });

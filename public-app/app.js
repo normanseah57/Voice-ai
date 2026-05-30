@@ -173,4 +173,54 @@ function logout() {
   document.getElementById('login-error').textContent = '';
   document.getElementById('main-app').classList.remove('active');
   document.getElementById('login-screen').classList.add('active');
+  
+  // Reset drawer state
+  const drawer = document.getElementById('mobile-sidebar-drawer');
+  const overlay = document.getElementById('mobile-sidebar-overlay');
+  if (drawer) drawer.classList.remove('open');
+  if (overlay) overlay.classList.remove('show');
 }
+
+// Mobile Sidebar Drawer Controllers
+window.toggleMobileSidebar = function() {
+  const drawer = document.getElementById('mobile-sidebar-drawer');
+  const overlay = document.getElementById('mobile-sidebar-overlay');
+  if (drawer && overlay) {
+    const isOpen = drawer.classList.contains('open');
+    if (isOpen) {
+      drawer.classList.remove('open');
+      overlay.classList.remove('show');
+    } else {
+      drawer.classList.add('open');
+      overlay.classList.add('show');
+    }
+  }
+};
+
+window.selectSidebarTab = function(elem, tabId) {
+  // Update sidebar active state
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  elem.classList.add('active');
+  
+  // Update bottom navigation active state as well to synchronize them!
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(nav => {
+    nav.classList.remove('active');
+    if (nav.getAttribute('data-target') === tabId) {
+      nav.classList.add('active');
+    }
+  });
+  
+  // Update tab panes
+  document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+  const targetPane = document.getElementById(tabId);
+  if (targetPane) targetPane.classList.add('active');
+  
+  if (tabId === 'tab-overview') fetchOverviewData();
+  
+  // Auto close sidebar drawer after choice
+  window.toggleMobileSidebar();
+};
+
+window.triggerMobileLogout = function() {
+  logout();
+};

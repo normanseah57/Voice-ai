@@ -1,6 +1,7 @@
 // State Management
 let saasToken = localStorage.getItem('saas_token');
 let currentTenant = null;
+window.globalOverageRate = 0.35;
 let selectedUpgradeTier = null;
 let selectedBillingCycle = 'monthly';
 let stripePaymentMode = 'upgrade'; // 'upgrade' or 'overage'
@@ -96,6 +97,25 @@ const displayBusinessHours = document.getElementById('display-business-hours');
 const quickAppointmentsList = document.getElementById('quick-appointments-list');
 const linkGotoAppointments = document.getElementById('link-goto-appointments');
 
+// Engagement Features Elements
+const streakCount = document.getElementById('streak-count');
+const streakBadge = document.getElementById('streak-badge');
+const savingsHeadline = document.getElementById('savings-headline');
+const savingsSub = document.getElementById('savings-sub');
+const savingsCalls = document.getElementById('savings-calls');
+const savingsHours = document.getElementById('savings-hours');
+const savingsDollars = document.getElementById('savings-dollars');
+const healthGradeBadge = document.getElementById('health-grade-badge');
+const gaugeFillCircle = document.getElementById('gauge-fill-circle');
+const gaugeScoreText = document.getElementById('gauge-score-text');
+const healthAnswerRate = document.getElementById('health-answer-rate');
+const healthBookingRate = document.getElementById('health-booking-rate');
+const healthAvgDuration = document.getElementById('health-avg-duration');
+const healthSetupScore = document.getElementById('health-setup-score');
+const activityFeedList = document.getElementById('activity-feed-list');
+const activityEmptyState = document.getElementById('activity-empty-state');
+const displayAiPersonaName = document.getElementById('display-ai-persona-name');
+
 // Pane Elements: Monitor
 const monitorInactiveView = document.getElementById('monitor-inactive-view');
 const monitorActiveView = document.getElementById('monitor-active-view');
@@ -177,7 +197,8 @@ const tabMetadata = {
   billing: { title: 'SaaS Billing & Quotas', subtitle: 'Track your call limits and upgrade subscription tiers' },
   services: { title: 'Services & Pricing', subtitle: 'Manage your catalog and import pricing structure' },
   accounting: { title: 'Accounting', subtitle: 'Manage finances, invoices, payments, expenses, and financial reports' },
-  'mobile-app': { title: 'Mobile Simulator', subtitle: 'Interactive iPhone viewport and cross-device testing' }
+  'mobile-app': { title: 'Mobile Simulator', subtitle: 'Interactive iPhone viewport and cross-device testing' },
+  admin: { title: 'Super Admin Console', subtitle: 'Manage SaaS tenants, adjust usage limits, and audit platform activities' }
 };
 
 function switchTab(tabId) {
@@ -238,6 +259,8 @@ function switchTab(tabId) {
     fetchAccountingData();
   } else if (tabId === 'mobile-app') {
     initMobileSimulator();
+  } else if (tabId === 'admin') {
+    fetchAdminDashboard();
   }
 }
 window.switchTab = switchTab;
@@ -406,6 +429,8 @@ function connectWebSocket() {
       switch (event) {
         case 'call_started':
           startActiveCallState(data);
+          addActivityItem(data.direction === 'outbound' ? 'call-out' : 'call-in', `Active Call with ${data.phoneNumber || 'Unknown'}`, 'AI receptionist connected', 'Just now');
+          playChime('call');
           break;
           
         case 'transcript_delta':
@@ -418,6 +443,7 @@ function connectWebSocket() {
           
         case 'call_ended':
           endActiveCallState(data);
+          addActivityItem('ended', `Call Ended with ${data.phoneNumber || 'Unknown'}`, 'Status: Completed', 'Just now');
           break;
           
         case 'call_summary_updated':
@@ -427,6 +453,10 @@ function connectWebSocket() {
         case 'refresh_appointments':
           fetchAppointments();
           fetchOverviewData();
+          if (data && data.customer_name) {
+            addActivityItem('booking', `Appointment Booked: ${data.customer_name}`, `${data.service} on ${data.date} at ${data.time}`, 'Just now');
+            playChime('booking');
+          }
           break;
           
         case 'refresh_crm':
@@ -662,8 +692,169 @@ function endActiveCallState(callData) {
 }
 
 // -------------------------------------------------------------
-// OVERVIEW & CORE APPOINTMENT LOGS
+// ENGAGEMENT FEATURES HELPERS & OVERVIEW
 // -------------------------------------------------------------
+
+function playChime(type) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    if (type === 'call') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+    } else if (type === 'booking') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    }
+  } catch (e) {
+    console.log('Web Audio feedback error:', e);
+  }
+}
+
+
+function updateHealthGauge(score) {
+  if (!gaugeFillCircle || !gaugeScoreText) return;
+  const offset = 301.6 - (301.6 * score) / 100;
+  gaugeFillCircle.style.strokeDashoffset = offset;
+  gaugeScoreText.textContent = score;
+}
+
+function addActivityItem(iconType, title, meta, timeText) {
+  if (!activityFeedList) return;
+  
+  if (activityEmptyState) {
+    activityEmptyState.style.display = 'none';
+  }
+  
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  
+  let emoji = '📞';
+  if (iconType === 'call-in') emoji = '📥';
+  else if (iconType === 'call-out') emoji = '📤';
+  else if (iconType === 'booking') emoji = '📅';
+  else if (iconType === 'ended') emoji = '🏁';
+  else if (iconType === 'warn') emoji = '⚠️';
+  
+  item.innerHTML = `
+    <div class="activity-icon ${iconType}">${emoji}</div>
+    <div class="activity-body">
+      <div class="activity-title">${escapeHtml(title)}</div>
+      <div class="activity-meta">${escapeHtml(meta)}</div>
+    </div>
+    <div class="activity-time">${escapeHtml(timeText)}</div>
+  `;
+  
+  activityFeedList.insertBefore(item, activityFeedList.firstChild);
+  
+  // Truncate to maximum 10 items
+  while (activityFeedList.children.length > 10) {
+    const lastChild = activityFeedList.lastChild;
+    if (lastChild && lastChild !== activityEmptyState) {
+      activityFeedList.removeChild(lastChild);
+    } else {
+      break;
+    }
+  }
+  
+  // Add live badge scale animation on trigger
+  const liveBadge = document.getElementById('activity-live-badge');
+  if (liveBadge) {
+    liveBadge.classList.add('activity-ping-active');
+    setTimeout(() => liveBadge.classList.remove('activity-ping-active'), 500);
+  }
+}
+
+function calculateStreak(calls) {
+  if (!calls || calls.length === 0) return 0;
+  const dates = [...new Set(calls.map(c => {
+    const date = new Date(c.created_at);
+    return date.toISOString().split('T')[0];
+  }))].sort((a, b) => new Date(b) - new Date(a));
+  
+  if (dates.length === 0) return 0;
+  
+  const todayStr = new Date().toISOString().split('T')[0];
+  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  
+  if (dates[0] !== todayStr && dates[0] !== yesterdayStr) {
+    return 0;
+  }
+  
+  let streak = 1;
+  let current = new Date(dates[0]);
+  for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i]);
+    const diffTime = Math.abs(current - prev);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) {
+      streak++;
+      current = prev;
+    } else if (diffDays > 1) {
+      break;
+    }
+  }
+  return streak;
+}
+
+function populateInitialActivityFeed(calls, appointments) {
+  if (!activityFeedList) return;
+  // If we already have items inside, don't populate (avoid overwriting live logs)
+  if (activityFeedList.querySelectorAll('.activity-item').length > 0) return;
+  
+  let events = [];
+  
+  // Extract calls
+  calls.forEach(c => {
+    events.push({
+      type: c.direction === 'outbound' ? 'call-out' : 'call-in',
+      title: `${c.direction === 'outbound' ? 'Outbound' : 'Inbound'} call ${c.phone_number}`,
+      meta: c.status === 'completed' ? `Completed · Duration: ${Math.floor(c.duration / 60)}m ${c.duration % 60}s` : `Ended with status: ${c.status}`,
+      date: new Date(c.created_at)
+    });
+  });
+  
+  // Extract appointments (as booking events)
+  appointments.forEach(a => {
+    events.push({
+      type: 'booking',
+      title: `Appointment booked: ${a.customer_name}`,
+      meta: `${a.service} on ${a.date} at ${a.time}`,
+      date: new Date(a.created_at || a.date)
+    });
+  });
+  
+  // Sort oldest first, so that when we prepend, the newest ends up at the top!
+  events.sort((a, b) => a.date - b.date);
+  
+  // Take the last 5 events (which are the newest) and add them
+  const recentEvents = events.slice(-5);
+  if (recentEvents.length > 0) {
+    if (activityEmptyState) activityEmptyState.style.display = 'none';
+    recentEvents.forEach(ev => {
+      addActivityItem(ev.type, ev.title, ev.meta, formatRelativeTime(ev.date));
+    });
+  } else {
+    if (activityEmptyState) activityEmptyState.style.display = 'flex';
+  }
+}
+
 async function fetchOverviewData() {
   try {
     const resAppointments = await fetch('/api/appointments');
@@ -703,6 +894,113 @@ async function fetchOverviewData() {
       currentTenant.company_name = systemConfig.company_name;
       updateHeaderUserInfo();
     }
+
+    // Update AI Receptionist Named Persona
+    if (displayAiPersonaName) {
+      displayAiPersonaName.textContent = (systemConfig.agent_name || 'Aura') + ' Voice Receptionist';
+    }
+
+    // 1. Calculate Streak
+    const streak = calculateStreak(calls);
+    if (streakCount) {
+      streakCount.textContent = streak;
+    }
+    if (streakBadge) {
+      if (streak > 0) {
+        streakBadge.style.display = 'flex';
+      } else {
+        streakBadge.style.display = 'flex';
+      }
+    }
+
+    // 2. Calculate "AI Saved You" Metric Card
+    const totalCallsCount = calls.length;
+    const totalMinutesSaved = (totalCallsCount * 4) + (appointments.length * 12);
+    const hoursSaved = Math.floor(totalMinutesSaved / 60);
+    const minsSaved = totalMinutesSaved % 60;
+    const dollarsSaved = Math.round((totalMinutesSaved / 60) * 20);
+
+    if (savingsCalls) savingsCalls.textContent = totalCallsCount;
+    if (savingsHours) savingsHours.textContent = `${hoursSaved}h ${minsSaved}m`;
+    if (savingsDollars) savingsDollars.textContent = `$${dollarsSaved}`;
+
+    if (savingsHeadline && savingsSub) {
+      if (totalCallsCount > 0) {
+        savingsHeadline.textContent = `Your AI assistant has saved you $${dollarsSaved}!`;
+        savingsSub.textContent = `Handled ${totalCallsCount} calls and saved ${hoursSaved}h ${minsSaved}m of labor time.`;
+      } else {
+        savingsHeadline.textContent = `Your AI is ready to answer calls`;
+        savingsSub.textContent = `Share your Twilio number to begin saving time and costs!`;
+      }
+    }
+
+    // 3. Calculate Business Health Score
+    const answeredCalls = calls.filter(c => c.status === 'completed' || c.duration > 0).length;
+    const answerRate = totalCallsCount ? Math.round((answeredCalls / totalCallsCount) * 100) : 100;
+    const bookingRate = totalCallsCount ? Math.min(100, Math.round((appointments.length / totalCallsCount) * 100)) : 0;
+    
+    const totalDuration = calls.reduce((acc, c) => acc + (c.duration || 0), 0);
+    const avgDurationSec = totalCallsCount ? totalDuration / totalCallsCount : 0;
+    const avgDurationMin = (avgDurationSec / 60).toFixed(1);
+
+    // Calculate wizard/setup score
+    let completedCount = 0;
+    const totalSteps = 11;
+    if (settingsCompany && settingsCompany.value.trim()) completedCount++;
+    if (settingsAgentName && settingsAgentName.value.trim()) completedCount++;
+    completedCount++;
+    if (settingsTwilio && settingsTwilio.value.trim()) completedCount++;
+    if (settingsPrompt && settingsPrompt.value.trim()) completedCount++;
+    
+    let anyActiveDay = false;
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+      const checkbox = document.getElementById('work-day-' + day);
+      if (checkbox && checkbox.checked) anyActiveDay = true;
+    });
+    if (anyActiveDay) completedCount++;
+
+    const step8Comp = !!(settingsWebsiteUrl && settingsWebsiteUrl.value.trim()) || 
+                     !!(document.getElementById('settings-template')?.value) ||
+                     (crawlStatusContainer && crawlStatusContainer.style.display === 'block');
+    if (step8Comp) completedCount++;
+    completedCount++;
+    const step10Comp = !!(settingsResources && settingsResources.value.trim()) || 
+                      (workspaceTeamList && workspaceTeamList.length > 0);
+    if (step10Comp) completedCount++;
+    completedCount++;
+    
+    const setupScoreVal = Math.round((completedCount / totalSteps) * 100);
+
+    const score = Math.round((answerRate * 0.4) + (setupScoreVal * 0.3) + (bookingRate * 0.2) + (totalCallsCount ? 10 : 0));
+    const healthScore = Math.max(20, Math.min(100, score || 85));
+
+    if (healthAnswerRate) healthAnswerRate.textContent = `${answerRate}%`;
+    if (healthBookingRate) healthBookingRate.textContent = `${bookingRate}%`;
+    if (healthAvgDuration) healthAvgDuration.textContent = `${avgDurationMin} min`;
+    if (healthSetupScore) healthSetupScore.textContent = `${setupScoreVal}%`;
+
+    updateHealthGauge(healthScore);
+
+    if (healthGradeBadge) {
+      healthGradeBadge.className = 'badge';
+      if (healthScore >= 90) {
+        healthGradeBadge.textContent = 'Excellent (Grade A)';
+        healthGradeBadge.classList.add('grade-a');
+      } else if (healthScore >= 80) {
+        healthGradeBadge.textContent = 'Good (Grade B)';
+        healthGradeBadge.classList.add('grade-b');
+      } else if (healthScore >= 60) {
+        healthGradeBadge.textContent = 'Fair (Grade C)';
+        healthGradeBadge.classList.add('grade-c');
+      } else {
+        healthGradeBadge.textContent = 'Needs Attention (Grade D)';
+        healthGradeBadge.classList.add('grade-d');
+      }
+    }
+
+    // 4. Populate Initial Activity Feed
+    populateInitialActivityFeed(calls, appointments);
+
     notifyMobileSimulatorRefresh();
   } catch (err) {
     console.error('Failed to load overview data:', err);
@@ -2000,12 +2298,26 @@ function initAuthenticatedSession() {
     document.getElementById('app-container').style.display = 'flex';
     
     const adminMenuItem = document.getElementById('menu-item-admin');
-    if (adminMenuItem) {
-      if (currentTenant && currentTenant.is_admin === 1) {
-        adminMenuItem.style.display = 'flex';
-      } else {
-        adminMenuItem.style.display = 'none';
-      }
+    const settingsMenuItem = document.querySelector('.menu-item[data-tab="settings"]');
+    
+    if (currentTenant && currentTenant.is_admin === 1) {
+      // Super Admin: show Admin Console, hide Agent Settings (not applicable for platform owner)
+      if (adminMenuItem) adminMenuItem.style.display = 'flex';
+      // Keep Agent Settings visible for super admin too — needed for prompt/voice config
+      // Show all admin-only UI fields (tenant filter banners) across every pane
+      document.querySelectorAll('.admin-only-field').forEach(el => {
+        el.style.display = el.tagName === 'SELECT' ? 'block' : 'flex';
+      });
+      // Load tenant list into all global tenant filter dropdowns
+      loadGlobalTenantDropdowns();
+    } else {
+      // Regular Tenant: hide Admin Console, show Agent Settings
+      if (adminMenuItem) adminMenuItem.style.display = 'none';
+      if (settingsMenuItem) settingsMenuItem.style.display = 'flex';
+      // Ensure admin-only fields are hidden
+      document.querySelectorAll('.admin-only-field').forEach(el => {
+        el.style.display = 'none';
+      });
     }
 
     // Regroup settings access based on tenant user role
@@ -2019,7 +2331,7 @@ function initAuthenticatedSession() {
         if (tabsContainer) tabsContainer.style.display = 'flex';
       } else {
         advTab.style.display = 'none';
-        if (basicTab) basicTab.style.display = 'none'; // hide tabs entirely if only member
+        if (basicTab) basicTab.style.display = 'none';
         if (tabsContainer) tabsContainer.style.display = 'none';
       }
     }
@@ -2028,7 +2340,13 @@ function initAuthenticatedSession() {
     
     connectWebSocket();
     updateHeaderUserInfo();
-    switchTab('overview');
+    
+    // Super Admins start on Admin Console; regular tenants start on Overview
+    if (currentTenant && currentTenant.is_admin === 1) {
+      switchTab('admin');
+    } else {
+      switchTab('overview');
+    }
   } catch (err) {
     console.error('CRITICAL ERROR in initAuthenticatedSession:', err);
     showToast('Session Error', 'There was an error loading your workspace: ' + err.message, 'danger');
@@ -2186,6 +2504,7 @@ async function fetchBillingDetails() {
     if (currentTenant) {
       currentTenant.subscription_tier = usage.tier;
       currentTenant.billing_cycle = usage.billing_cycle || 'monthly';
+      currentTenant.overage_rate = usage.overage_rate;
     }
     updateHeaderUserInfo();
     
@@ -2205,6 +2524,20 @@ async function fetchBillingDetails() {
       };
       tierBadge.textContent = (tierNames[usage.tier] || 'Enterprise Plan') + cycleLabel;
       tierBadge.className = `lead-stage-pill ${usage.tier === 'free' ? 'subscriber' : usage.tier === 'starter' ? 'lead' : usage.tier === 'professional' ? 'customer' : 'vip'}`;
+    }
+    
+    // Update Billing page next renewal date
+    const renewalEl = document.getElementById('billing-renewal-date');
+    if (renewalEl) {
+      if (usage.tier === 'free') {
+        renewalEl.textContent = 'Renewal: N/A';
+      } else if (usage.next_payment_due) {
+        const renewalDate = new Date(usage.next_payment_due);
+        const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        renewalEl.textContent = `Next Payment Due: ${renewalDate.toLocaleDateString(undefined, options)}`;
+      } else {
+        renewalEl.textContent = 'Renewal: N/A';
+      }
     }
     
     // Calculate Call Duration Progress Bar
@@ -2239,7 +2572,7 @@ async function fetchBillingDetails() {
     // Quota Hint
     const overageHint = document.getElementById('billing-minutes-overage-hint');
     if (overageHint) {
-      const overageRate = usage.tier === 'free' ? 0.0 : 0.35;
+      const overageRate = usage.tier === 'free' ? 0.0 : (usage.overage_rate || 0.35);
       overageHint.textContent = usage.tier === 'free'
         ? 'Sandbox limit. Call connections block after exceeding 15 minutes.'
         : `Overage: Pro-rated at $${overageRate.toFixed(2)}/minute.`;
@@ -2275,7 +2608,7 @@ async function fetchBillingDetails() {
     
     // Calculate overages and simulated invoicing
     const overageMins = Math.max(0, minsUsed - minsMax);
-    const overageRate = usage.tier === 'free' ? 0.0 : 0.35;
+    const overageRate = usage.tier === 'free' ? 0.0 : (usage.overage_rate || 0.35);
     const overageCost = overageMins * overageRate;
     
     const countEl = document.getElementById('overage-minutes-count');
@@ -2319,7 +2652,13 @@ function enforceTierRestrictions(tier) {
 // Global exposure of handlers called inline in HTML
 window.openAuthModal = function(mode) {
   const modal = document.getElementById('saas-auth-modal');
-  if (modal) modal.classList.add('active');
+  if (modal) {
+    // Move to document.body to escape overflow:auto stacking context
+    if (modal.parentNode !== document.body) {
+      document.body.appendChild(modal);
+    }
+    modal.classList.add('active');
+  }
   window.toggleAuthTab(mode);
 };
 
@@ -2457,8 +2796,9 @@ window.togglePaymentModal = function(show) {
         const blocksSelect = document.getElementById('overage-blocks-select');
         const blocks = blocksSelect ? parseInt(blocksSelect.value) || 1 : 1;
         const minutes = blocks * 100;
-        const price = (blocks * 35.00).toFixed(2);
-        tierDisplay = `${minutes} Prepaid Overage Minutes ($${price} - Billed Upfront)`;
+        const rate = (currentTenant && currentTenant.overage_rate != null) ? currentTenant.overage_rate : 0.35;
+        const price = (blocks * 100 * rate).toFixed(2);
+        tierDisplay = `${minutes} Prepaid Overage Minutes ($${price} - Billed Upfront at $${rate.toFixed(2)}/min)`;
       } else {
         const isAnnual = selectedBillingCycle === 'annual';
         const starterPrice = isAnnual ? 79 : 99;
@@ -2673,28 +3013,55 @@ document.getElementById('form-overage-reminder').addEventListener('submit', asyn
 // =============================================================
 
 async function fetchAdminDashboard() {
+  // ---- Global SaaS Config ----
+  try {
+    const configResponse = await fetch('/api/admin/global-settings');
+    if (configResponse.ok) {
+      const config = await configResponse.json();
+      window.globalOverageRate = parseFloat(config.global_overage_rate);
+      const input = document.getElementById('global-overage-rate-input');
+      if (input) input.value = window.globalOverageRate.toFixed(2);
+    }
+  } catch (err) {
+    console.error('[Admin] Global settings fetch error:', err);
+  }
+
+  // ---- Stats ----
   try {
     const statsResponse = await fetch('/api/admin/stats');
-    if (!statsResponse.ok) throw new Error('Failed to load admin stats');
-    
-    const stats = await statsResponse.json();
-    document.getElementById('admin-metric-tenants').textContent = stats.totalTenants;
-    document.getElementById('admin-metric-minutes').textContent = (stats.totalMinutes || 0).toFixed(1);
-    document.getElementById('admin-metric-mrr').textContent = `$${stats.estimatedMrr.toFixed(2)}`;
-    document.getElementById('admin-metric-active-streams').textContent = stats.activeCalls;
-    
-    const listResponse = await fetch('/api/admin/tenants');
-    if (!listResponse.ok) throw new Error('Failed to load tenants list');
-    
-    const tenants = await listResponse.json();
-    const tbody = document.getElementById('admin-tenants-tbody');
-    
-    if (tenants.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No SaaS tenants registered.</td></tr>';
-      return;
+    if (!statsResponse.ok) {
+      const err = await statsResponse.json().catch(() => ({}));
+      console.error('[Admin] Stats fetch failed:', statsResponse.status, err);
+    } else {
+      const stats = await statsResponse.json();
+      document.getElementById('admin-metric-tenants').textContent = stats.totalTenants;
+      document.getElementById('admin-metric-minutes').textContent = (stats.totalMinutes || 0).toFixed(1);
+      document.getElementById('admin-metric-mrr').textContent = `$${(stats.estimatedMrr || 0).toFixed(2)}`;
+      document.getElementById('admin-metric-active-streams').textContent = stats.activeCalls;
     }
-    
-    tbody.innerHTML = tenants.map(t => {
+  } catch (err) {
+    console.error('[Admin] Stats error:', err);
+  }
+  
+  // ---- Tenants List ----
+  try {
+    const listResponse = await fetch('/api/admin/tenants');
+    if (!listResponse.ok) {
+      const err = await listResponse.json().catch(() => ({}));
+      console.error('[Admin] Tenants list failed:', listResponse.status, err);
+      const tbody = document.getElementById('admin-tenants-tbody');
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding: 20px; color: #ef4444;">Failed to load tenant list (${listResponse.status}): ${err.error || 'Unknown error'}</td></tr>`;
+    } else {
+      const tenants = await listResponse.json();
+      const tbody = document.getElementById('admin-tenants-tbody');
+      
+      if (tenants.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 20px;">No SaaS tenants registered.</td></tr>';
+      } else {
+        window.adminTenantsList = tenants;
+        populateAdminTenantFilters();
+        tbody.innerHTML = tenants.map(t => {
+
       const dateStr = formatDate(t.created_at);
       const isSelf = currentTenant && parseInt(currentTenant.id) === t.id;
       
@@ -2727,6 +3094,40 @@ async function fetchAdminDashboard() {
           </button>
         `;
 
+      // Build custom limits cell content
+      const planDefaults = { free: {m:15, c:15, a:5}, starter: {m:100, c:100, a:9999}, professional: {m:1000, c:99999, a:99999}, enterprise: {m:999999, c:999999, a:999999} };
+      const pd = planDefaults[t.subscription_tier] || planDefaults.free;
+      const hasCustomMinutes = t.custom_minute_limit != null;
+      const hasCustomContacts = t.custom_contact_limit != null;
+      const hasCustomAppts = t.custom_appointment_limit != null;
+      const hasCustomOverage = t.custom_overage_rate != null;
+      const hasAnyCustom = hasCustomMinutes || hasCustomContacts || hasCustomAppts || hasCustomOverage;
+
+      const limitsCellHtml = isSelf ? '<span class="text-muted" style="font-size: 0.75rem;">Owner</span>' : `
+        <div style="display: flex; flex-direction: column; gap: 3px; min-width: 110px;">
+          <span class="limit-pill ${hasCustomMinutes ? 'custom' : 'default'}" title="${hasCustomMinutes ? 'Custom override' : 'Plan default'}">
+            <i data-lucide="phone-call" style="width: 10px; height: 10px;"></i>
+            ${hasCustomMinutes ? t.custom_minute_limit : pd.m} min
+            ${hasCustomMinutes ? '<span class="limit-pill-tag">custom</span>' : ''}
+          </span>
+          <span class="limit-pill ${hasCustomContacts ? 'custom' : 'default'}" title="${hasCustomContacts ? 'Custom override' : 'Plan default'}">
+            <i data-lucide="users" style="width: 10px; height: 10px;"></i>
+            ${hasCustomContacts ? t.custom_contact_limit : pd.c > 9000 ? '∞' : pd.c} contacts
+            ${hasCustomContacts ? '<span class="limit-pill-tag">custom</span>' : ''}
+          </span>
+          <span class="limit-pill ${hasCustomAppts ? 'custom' : 'default'}" title="${hasCustomAppts ? 'Custom override' : 'Plan default'}">
+            <i data-lucide="calendar" style="width: 10px; height: 10px;"></i>
+            ${hasCustomAppts ? t.custom_appointment_limit : pd.a > 9000 ? '∞' : pd.a} appts
+            ${hasCustomAppts ? '<span class="limit-pill-tag">custom</span>' : ''}
+          </span>
+          <span class="limit-pill ${hasCustomOverage ? 'custom' : 'default'}" title="${hasCustomOverage ? 'Custom override' : 'System default'}">
+            <i data-lucide="dollar-sign" style="width: 10px; height: 10px;"></i>
+            $${hasCustomOverage ? parseFloat(t.custom_overage_rate).toFixed(2) : (window.globalOverageRate || 0.35)}/min
+            ${hasCustomOverage ? '<span class="limit-pill-tag">custom</span>' : ''}
+          </span>
+        </div>
+      `;
+
       return `
         <tr>
           <td>
@@ -2746,10 +3147,14 @@ async function fetchAdminDashboard() {
             <span class="val">${t.contacts_count} contacts</span><br/>
             <span class="val text-muted" style="font-size: 0.75rem;">${t.appointments_count} bookings</span>
           </td>
+          <td>${limitsCellHtml}</td>
           <td class="text-right">
-            <div class="admin-actions-cell" style="display: flex; gap: 8px; justify-content: flex-end;">
+            <div class="admin-actions-cell" style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
               ${statusBtnHtml}
               ${isSelf ? '' : `
+                <button class="status-toggle-btn ${hasAnyCustom ? 'limits-active' : 'activate'}" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-weight: 500;" onclick="openAdminLimitsModal(${t.id}, '${escapeHtml(t.company_name || 'Workspace')}', '${t.subscription_tier}', ${t.custom_minute_limit ?? 'null'}, ${t.custom_contact_limit ?? 'null'}, ${t.custom_appointment_limit ?? 'null'}, ${t.custom_overage_rate ?? 'null'})">
+                  <i data-lucide="gauge" style="width: 12px; height: 12px;"></i> Limits${hasAnyCustom ? ' ★' : ''}
+                </button>
                 <button class="status-toggle-btn activate" style="background: var(--color-primary); color: white; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(6,182,212,0.4); padding: 4px 10px; font-weight: 500;" onclick="remoteManageTenantSettings(${t.id}, '${escapeHtml(t.company_name)}')">
                   <i data-lucide="sliders" style="width: 12px; height: 12px;"></i> Remote Settings
                 </button>
@@ -2759,16 +3164,16 @@ async function fetchAdminDashboard() {
         </tr>
       `;
     }).join('');
-    
-    // Fetch and render Platform Activities
-    try {
-      const activitiesResponse = await fetch('/api/admin/activities');
-      if (activitiesResponse.ok) {
-        const activities = await activitiesResponse.json();
-        const feedContainer = document.getElementById('admin-activities-feed');
-        if (feedContainer) {
-          if (activities.length === 0) {
-            feedContainer.innerHTML = '<p class="text-center text-muted py-4">No activities logged yet.</p>';
+
+        // Fetch and render Platform Activities
+        try {
+          const activitiesResponse = await fetch('/api/admin/activities');
+          if (activitiesResponse.ok) {
+            const activities = await activitiesResponse.json();
+            const feedContainer = document.getElementById('admin-activities-feed');
+            if (feedContainer) {
+              if (activities.length === 0) {
+                feedContainer.innerHTML = '<p class="text-center text-muted py-4">No activities logged yet.</p>';
           } else {
             feedContainer.innerHTML = activities.map(act => {
               let icon = 'activity';
@@ -2829,12 +3234,396 @@ async function fetchAdminDashboard() {
     } catch (e) {
       console.error('Error loading platform activities:', e);
     }
-    
-    initIcons();
+
+        initIcons();
+      } // end else tenants
+    } // end else listResponse ok
   } catch (err) {
-    console.error('Error fetching admin dashboard details:', err);
+    console.error('[Admin] Tenants section error:', err);
   }
 }
+
+// -------------------------------------------------------------
+// SUPER ADMIN DASHBOARD SUBTABS CONTROLLERS
+// -------------------------------------------------------------
+window.activeAdminTab = 'overview';
+window.activeAdminAccountingTab = 'invoices';
+
+window.switchAdminSubtab = function(tabName) {
+  window.activeAdminTab = tabName;
+  
+  // Update sub-tab buttons active state
+  document.querySelectorAll('.admin-subtab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  const activeBtn = document.getElementById(`admin-subtab-${tabName}-btn`);
+  if (activeBtn) activeBtn.classList.add('active');
+  
+  // Hide all sub-panes, show active one
+  document.querySelectorAll('.admin-sub-pane').forEach(pane => {
+    pane.style.display = 'none';
+  });
+  const activePane = document.getElementById(`sub-pane-admin-${tabName}`);
+  if (activePane) activePane.style.display = 'block';
+  
+  // Load respective sub-tab data
+  if (tabName === 'overview') {
+    fetchAdminDashboard();
+  } else if (tabName === 'crm') {
+    fetchAdminCRM();
+  } else if (tabName === 'appointments') {
+    fetchAdminAppointments();
+  } else if (tabName === 'calls') {
+    fetchAdminCalls();
+  } else if (tabName === 'billing') {
+    fetchAdminBilling();
+  } else if (tabName === 'accounting') {
+    fetchAdminAccounting();
+  }
+};
+
+window.switchAdminAccountingTab = function(tabName) {
+  window.activeAdminAccountingTab = tabName;
+  
+  // Update sub-tab buttons
+  document.querySelectorAll('.admin-accounting-tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  const activeBtn = document.getElementById(`admin-accounting-tab-${tabName}-btn`);
+  if (activeBtn) activeBtn.classList.add('active');
+  
+  // Toggle content panes
+  document.querySelectorAll('.admin-accounting-tab-content').forEach(pane => {
+    pane.style.display = 'none';
+  });
+  const activePane = document.getElementById(`admin-accounting-subtab-${tabName}`);
+  if (activePane) activePane.style.display = 'block';
+};
+
+// Populate Filters Dropdown helper
+window.populateAdminTenantFilters = function() {
+  const tenants = window.adminTenantsList || [];
+  const filters = [
+    'admin-crm-tenant-filter',
+    'admin-appointments-tenant-filter',
+    'admin-calls-tenant-filter',
+    'admin-billing-tenant-filter',
+    'admin-accounting-tenant-filter'
+  ];
+  filters.forEach(filterId => {
+    const select = document.getElementById(filterId);
+    if (!select) return;
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">All Tenants</option>' + tenants.map(t => 
+      `<option value="${t.id}">${escapeHtml(t.company_name || t.name || 'Workspace ' + t.id)}</option>`
+    ).join('');
+    select.value = currentVal;
+  });
+};
+
+// Data Caches
+window.adminCRMData = [];
+window.adminAppointmentsData = [];
+window.adminCallsData = [];
+window.adminBillingData = [];
+window.adminAccountingData = { invoices: [], bills: [], payments: [] };
+
+// 1. Fetch CRM
+window.fetchAdminCRM = async function() {
+  try {
+    const res = await fetch('/api/admin/contacts');
+    if (!res.ok) throw new Error('Failed to load global CRM contacts');
+    window.adminCRMData = await res.json();
+    filterAdminCRM();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('admin-crm-tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:20px; color:#ef4444;">${err.message}</td></tr>`;
+  }
+};
+
+window.filterAdminCRM = function() {
+  const searchVal = (document.getElementById('admin-crm-search')?.value || '').toLowerCase();
+  const tenantFilter = document.getElementById('admin-crm-tenant-filter')?.value || '';
+  const tbody = document.getElementById('admin-crm-tbody');
+  if (!tbody) return;
+  
+  const filtered = window.adminCRMData.filter(c => {
+    const matchSearch = (c.name || '').toLowerCase().includes(searchVal) ||
+                        (c.email || '').toLowerCase().includes(searchVal) ||
+                        (c.phone || '').toLowerCase().includes(searchVal) ||
+                        (c.company || '').toLowerCase().includes(searchVal);
+    const matchTenant = tenantFilter === '' || parseInt(c.tenant_id) === parseInt(tenantFilter);
+    return matchSearch && matchTenant;
+  });
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:20px;">No CRM contacts found.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = filtered.map(c => `
+    <tr>
+      <td><strong>${escapeHtml(c.tenant_company || c.tenant_name || 'Tenant ' + c.tenant_id)}</strong></td>
+      <td>${escapeHtml(c.name || 'N/A')}</td>
+      <td>${escapeHtml(c.email || 'N/A')}</td>
+      <td>${escapeHtml(c.phone || 'N/A')}</td>
+      <td>${escapeHtml(c.company || 'N/A')}</td>
+      <td><span class="lead-stage-pill ${c.stage || 'lead'}">${c.stage ? c.stage.toUpperCase() : 'LEAD'}</span></td>
+      <td>${formatDate(c.created_at)}</td>
+    </tr>
+  `).join('');
+  
+  lucide.createIcons();
+};
+
+// 2. Fetch Appointments
+window.fetchAdminAppointments = async function() {
+  try {
+    const res = await fetch('/api/admin/appointments');
+    if (!res.ok) throw new Error('Failed to load global appointments');
+    window.adminAppointmentsData = await res.json();
+    filterAdminAppointments();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('admin-appointments-tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:20px; color:#ef4444;">${err.message}</td></tr>`;
+  }
+};
+
+window.filterAdminAppointments = function() {
+  const searchVal = (document.getElementById('admin-appointments-search')?.value || '').toLowerCase();
+  const tenantFilter = document.getElementById('admin-appointments-tenant-filter')?.value || '';
+  const tbody = document.getElementById('admin-appointments-tbody');
+  if (!tbody) return;
+  
+  const filtered = window.adminAppointmentsData.filter(a => {
+    const matchSearch = (a.client_name || '').toLowerCase().includes(searchVal) ||
+                        (a.service_name || '').toLowerCase().includes(searchVal);
+    const matchTenant = tenantFilter === '' || parseInt(a.tenant_id) === parseInt(tenantFilter);
+    return matchSearch && matchTenant;
+  });
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:20px;">No appointments scheduled.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = filtered.map(a => `
+    <tr>
+      <td><strong>${escapeHtml(a.tenant_company || a.tenant_name || 'Tenant ' + a.tenant_id)}</strong></td>
+      <td>
+        <div style="font-weight:600;">${escapeHtml(a.client_name || 'N/A')}</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(a.client_email || '')}</div>
+      </td>
+      <td>${escapeHtml(a.service_name || 'Receptionist Call')}</td>
+      <td>${formatDate(a.appointment_date)} at ${a.appointment_time}</td>
+      <td>$${(a.price || 0).toFixed(2)}</td>
+      <td><span class="lead-stage-pill ${a.status === 'confirmed' ? 'customer' : a.status === 'cancelled' ? 'lost' : 'lead'}">${a.status.toUpperCase()}</span></td>
+      <td>
+        <span class="lead-stage-pill ${a.payment_status === 'paid' ? 'customer' : 'lost'}" style="font-size:0.75rem; padding: 3px 8px;">
+          ${a.payment_status ? a.payment_status.toUpperCase() : 'UNPAID'}
+        </span>
+      </td>
+    </tr>
+  `).join('');
+  
+  lucide.createIcons();
+};
+
+// 3. Fetch Call History
+window.fetchAdminCalls = async function() {
+  try {
+    const res = await fetch('/api/admin/calls');
+    if (!res.ok) throw new Error('Failed to load global call history');
+    window.adminCallsData = await res.json();
+    filterAdminCalls();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('admin-calls-tbody').innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:20px; color:#ef4444;">${err.message}</td></tr>`;
+  }
+};
+
+window.filterAdminCalls = function() {
+  const searchVal = (document.getElementById('admin-calls-search')?.value || '').toLowerCase();
+  const tenantFilter = document.getElementById('admin-calls-tenant-filter')?.value || '';
+  const tbody = document.getElementById('admin-calls-tbody');
+  if (!tbody) return;
+  
+  const filtered = window.adminCallsData.filter(c => {
+    const matchSearch = (c.caller_phone || '').toLowerCase().includes(searchVal) ||
+                        (c.transcript || '').toLowerCase().includes(searchVal);
+    const matchTenant = tenantFilter === '' || parseInt(c.tenant_id) === parseInt(tenantFilter);
+    return matchSearch && matchTenant;
+  });
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No calls logged.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = filtered.map(c => {
+    const duration = c.duration ? `${Math.floor(c.duration)}s` : '0s';
+    const textPreview = c.transcript ? (c.transcript.length > 50 ? c.transcript.substring(0, 50) + '...' : c.transcript) : 'No transcript recorded.';
+    return `
+      <tr>
+        <td><strong>${escapeHtml(c.tenant_company || c.tenant_name || 'Tenant ' + c.tenant_id)}</strong></td>
+        <td><code>${escapeHtml(c.caller_phone || 'Browser Client')}</code></td>
+        <td>${formatDate(c.start_time)}</td>
+        <td><code>${duration}</code></td>
+        <td><span class="admin-status-badge ${c.status === 'completed' ? 'active' : 'suspended'}">${c.status}</span></td>
+        <td><span class="lead-stage-pill ${c.direction === 'outbound' ? 'lead' : 'subscriber'}" style="font-size:0.75rem;">${c.direction ? c.direction.toUpperCase() : 'INCOMING'}</span></td>
+        <td><span class="lead-stage-pill ${c.sentiment === 'positive' ? 'customer' : c.sentiment === 'negative' ? 'lost' : 'lead'}" style="font-size:0.75rem;">${c.sentiment ? c.sentiment.toUpperCase() : 'NEUTRAL'}</span></td>
+        <td style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(c.transcript || '')}">${escapeHtml(textPreview)}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  lucide.createIcons();
+};
+
+// 4. Fetch Billing
+window.fetchAdminBilling = async function() {
+  try {
+    const res = await fetch('/api/admin/activities');
+    if (!res.ok) throw new Error('Failed to load global billing logs');
+    const allActivities = await res.json();
+    // Filter activities relating to billing
+    window.adminBillingData = allActivities.filter(a => 
+      a.activity_type === 'billing_upgrade' || 
+      a.activity_type === 'suspension_toggle' || 
+      a.activity_type === 'settings_update' || 
+      a.description.toLowerCase().includes('overage') || 
+      a.description.toLowerCase().includes('billing')
+    );
+    filterAdminBilling();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('admin-billing-tbody').innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding:20px; color:#ef4444;">${err.message}</td></tr>`;
+  }
+};
+
+window.filterAdminBilling = function() {
+  const tenantFilter = document.getElementById('admin-billing-tenant-filter')?.value || '';
+  const tbody = document.getElementById('admin-billing-tbody');
+  if (!tbody) return;
+  
+  const filtered = window.adminBillingData.filter(a => {
+    return tenantFilter === '' || parseInt(a.tenant_id) === parseInt(tenantFilter);
+  });
+  
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:20px;">No billing logs recorded.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = filtered.map(a => `
+    <tr>
+      <td><strong>${escapeHtml(a.company_name || 'System / Platform')}</strong></td>
+      <td>
+        <span class="lead-stage-pill ${a.activity_type === 'billing_upgrade' ? 'customer' : a.activity_type === 'suspension_toggle' ? 'lost' : 'lead'}">
+          ${a.activity_type ? a.activity_type.toUpperCase() : 'BILLING'}
+        </span>
+      </td>
+      <td>${escapeHtml(a.description)}</td>
+      <td>${formatDate(a.created_at)}</td>
+    </tr>
+  `).join('');
+  
+  lucide.createIcons();
+};
+
+// 5. Fetch Accounting
+window.fetchAdminAccounting = async function() {
+  try {
+    const res = await fetch('/api/admin/accounting');
+    if (!res.ok) throw new Error('Failed to load global accounting data');
+    window.adminAccountingData = await res.json();
+    filterAdminAccounting();
+  } catch (err) {
+    console.error(err);
+    const errorMsg = `<tr><td colspan="9" class="text-center text-muted" style="padding:20px; color:#ef4444;">${err.message}</td></tr>`;
+    document.getElementById('admin-accounting-invoices-tbody').innerHTML = errorMsg;
+    document.getElementById('admin-accounting-bills-tbody').innerHTML = errorMsg;
+    document.getElementById('admin-accounting-payments-tbody').innerHTML = errorMsg;
+  }
+};
+
+window.filterAdminAccounting = function() {
+  const tenantFilter = document.getElementById('admin-accounting-tenant-filter')?.value || '';
+  
+  // Filter Invoices
+  const invoicesTbody = document.getElementById('admin-accounting-invoices-tbody');
+  if (invoicesTbody) {
+    const filteredInvoices = (window.adminAccountingData.invoices || []).filter(i => 
+      tenantFilter === '' || parseInt(i.tenant_id) === parseInt(tenantFilter)
+    );
+    if (filteredInvoices.length === 0) {
+      invoicesTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:20px;">No invoices recorded.</td></tr>';
+    } else {
+      invoicesTbody.innerHTML = filteredInvoices.map(i => `
+        <tr>
+          <td><strong>${escapeHtml(i.tenant_company || i.tenant_name || 'Tenant ' + i.tenant_id)}</strong></td>
+          <td><code>${escapeHtml(i.invoice_number)}</code></td>
+          <td>${escapeHtml(i.customer_name || 'Customer')}</td>
+          <td>${formatDate(i.date)}</td>
+          <td>${formatDate(i.due_date)}</td>
+          <td><strong>$${(i.total || 0).toFixed(2)}</strong></td>
+          <td class="text-green">$${(i.paid || 0).toFixed(2)}</td>
+          <td class="text-red">$${(i.balance || 0).toFixed(2)}</td>
+          <td><span class="lead-stage-pill ${i.status === 'paid' ? 'customer' : 'lost'}">${i.status.toUpperCase()}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  // Filter Bills
+  const billsTbody = document.getElementById('admin-accounting-bills-tbody');
+  if (billsTbody) {
+    const filteredBills = (window.adminAccountingData.bills || []).filter(b => 
+      tenantFilter === '' || parseInt(b.tenant_id) === parseInt(tenantFilter)
+    );
+    if (filteredBills.length === 0) {
+      billsTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:20px;">No supplier bills recorded.</td></tr>';
+    } else {
+      billsTbody.innerHTML = filteredBills.map(b => `
+        <tr>
+          <td><strong>${escapeHtml(b.tenant_company || b.tenant_name || 'Tenant ' + b.tenant_id)}</strong></td>
+          <td><code>${escapeHtml(b.bill_number || '#' + b.id)}</code></td>
+          <td>${escapeHtml(b.vendor_name || 'Supplier Vendor')}</td>
+          <td>${formatDate(b.date)}</td>
+          <td>${formatDate(b.due_date)}</td>
+          <td><strong>$${(b.total || 0).toFixed(2)}</strong></td>
+          <td class="text-green">$${(b.paid || 0).toFixed(2)}</td>
+          <td class="text-red">$${(b.balance || 0).toFixed(2)}</td>
+          <td><span class="lead-stage-pill ${b.status === 'paid' ? 'customer' : 'lost'}">${b.status.toUpperCase()}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  // Filter Payments
+  const paymentsTbody = document.getElementById('admin-accounting-payments-tbody');
+  if (paymentsTbody) {
+    const filteredPayments = (window.adminAccountingData.payments || []).filter(p => 
+      tenantFilter === '' || parseInt(p.tenant_id) === parseInt(tenantFilter)
+    );
+    if (filteredPayments.length === 0) {
+      paymentsTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:20px;">No ledger payments recorded.</td></tr>';
+    } else {
+      paymentsTbody.innerHTML = filteredPayments.map(p => `
+        <tr>
+          <td><strong>${escapeHtml(p.tenant_company || p.tenant_name || 'Tenant ' + p.tenant_id)}</strong></td>
+          <td><code>PAY-${p.id}</code></td>
+          <td>${p.invoice_id ? 'Customer Invoice payment' : 'Supplier Bill payment'}</td>
+          <td><strong class="text-green">+$${(p.amount || 0).toFixed(2)}</strong></td>
+          <td>${formatDate(p.date)}</td>
+          <td><span class="lead-stage-pill lead" style="font-size:0.75rem;">${p.method ? p.method.toUpperCase() : 'STRIPE_GATEWAY'}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+  
+  lucide.createIcons();
+};
 
 window.updateTenantTier = async function(tenantId, tier) {
   try {
@@ -2927,7 +3716,132 @@ window.toggleTenantStatus = async function(tenantId, currentStatus) {
   }
 };
 
+// =============================================================
+// SUPER ADMIN: USAGE RATE LIMITS MODAL
+// =============================================================
+
+const _adminLimitPlanDefaults = {
+  free:         { minutes: 15,     contacts: 15,    appointments: 5 },
+  starter:      { minutes: 100,    contacts: 100,   appointments: 9999 },
+  professional: { minutes: 1000,   contacts: 99999, appointments: 99999 },
+  enterprise:   { minutes: 999999, contacts: 999999, appointments: 999999 }
+};
+
+window.openAdminLimitsModal = function(tenantId, companyName, tier, customMinutes, customContacts, customAppts, customOverage) {
+  document.getElementById('admin-limits-tenant-id').value = tenantId;
+  document.getElementById('admin-limits-tenant-tier').value = tier;
+  document.getElementById('admin-limits-tenant-name').textContent = `${companyName} — ${tier.toUpperCase()} plan`;
+
+  const pd = _adminLimitPlanDefaults[tier] || _adminLimitPlanDefaults.free;
+  const fmtDefault = v => v >= 9999 ? '∞ (unlimited)' : v.toLocaleString();
+  document.getElementById('admin-limits-default-minutes').textContent = fmtDefault(pd.minutes);
+  document.getElementById('admin-limits-default-contacts').textContent = fmtDefault(pd.contacts);
+  document.getElementById('admin-limits-default-appointments').textContent = fmtDefault(pd.appointments);
+  
+  const defaultOverage = window.globalOverageRate || 0.35;
+  document.getElementById('admin-limits-default-overage').textContent = `$${defaultOverage.toFixed(2)}`;
+
+  // Pre-fill with existing custom values (or empty if using plan default)
+  document.getElementById('admin-limits-minutes').value     = customMinutes     != null ? customMinutes     : '';
+  document.getElementById('admin-limits-contacts').value    = customContacts    != null ? customContacts    : '';
+  document.getElementById('admin-limits-appointments').value = customAppts      != null ? customAppts       : '';
+  document.getElementById('admin-limits-overage').value      = customOverage      != null ? customOverage      : '';
+
+  const modal = document.getElementById('admin-limits-modal');
+  modal.classList.add('active');
+  initIcons();
+};
+
+window.closeAdminLimitsModal = function() {
+  document.getElementById('admin-limits-modal').classList.remove('active');
+};
+
+window.resetAdminLimit = function(type) {
+  if (type === 'minute')      document.getElementById('admin-limits-minutes').value = '';
+  if (type === 'contact')     document.getElementById('admin-limits-contacts').value = '';
+  if (type === 'appointment') document.getElementById('admin-limits-appointments').value = '';
+  if (type === 'overage')     document.getElementById('admin-limits-overage').value = '';
+};
+
+window.saveAdminLimits = async function() {
+  const tenantId = parseInt(document.getElementById('admin-limits-tenant-id').value);
+  const minutes      = document.getElementById('admin-limits-minutes').value.trim();
+  const contacts     = document.getElementById('admin-limits-contacts').value.trim();
+  const appointments = document.getElementById('admin-limits-appointments').value.trim();
+  const overage      = document.getElementById('admin-limits-overage').value.trim();
+
+  const btn = document.getElementById('admin-limits-save-btn');
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Saving...';
+  initIcons();
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/limits`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        custom_minute_limit:      minutes      !== '' ? parseInt(minutes)      : null,
+        custom_contact_limit:     contacts     !== '' ? parseInt(contacts)     : null,
+        custom_appointment_limit: appointments !== '' ? parseInt(appointments) : null,
+        custom_overage_rate:      overage      !== '' ? parseFloat(overage)    : null
+      })
+    });
+
+    const result = await response.json();
+    if (response.ok && result.success) {
+      closeAdminLimitsModal();
+      fetchAdminDashboard();
+      // Toast
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:linear-gradient(135deg,rgba(34,197,94,0.9),rgba(22,163,74,0.9));color:white;padding:12px 20px;border-radius:12px;font-size:0.875rem;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);backdrop-filter:blur(12px);animation:fadeInUp 0.3s ease;';
+      toast.innerHTML = '✅ Usage limits updated successfully';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+    } else {
+      alert(`Failed to save limits: ${result.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error saving usage limits.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+    initIcons();
+  }
+};
+
+window.saveGlobalSettings = async function() {
+  const rateInput = document.getElementById('global-overage-rate-input');
+  if (!rateInput) return;
+  const rate = parseFloat(rateInput.value);
+  if (isNaN(rate) || rate < 0) {
+    alert('Overage rate must be a non-negative number.');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/admin/global-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ global_overage_rate: rate })
+    });
+    const result = await response.json();
+    if (response.ok && result.success) {
+      window.globalOverageRate = rate;
+      alert('Global SaaS configuration saved successfully.');
+      fetchAdminDashboard();
+    } else {
+      alert(`Failed to save settings: ${result.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error saving global settings.');
+  }
+};
+
 window.updateROICalculator = function() {
+
   const callsInput = document.getElementById('roi-calls');
   const valueInput = document.getElementById('roi-value');
   if (!callsInput || !valueInput) return;
@@ -3011,6 +3925,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!saasToken) {
     document.getElementById('landing-page-container').style.display = 'block';
     document.getElementById('app-container').style.display = 'none';
+    
+
   } else {
     try {
       currentTenant = JSON.parse(localStorage.getItem('current_tenant')) || {
@@ -5344,6 +6260,35 @@ window.triggerLockPayment = function(mode) {
   }
 };
 
+window.simulateLatePayment = async function() {
+  if (currentTenant && currentTenant.subscription_tier === 'free') {
+    alert('Subscription suspension only applies to paid tiers (Starter, Professional). Please upgrade your workspace tier first!');
+    return;
+  }
+  
+  if (!confirm('Are you sure you want to simulate subscription billing failure? This will backdate the renewal due date and trigger account suspension.')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/saas/billing/simulate-late-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = await response.json();
+    if (response.ok && result.success) {
+      alert('Billing simulation triggered! The workspace has been suspended.');
+      fetchBillingDetails();
+      fetchOverviewData();
+    } else {
+      alert(`Simulation failed: ${result.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Network error triggering late payment simulation.');
+  }
+};
+
 window.logoutRestrictedAccount = function() {
   logout();
   const lockOverlay = document.getElementById('account-lock-overlay');
@@ -7156,41 +8101,124 @@ function handleServicesFile(file) {
 }
 
 // =============================================================
-// OWNER IMPERSONATION / REMOTE SETTINGS ACCESS
+// SUPER ADMIN: GLOBAL TENANT FILTER
 // =============================================================
-// Store impersonation state globally
 window.impersonateTenantId = null;
 let impersonateTenantName = null;
 
-window.remoteManageTenantSettings = function(tenantId, companyName) {
-  window.impersonateTenantId = tenantId;
-  impersonateTenantName = companyName;
-  
-  // Show impersonation banner
-  const banner = document.getElementById('impersonation-banner');
-  const label = document.getElementById('impersonate-tenant-name-label');
-  if (banner && label) {
-    label.textContent = companyName;
-    banner.style.display = 'flex';
+// All per-pane tenant filter select IDs
+const GLOBAL_TENANT_FILTER_IDS = [
+  'overview-tenant-filter',
+  'appointments-tenant-filter',
+  'crm-tenant-filter',
+  'history-tenant-filter',
+  'billing-tenant-filter',
+  'accounting-tenant-filter'
+];
+
+// Fetch all tenant list and populate every filter dropdown
+async function loadGlobalTenantDropdowns() {
+  try {
+    const res = await fetch('/api/admin/tenants');
+    if (!res.ok) return;
+    const tenants = await res.json();
+    window.adminTenantsList = tenants;
+
+    const optionsHtml = '<option value="">All Tenants</option>' +
+      tenants.map(t => `<option value="${t.id}">${escapeHtml(t.company_name || t.email)}</option>`).join('');
+
+    GLOBAL_TENANT_FILTER_IDS.forEach(id => {
+      const sel = document.getElementById(id);
+      if (sel) {
+        const current = sel.value;
+        sel.innerHTML = optionsHtml;
+        // Restore previously selected tenant if still present
+        if (current) sel.value = current;
+      }
+    });
+
+    // Also populate the legacy admin sub-pane filters if they still exist
+    window.populateAdminTenantFilters?.();
+  } catch (e) {
+    console.warn('[Admin] Could not load tenant dropdown:', e);
   }
-  
-  showToast('Impersonation Active', `Remote managing settings for ${companyName}.`, 'warning');
-  
-  // Switch to the Settings tab to see this tenant's settings
-  switchTab('settings');
+}
+window.loadGlobalTenantDropdowns = loadGlobalTenantDropdowns;
+
+// Called whenever any per-pane tenant filter dropdown changes
+window.handleGlobalTenantFilterChange = function(changedSelect) {
+  const tenantId = changedSelect.value ? parseInt(changedSelect.value) : null;
+  const tenantName = changedSelect.options[changedSelect.selectedIndex]?.text || '';
+
+  // Update global impersonation state
+  window.impersonateTenantId = tenantId || null;
+  impersonateTenantName = tenantId ? tenantName : null;
+
+  // Sync all other dropdowns to the same value
+  GLOBAL_TENANT_FILTER_IDS.forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel && sel !== changedSelect) sel.value = changedSelect.value;
+  });
+
+  // Show/hide impersonation banner
+  const banner = document.getElementById('impersonation-banner');
+  const label  = document.getElementById('impersonate-tenant-name-label');
+  if (banner && label) {
+    if (tenantId) {
+      label.textContent = tenantName;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  // Refresh data for the currently active pane
+  const tab = currentTab;
+  if (tab === 'overview')     fetchOverviewData();
+  else if (tab === 'appointments') fetchAppointments();
+  else if (tab === 'crm')     fetchCrmData();
+  else if (tab === 'history') fetchCallLogs();
+  else if (tab === 'billing') fetchBillingDetails();
+  else if (tab === 'accounting') fetchAccountingData();
+  else if (tab === 'admin')   fetchAdminDashboard();
+
+  const msg = tenantId ? `Viewing data for: ${tenantName}` : 'Viewing all tenants';
+  showToast('Filter Applied', msg, 'info');
+};
+
+// Remote-manage a specific tenant: set global filter + go to Overview
+window.remoteManageTenantSettings = function(tenantId, companyName) {
+  // Find and trigger the overview filter (which syncs all others)
+  const overviewSel = document.getElementById('overview-tenant-filter');
+  if (overviewSel) {
+    overviewSel.value = tenantId;
+    window.handleGlobalTenantFilterChange(overviewSel);
+  } else {
+    // Fallback: set impersonation manually
+    window.impersonateTenantId = tenantId;
+    impersonateTenantName = companyName;
+    const banner = document.getElementById('impersonation-banner');
+    const label  = document.getElementById('impersonate-tenant-name-label');
+    if (banner && label) { label.textContent = companyName; banner.style.display = 'flex'; }
+  }
+  showToast('Tenant Selected', `Now viewing workspace: ${companyName}`, 'warning');
+  switchTab('overview');
 };
 
 window.exitImpersonationMode = function() {
   window.impersonateTenantId = null;
   impersonateTenantName = null;
-  
-  // Hide impersonation banner
+
+  // Reset all filter dropdowns to "All Tenants"
+  GLOBAL_TENANT_FILTER_IDS.forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.value = '';
+  });
+
   const banner = document.getElementById('impersonation-banner');
   if (banner) banner.style.display = 'none';
-  
-  showToast('Impersonation Exit', `Returned to administrative dashboard.`, 'success');
-  
-  // Re-switch to the Admin Console pane
+
+  showToast('Returned', 'Back to global administrator view.', 'success');
   switchTab('admin');
 };
 
