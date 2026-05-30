@@ -118,7 +118,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5050;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -2868,13 +2868,23 @@ process.on('SIGTERM', () => {
 
 // Initialize database and start HTTP Server
 initDb().then(async () => {
-  await startSshTunnel();
+  // Skip SSH tunnel on Railway/production — Railway provides a public HTTPS URL natively
+  const isProduction = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (!isProduction) {
+    await startSshTunnel();
+  } else {
+    const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
+    if (railwayDomain) {
+      process.env.NGROK_URL = `https://${railwayDomain}`;
+      console.log(`Production mode: Using Railway domain https://${railwayDomain}`);
+    }
+  }
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n======================================================`);
     console.log(`Voice AI SaaS Server listening on port ${PORT}`);
     console.log(`- Web portal dashboard: http://localhost:${PORT}`);
     if (process.env.NGROK_URL) {
-      console.log(`- Public HTTPS tunnel URL: ${process.env.NGROK_URL}`);
+      console.log(`- Public HTTPS URL: ${process.env.NGROK_URL}`);
     }
     console.log(`======================================================\n`);
   });
