@@ -7511,12 +7511,35 @@ function initWizardEvents() {
     });
   }
 
-  // Branding Avatar selectors
+  // Branding Avatar selectors & Synchronization
+  const updateDashboardAvatar = (avatarType) => {
+    const dashboardAvatarImg = document.getElementById('display-agent-avatar');
+    if (dashboardAvatarImg) {
+      dashboardAvatarImg.src = `assets/${avatarType}_avatar.png`;
+      dashboardAvatarImg.style.display = 'block';
+      const avatarInitials = document.querySelector('.agent-avatar .avatar-initials');
+      if (avatarInitials) avatarInitials.style.display = 'none';
+    }
+  };
+
+  const savedAvatar = localStorage.getItem('selected_avatar') || 'female';
   document.querySelectorAll('.brand-avatar-option').forEach(avatar => {
+    const avatarType = avatar.getAttribute('data-avatar');
+    
+    // Set initial active state based on localStorage
+    if (avatarType === savedAvatar) {
+      avatar.classList.add('active');
+      updateDashboardAvatar(avatarType);
+    } else {
+      avatar.classList.remove('active');
+    }
+
     avatar.addEventListener('click', () => {
       document.querySelectorAll('.brand-avatar-option').forEach(a => a.classList.remove('active'));
       avatar.classList.add('active');
-      showToast('Avatar Selected', `Representative avatar changed to ${avatar.getAttribute('data-avatar')}`, 'success');
+      localStorage.setItem('selected_avatar', avatarType);
+      updateDashboardAvatar(avatarType);
+      showToast('Avatar Selected', `Representative avatar changed to ${avatarType}`, 'success');
     });
   });
 

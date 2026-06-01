@@ -1011,10 +1011,11 @@
               
               <div class="receptionist-preview-content">
                 <div class="agent-avatar-container">
-                  <div class="agent-avatar">
+                  <div class="agent-avatar" style="overflow: hidden; position: relative;">
                     <div class="avatar-ring"></div>
                     <div class="avatar-ring ring-2"></div>
-                    <span class="avatar-initials">A</span>
+                    <img id="display-agent-avatar" src="assets/female_avatar.png" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; z-index: 2; position: relative; display: block;">
+                    <span class="avatar-initials" style="display: none;">A</span>
                   </div>
                   <div class="agent-intro">
                     <h4 id="display-company-name">Aura Wellness Spa</h4>
