@@ -849,6 +849,17 @@ body {
 .speech-bubble.user .speaker-tag { color: var(--color-primary); }
 .speech-bubble.assistant .speaker-tag { color: var(--color-secondary); }
 
+.speech-bubble.human_agent {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(217, 70, 239, 0.05));
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  align-self: flex-start;
+  border-bottom-left-radius: 2px;
+  color: var(--text-main);
+}
+.speech-bubble.human_agent .speaker-tag {
+  color: #a78bfa;
+}
+
 /* Appointments Page Layout */
 .appointments-layout {
   display: grid;
@@ -2896,6 +2907,14 @@ select option {
   justify-content: center;
   font-size: 1.5rem;
   transition: all 0.2s;
+  overflow: hidden;
+}
+
+.brand-avatar-option img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .brand-avatar-option:hover {
@@ -3898,4 +3917,69 @@ select option {
   font-weight: 500;
   flex-shrink: 0;
   min-width: 60px;
+}
+
+/* Addon Toggle Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .4s;
+  border-radius: 34px;
+  border: 1px solid var(--border-glass);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.switch input:checked + .slider {
+  background-color: var(--color-primary);
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* Call log badge */
+.badge-transcribed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(6, 182, 212, 0.12);
+  color: var(--color-primary);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
 }

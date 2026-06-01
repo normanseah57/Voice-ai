@@ -792,7 +792,24 @@
     </div>
   </div>
 
-
+  <!-- Modal: Subscription Warning Overlay -->
+  <div class="modal-overlay" id="subscription-warning-modal" onclick="if(event.target===this) document.getElementById('subscription-warning-modal').classList.remove('active')" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 450px; text-align: center; display: flex; flex-direction: column; padding: 30px; gap: 20px; align-items: center;" onclick="event.stopPropagation()">
+      <div style="width: 64px; height: 64px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+        <i data-lucide="lock" style="width: 30px; height: 30px; color: #f59e0b;"></i>
+      </div>
+      <div>
+        <h3 id="subscription-warning-title" style="color: white; margin: 0 0 8px 0; font-size: 1.3rem;">Subscription Required</h3>
+        <p id="subscription-warning-message" style="color: var(--text-muted); font-size: 0.9rem; margin: 0; line-height: 1.5;">
+          Please subscribe to this addon module in settings (Step 8: Add Modules) to access this feature.
+        </p>
+      </div>
+      <div style="display: flex; gap: 12px; width: 100%; margin-top: 10px;">
+        <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;" onclick="document.getElementById('subscription-warning-modal').classList.remove('active')">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-warning-subscribe" style="flex: 1; padding: 10px; color: black; font-weight: 600;">Subscribe Now</button>
+      </div>
+    </div>
+  </div>
 
   <!-- =============================================================
        2. SAAS DASHBOARD INTERFACE (Shown when authenticated)
@@ -827,7 +844,7 @@
           <i data-lucide="calendar"></i>
           <span>Appointments</span>
         </a>
-        <a href="#" class="menu-item" data-tab="crm">
+        <a href="#" class="menu-item sidebar-addon-tab" data-tab="crm" data-addon="crm">
           <i data-lucide="users"></i>
           <span>CRM Hub</span>
         </a>
@@ -843,7 +860,7 @@
           <i data-lucide="credit-card"></i>
           <span>Billing & Usage</span>
         </a>
-        <a href="#" class="menu-item" data-tab="accounting">
+        <a href="#" class="menu-item sidebar-addon-tab" data-tab="accounting" data-addon="accounting">
           <i data-lucide="calculator"></i>
           <span>Accounting</span>
         </a>
@@ -1453,64 +1470,71 @@
               <div class="stepper-item" data-step="3">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">Branding</span>
-                  <span class="stepper-subtitle">Logo, colors, and display name</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="4">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Voice Provider</span>
-                  <span class="stepper-subtitle">Choose Retell AI or VAPI</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="5">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
                   <span class="stepper-title">Phone Number</span>
                   <span class="stepper-subtitle">Assign inbound phone number</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="6">
+              <div class="stepper-item" data-step="4">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">AI Receptionist</span>
                   <span class="stepper-subtitle">Configure your AI agent</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="7">
+              <div class="stepper-item" data-step="5">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Business Hours</span>
                   <span class="stepper-subtitle">Set operating schedule</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="8">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Knowledge Base</span>
-                  <span class="stepper-subtitle">Upload FAQs and documents</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="9">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Add-on Modules</span>
-                  <span class="stepper-subtitle">CRM, Payments, WhatsApp</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="10">
+              <div class="stepper-item" data-step="6">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Team Members</span>
                   <span class="stepper-subtitle">Invite staff and set roles</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="11">
+              <div class="stepper-item" data-step="7">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Add Modules</span>
+                  <span class="stepper-subtitle">Activate voice and business addons</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="8">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Go Live</span>
                   <span class="stepper-subtitle">Test and activate your AI</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="9">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">OpenAI API Key</span>
+                  <span class="stepper-subtitle">Configure project API key</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="10">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Security (2FA)</span>
+                  <span class="stepper-subtitle">Two-factor authentication</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="11">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Voice Provider</span>
+                  <span class="stepper-subtitle">Choose Retell AI or VAPI</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="12">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Knowledge Base</span>
+                  <span class="stepper-subtitle">Upload FAQs and documents</span>
                 </div>
               </div>
             </div>
@@ -1564,6 +1588,7 @@
                         <p>Provide key details about your business.</p>
                       </div>
                     </div>
+
                     <div class="form-group mb-4">
                       <label for="settings-company">Company Name</label>
                       <input type="text" id="settings-company" class="form-input" required placeholder="e.g. Aura Wellness Spa">
@@ -1632,86 +1657,24 @@
                     </div>
                   </div>
 
-                  <!-- STEP 3: Branding -->
+
+
+                  <!-- STEP 3: Phone Number -->
                   <div class="wizard-step-pane" data-step="3">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="palette"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 2: Branding</h3>
-                        <p>Customize your AI persona and accent styling.</p>
-                      </div>
-                    </div>
-                    <div class="form-group mb-4">
-                      <label for="settings-agent-name">AI Receptionist Name</label>
-                      <input type="text" id="settings-agent-name" class="form-input" required placeholder="e.g. Aura">
-                    </div>
-                    <div class="form-group mb-4">
-                      <label>AI Representative Avatar</label>
-                      <div class="brand-avatars-grid">
-                        <span class="brand-avatar-option active" data-avatar="👩">👩</span>
-                        <span class="brand-avatar-option" data-avatar="🤖">🤖</span>
-                        <span class="brand-avatar-option" data-avatar="👨">👨</span>
-                        <span class="brand-avatar-option" data-avatar="✨">✨</span>
-                        <span class="brand-avatar-option" data-avatar="💼">💼</span>
-                      </div>
-                    </div>
-                    <div class="form-group mb-4">
-                      <label>Primary Brand Accent Color</label>
-                      <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
-                        <input type="color" class="form-input" value="#06b6d4" style="width: 50px; height: 38px; padding: 2px; border-radius: var(--border-radius-md); cursor: pointer;">
-                        <span style="font-size: 0.85rem; color: var(--text-muted);">Custom Cyan highlight matches your website brand</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- STEP 4: Voice Provider -->
-                  <div class="wizard-step-pane" data-step="4">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="radio-tower"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 3: Voice Provider</h3>
-                        <p>Select the underlying voice gateway provider.</p>
-                      </div>
-                    </div>
-                    <div class="form-group mb-4">
-                      <label>Select Voice AI Provider</label>
-                      <div class="voice-providers-grid">
-                        <div class="voice-provider-card active" data-provider="openai">
-                          <i data-lucide="phone-call" style="margin-bottom: 4px;"></i>
-                          <div class="voice-provider-title">OpenAI Realtime</div>
-                          <div class="voice-provider-desc">Active. Built-in ultra low-latency WebRTC streams.</div>
-                        </div>
-                        <div class="voice-provider-card" data-provider="vapi">
-                          <i data-lucide="radio" style="margin-bottom: 4px;"></i>
-                          <div class="voice-provider-title">Retell / VAPI</div>
-                          <div class="voice-provider-desc">Alternative provider. Custom endpoints supported.</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- STEP 5: Phone Number -->
-                  <div class="wizard-step-pane" data-step="5">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="phone"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 4: Phone Number</h3>
+                        <h3>Step 2: Phone Number</h3>
                         <p>Configure Twilio numbers for inbound calls.</p>
                       </div>
                     </div>
                     <div class="form-group">
-                      <label for="settings-twilio-num">Your Twilio / SignalWire Phone Number (For Inbound Routing)</label>
+                      <label for="settings-twilio-num">Add a phone number you want your customer to call</label>
                       <input type="text" id="settings-twilio-num" class="form-input" placeholder="e.g. +15551234567">
                       <small class="text-muted">Voice calls dialed to this number will load this receptionist.</small>
                     </div>
-
-
 
                     <div class="webhook-setup-guide mt-4 settings-advanced-only">
                       <h4 style="color: white; margin-top: 0; font-size: 0.95rem;">Incoming Call Webhook</h4>
@@ -1723,15 +1686,39 @@
                     </div>
                   </div>
 
-                  <!-- STEP 6: AI Receptionist -->
-                  <div class="wizard-step-pane" data-step="6">
+                  <!-- STEP 4: AI Receptionist -->
+                  <div class="wizard-step-pane" data-step="4">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="bot"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 5: AI Receptionist</h3>
+                        <h3>Step 3: AI Receptionist</h3>
                         <p>Configure the system prompt, model and voice attributes.</p>
+                      </div>
+                    </div>
+
+                    <!-- AI Receptionist Name -->
+                    <div class="form-group mb-4">
+                      <label for="settings-agent-name">AI Receptionist Name</label>
+                      <input type="text" id="settings-agent-name" class="form-input" required placeholder="e.g. Aura">
+                    </div>
+
+                    <!-- AI Representative Avatar -->
+                    <div class="form-group mb-4">
+                      <label>AI Representative Avatar</label>
+                      <div class="brand-avatars-grid">
+                        <span class="brand-avatar-option active" data-avatar="female"><img src="assets/female_avatar.png" alt="Female AI Avatar"></span>
+                        <span class="brand-avatar-option" data-avatar="male"><img src="assets/male_avatar.png" alt="Male AI Avatar"></span>
+                      </div>
+                    </div>
+
+                    <!-- Primary Brand Accent Color -->
+                    <div class="form-group mb-4">
+                      <label>Primary Brand Accent Color</label>
+                      <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
+                        <input type="color" class="form-input" value="#06b6d4" style="width: 50px; height: 38px; padding: 2px; border-radius: var(--border-radius-md); cursor: pointer;">
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Custom Cyan highlight matches your website brand</span>
                       </div>
                     </div>
                     
@@ -1813,14 +1800,14 @@
                     </div>
                   </div>
 
-                  <!-- STEP 7: Business Hours -->
-                  <div class="wizard-step-pane" data-step="7">
+                  <!-- STEP 5: Business Hours -->
+                  <div class="wizard-step-pane" data-step="5">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="clock"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 6: Business Hours</h3>
+                        <h3>Step 4: Business Hours</h3>
                         <p>Set operating schedule</p>
                       </div>
                     </div>
@@ -1909,101 +1896,197 @@
                     </div>
                   </div>
 
-                  <!-- STEP 8: Knowledge Base -->
-                  <div class="wizard-step-pane" data-step="8">
+
+
+                  <!-- STEP 7: Add Modules -->
+                  <div class="wizard-step-pane" data-step="7">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="database"></i>
+                        <i data-lucide="package"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 7: Knowledge Base</h3>
-                        <p>Train your AI receptionist on your website content.</p>
+                        <h3>Step 6: Add Modules</h3>
+                        <p>Activate business and voice addons to customize your workspace.</p>
                       </div>
                     </div>
 
-                    <div class="form-group mb-4">
-                      <label for="settings-template">Load Business Persona Template</label>
-                      <select id="settings-template" class="form-input">
-                        <option value="">-- Customize Manually (Or Select Template) --</option>
-                        <option value="dental">🦷 Dental Clinic (Dr. Smiles & Orthodontics)</option>
-                        <option value="medical">🏥 Medical Practice (Aura Clinic & Diagnostics)</option>
-                        <option value="spa">🌸 Beauty Spa & Wellness (Aura Retreat)</option>
-                        <option value="salon">💇 Hair Salon & Treatments (Style & Co.)</option>
-                        <option value="chiropractor">🦴 Chiropractic & Spinal Therapy (BackCare AI)</option>
-                        <option value="tcm">🌿 Traditional Chinese Medicine (TCM Harmony)</option>
-                        <option value="plumber">🚰 Plumbing & Home Maintenance (FlowForce)</option>
-                        <option value="realestate">🏠 Real Estate Agency (Aura Properties)</option>
-                        <option value="finance">📈 Financial Advisor & Wealth (Ascent Wealth)</option>
-                        <option value="veterinary">🐾 Veterinary Clinic (PawPrints Care)</option>
-                        <option value="restaurant">🍽️ Restaurant Reservation (Aura Bistro)</option>
-                        <option value="hotel">🏨 Hotel Reservation (Grand Aura Hotel)</option>
-                      </select>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-prompt" style="display: flex; justify-content: space-between;">
-                        <span>System Instructions (System Prompt)</span>
-                        <span class="text-red" id="prompt-locked-tag" style="display: none; font-size: 0.8rem; font-weight: 600;"><i data-lucide="lock" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Locked</span>
-                      </label>
-                      <textarea id="settings-prompt" class="form-input text-area prompt-textarea" rows="8" required placeholder="Describe the AI's persona, knowledge, and scheduling rules..."></textarea>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-website-url" style="display: flex; justify-content: space-between;">
-                        <span>Company Website URL(s)</span>
-                        <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-primary);">Comma-separated URLs</span>
-                      </label>
-                      <div style="display: flex; gap: 10px;">
-                        <input type="text" id="settings-website-url" class="form-input" placeholder="e.g. https://yoursite.com, https://yoursite.com/about" style="flex: 1;">
-                        <button type="button" id="btn-crawl-website" class="btn btn-primary" style="padding: 0 20px; white-space: nowrap; display: flex; align-items: center; gap: 8px;">
-                          <i data-lucide="globe" style="width: 16px; height: 16px;"></i> Crawl Site
-                        </button>
-                      </div>
-                      <div id="crawl-status-container" style="display: none; margin-top: 8px; padding: 10px; border-radius: 6px; background: rgba(255,255,255,0.05); font-size: 0.85rem; border: 1px solid var(--border-glass);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                          <span id="crawl-status-badge" class="badge" style="background: rgba(0, 200, 100, 0.2); color: #00c864; font-size: 0.75rem;">Status: Idle</span>
-                          <span id="crawl-status-length" style="color: var(--text-muted); font-size: 0.75rem;">0 characters</span>
+                    <!-- Addon Modules Grid -->
+                    <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+                      
+                      <!-- 1. WhatsApp / SMS / Email Addon -->
+                      <div style="padding: 15px; border-radius: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="message-square" style="color: #10b981; width: 18px; height: 18px;"></i>
+                            <div>
+                              <span style="font-weight: 600; font-size: 0.85rem; color: white; display: block;">WhatsApp, SMS, &amp; Email Notifications</span>
+                              <span style="font-size: 0.72rem; color: var(--text-muted);">Send automated reminders, alerts, and confirmations (@$10/mo)</span>
+                            </div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="settings-addon-whatsapp">
+                            <span class="slider"></span>
+                          </label>
                         </div>
-                        <div id="crawl-status-preview" style="color: var(--text-muted); font-style: italic; white-space: pre-wrap; max-height: 80px; overflow-y: auto; font-size: 0.8rem;"></div>
+                        <div style="padding-left: 26px;">
+                          <span id="addon-whatsapp-status" style="font-size: 0.72rem; font-weight: 600; color: #94a3b8;">Status: Inactive</span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <!-- STEP 9: Add-on Modules -->
-                  <div class="wizard-step-pane" data-step="9">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="puzzle"></i>
+                      <!-- 2. AI CRM Hub Addon -->
+                      <div style="padding: 15px; border-radius: 12px; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="users" style="color: #3b82f6; width: 18px; height: 18px;"></i>
+                            <div>
+                              <span style="font-weight: 600; font-size: 0.85rem; color: white; display: block;">AI CRM Hub</span>
+                              <span style="font-size: 0.72rem; color: var(--text-muted);">Manage leads, customers, and sync logs in real-time (@$50/mo)</span>
+                            </div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="settings-addon-crm">
+                            <span class="slider"></span>
+                          </label>
+                        </div>
+                        <div style="padding-left: 26px;">
+                          <span id="addon-crm-status" style="font-size: 0.72rem; font-weight: 600; color: #94a3b8;">Status: Inactive</span>
+                        </div>
                       </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 8: Add-on Modules</h3>
-                        <p>Activate CRM sync, Google Calendar, and Stripe payments.</p>
+
+                      <!-- 3. Accounting & Invoicing Addon -->
+                      <div style="padding: 15px; border-radius: 12px; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="calculator" style="color: #f59e0b; width: 18px; height: 18px;"></i>
+                            <div>
+                              <span style="font-weight: 600; font-size: 0.85rem; color: white; display: block;">Accounting and Invoicing</span>
+                              <span style="font-size: 0.72rem; color: var(--text-muted);">Ledger, purchase bills, products catalog, and financial reports (@$20/mo)</span>
+                            </div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="settings-addon-accounting">
+                            <span class="slider"></span>
+                          </label>
+                        </div>
+                        <div style="padding-left: 26px;">
+                          <span id="addon-accounting-status" style="font-size: 0.72rem; font-weight: 600; color: #94a3b8;">Status: Inactive</span>
+                        </div>
                       </div>
+
+                      <!-- 4. Multi-Department & Extension Addon -->
+                      <div style="padding: 15px; border-radius: 12px; background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="git-branch" style="color: #8b5cf6; width: 18px; height: 18px;"></i>
+                            <div>
+                              <span style="font-weight: 600; font-size: 0.85rem; color: white; display: block;">Multi-Department &amp; Extension Routing</span>
+                              <span style="font-size: 0.72rem; color: var(--text-muted);">Route calls dynamically ($25/mo per extension + $10/mo if recording selected)</span>
+                            </div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="settings-addon-departments">
+                            <span class="slider"></span>
+                          </label>
+                        </div>
+                        <div style="padding-left: 26px;">
+                          <span id="addon-departments-status" style="font-size: 0.72rem; font-weight: 600; color: #94a3b8;">Status: Inactive</span>
+                        </div>
+
+                        <!-- Departments Grid Section (Visible when active) -->
+                        <div id="departments-addon-grid-container" style="display: none; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 5px; flex-direction: column; gap: 10px;">
+                          <h4 style="font-size: 0.8rem; font-weight: 600; color: white; margin: 0; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Configure Department Routing</span>
+                            <button type="button" class="btn btn-primary" id="btn-add-dept-inline" style="padding: 4px 10px; font-size: 0.7rem; display: flex; align-items: center; gap: 4px;">
+                              <i data-lucide="plus" style="width: 12px; height: 12px;"></i> Add Dept
+                            </button>
+                          </h4>
+
+                          <!-- Add Dept Form Inline -->
+                          <div id="form-add-dept-inline" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px; flex-direction: column; gap: 8px; margin-top: 5px;">
+                            <div style="display: grid; grid-template-columns: 1.2fr 1.5fr 1fr; gap: 8px;">
+                              <input type="text" id="input-dept-name" class="form-input" placeholder="e.g. Sales" style="font-size: 0.75rem; padding: 6px 10px;">
+                              <input type="text" id="input-dept-phone" class="form-input" placeholder="e.g. +6587654321" style="font-size: 0.75rem; padding: 6px 10px;">
+                              <input type="text" id="input-dept-ext" class="form-input" placeholder="e.g. 101" style="font-size: 0.75rem; padding: 6px 10px;">
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px; margin-top: 4px;">
+                              <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #94a3b8; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="input-dept-record" style="cursor: pointer; width: 13px; height: 13px;"> Record &amp; Transcribe calls (+$10/mo)
+                              </label>
+                              <div style="display: flex; gap: 8px;">
+                                <button type="button" class="btn btn-ghost" id="btn-cancel-dept-inline" style="padding: 4px 8px; font-size: 0.7rem;">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="btn-save-dept-inline" style="padding: 4px 12px; font-size: 0.7rem;">Save</button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Active Departments Table -->
+                          <div style="overflow-x: auto; max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.1); border-radius: 8px; border: 1px solid var(--border-glass);">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.75rem;">
+                              <thead>
+                                <tr style="border-bottom: 1px solid var(--border-glass); background: rgba(255,255,255,0.02); color: white; font-weight: 600;">
+                                  <th style="padding: 8px 10px;">Department</th>
+                                  <th style="padding: 8px 10px;">Number</th>
+                                  <th style="padding: 8px 10px;">Extension</th>
+                                  <th style="padding: 8px 10px; text-align: center;">Record</th>
+                                  <th style="padding: 8px 10px;">Billing</th>
+                                  <th style="padding: 8px 10px; text-align: center; width: 50px;">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody id="departments-list-tbody">
+                                <!-- Loaded dynamically -->
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 5. Payment Gateway Stripe Addon -->
+                      <div style="padding: 15px; border-radius: 12px; background: rgba(236, 72, 153, 0.05); border: 1px solid rgba(236, 72, 153, 0.2); display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="credit-card" style="color: #ec4899; width: 18px; height: 18px;"></i>
+                            <div>
+                              <span style="font-weight: 600; font-size: 0.85rem; color: white; display: block;">Payment Gateway (Stripe)</span>
+                              <span style="font-size: 0.72rem; color: var(--text-muted);">Collect live credit card payments from callers (@$5/mo)</span>
+                            </div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="settings-addon-stripe">
+                            <span class="slider"></span>
+                          </label>
+                        </div>
+                        <div style="padding-left: 26px;">
+                          <span id="addon-stripe-status" style="font-size: 0.72rem; font-weight: 600; color: #94a3b8;">Status: Inactive</span>
+                        </div>
+
+                        <!-- Hidden payment provider element for serializer compatibility -->
+                        <input type="hidden" id="settings-payment-provider" value="sandbox">
+
+                        <!-- Stripe Configuration Keys (Visible when active) -->
+                        <div id="stripe-keys-config" style="display: none; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 5px; flex-direction: column; gap: 10px;">
+                          <div class="form-group">
+                            <label for="settings-stripe-pub-key" style="font-size: 0.8rem; color: #94a3b8;">Stripe Publishable Key</label>
+                            <input type="text" id="settings-stripe-pub-key" class="form-input" placeholder="pk_test_..." style="font-size: 0.8rem; padding: 8px 12px;">
+                          </div>
+                          <div class="form-group">
+                            <label for="settings-stripe-sec-key" style="font-size: 0.8rem; color: #94a3b8;">Stripe Secret Key</label>
+                            <input type="password" id="settings-stripe-sec-key" class="form-input" placeholder="sk_test_..." style="font-size: 0.8rem; padding: 8px 12px;">
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
 
-                    <!-- Payment Gateway Selector -->
-                    <div class="form-group mb-4">
-                      <label for="settings-payment-provider" style="font-weight: 600; color: var(--color-primary);">Payment Gateway Provider</label>
-                      <select id="settings-payment-provider" class="form-input">
-                        <option value="sandbox">Sandbox (Simulated Payments)</option>
-                        <option value="stripe">Stripe (Live Credit Cards)</option>
-                      </select>
+                    <!-- Global human backup number (shown only when departments routing is inactive) -->
+                    <div id="global-transfer-number-group" class="form-group mb-4" style="margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 20px;">
+                      <label for="settings-transfer-num" style="font-weight: 600; color: white;">Global Human Backup Phone Number (For Call Handoff)</label>
+                      <input type="text" id="settings-transfer-num" class="form-input" placeholder="e.g. +6587654321">
+                      <small class="text-muted">Calls will transfer to this number if department routing is inactive and human backup is requested.</small>
                     </div>
 
-                    <div id="stripe-keys-config" style="display: none; margin-bottom: 20px; border-left: 2px solid var(--color-primary); padding-left: 15px;">
-                      <div class="form-group">
-                        <label for="settings-stripe-pub-key">Stripe Publishable Key</label>
-                        <input type="text" id="settings-stripe-pub-key" class="form-input" placeholder="pk_test_...">
-                      </div>
-                      <div class="form-group mt-2">
-                        <label for="settings-stripe-sec-key">Stripe Secret Key</label>
-                        <input type="password" id="settings-stripe-sec-key" class="form-input" placeholder="sk_test_...">
-                      </div>
-                    </div>
-
-                    <!-- Google Calendar Sync -->
+                    <!-- Google Calendar Sync (Free Integration) -->
                     <div style="border-top: 1px solid var(--border-glass); padding-top: 20px; margin-top: 20px;">
-                      <h4 style="font-family: var(--font-display); font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: var(--color-primary);">Google Calendar Real-Time Sync</h4>
+                      <h4 style="font-family: var(--font-display); font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: var(--color-primary);">Google Calendar Real-Time Sync (Free Integration)</h4>
                       <div id="gcal-status-container" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border-radius: 12px; border: 1px solid var(--border-glass);">
                         <div style="display: flex; align-items: center; gap: 10px;">
                           <i data-lucide="calendar" style="color: #4285F4; width: 20px; height: 20px;"></i>
@@ -2016,14 +2099,14 @@
                     </div>
                   </div>
 
-                  <!-- STEP 10: Team Members -->
-                  <div class="wizard-step-pane" data-step="10">
+                  <!-- STEP 6: Team Members -->
+                  <div class="wizard-step-pane" data-step="6">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="users"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 9: Team Members & Rooms</h3>
+                        <h3>Step 5: Team Members &amp; Rooms</h3>
                         <p>Configure staff resources or bookable slots.</p>
                       </div>
                     </div>
@@ -2077,22 +2160,16 @@
                     </div>
                   </div>
 
-                  <!-- STEP 11: Go Live -->
-                  <div class="wizard-step-pane" data-step="11">
+                  <!-- STEP 8: Go Live -->
+                  <div class="wizard-step-pane" data-step="8">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="rocket"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 10: Go Live</h3>
+                        <h3>Step 7: Go Live</h3>
                         <p>Test the receptionist and deploy live.</p>
                       </div>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-transfer-num">Human Backup Phone Number (For Call Transfer)</label>
-                      <input type="text" id="settings-transfer-num" class="form-input" placeholder="e.g. +6587654321">
-                      <small class="text-muted">Calls will transfer to this number if human backup is requested.</small>
                     </div>
 
                     <div class="info-bubble mt-4">
@@ -2100,6 +2177,199 @@
                         <i data-lucide="zap" style="color: var(--color-primary); width: 16px; height: 16px;"></i> Ready for Production
                       </h4>
                       <p>Your Voice AI Receptionist agent is fully configured. You can test it by clicking the Web Call button in the bottom simulator, or call your inbound Twilio number.</p>
+                    </div>
+                  </div>
+
+                  <!-- STEP 9: OpenAI API Key -->
+                  <div class="wizard-step-pane" data-step="9">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="key"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 8: OpenAI API Key</h3>
+                        <p>Configure your OpenAI Project API key.</p>
+                      </div>
+                    </div>
+
+                    <!-- OpenAI Project API Key Card -->
+                    <div class="glass" style="margin-top: 20px; margin-bottom: 24px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(6,182,212,0.3);">
+                      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <div style="width: 36px; height: 36px; background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="key" style="width: 18px; height: 18px; color: #06b6d4;"></i>
+                          </div>
+                          <div>
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">OpenAI Project API Key</h3>
+                            <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Use your own OpenAI project key — you control the budget &amp; usage</p>
+                          </div>
+                        </div>
+                        <span id="openai-key-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Using Platform Default</span>
+                      </div>
+
+                      <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                        <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
+                          Create a <strong style="color: white;">Project</strong> in your <a href="https://platform.openai.com/settings/organization/projects" target="_blank" style="color: #06b6d4;">OpenAI dashboard</a>, generate a project API key, and paste it here.
+                          Your calls will be billed directly to that project — giving you full cost visibility per tenant in one master account.
+                        </p>
+                      </div>
+
+                      <div id="openai-key-display" style="display: none; background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-family: monospace; font-size: 0.85rem; color: #06b6d4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                        <span id="openai-key-masked-text">—</span>
+                        <button type="button" onclick="window.clearOpenAIKey()" style="background: none; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;">Remove Key</button>
+                      </div>
+
+                      <div style="display: flex; gap: 8px; align-items: flex-end;">
+                        <div style="flex: 1;">
+                          <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 6px;">New API Key</label>
+                          <input type="password" id="settings-openai-key" class="form-input" placeholder="sk-proj-..." autocomplete="off"
+                            style="font-family: monospace; letter-spacing: 1px;">
+                        </div>
+                        <button type="button" onclick="window.saveOpenAIKey()" class="btn btn-primary" style="padding: 10px 16px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                          <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save Key
+                        </button>
+                      </div>
+                      <p class="text-muted" style="font-size: 0.75rem; margin-top: 8px;">Key is encrypted at rest and never sent back to your browser.</p>
+                    </div>
+                  </div>
+
+                  <!-- STEP 10: Security (2FA) -->
+                  <div class="wizard-step-pane" data-step="10">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="shield"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 9: Security (2FA)</h3>
+                        <p>Configure account security and 2FA.</p>
+                      </div>
+                    </div>
+
+                    <!-- Security Card -->
+                    <div class="glass" style="margin-top: 28px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(139,92,246,0.3);">
+                      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <div style="width: 36px; height: 36px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <i data-lucide="shield" style="width: 18px; height: 18px; color: #8b5cf6;"></i>
+                          </div>
+                          <div>
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">Security</h3>
+                            <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Two-factor authentication &amp; account protection</p>
+                          </div>
+                        </div>
+                        <span id="2fa-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Loading...</span>
+                      </div>
+
+                      <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                        <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
+                          <strong style="color: white;">Two-Factor Authentication (2FA)</strong> adds an extra layer of security to your account.
+                          When enabled, you'll need to provide a 6-digit code from your authenticator app every time you sign in.
+                        </p>
+                      </div>
+
+                      <!-- Enable Button -->
+                      <button type="button" id="2fa-enable-btn" class="btn btn-primary" onclick="window.setup2FA()" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 8px 16px;">
+                        <i data-lucide="shield-check" style="width: 15px; height: 15px;"></i> Enable Two-Factor Auth
+                      </button>
+
+                      <!-- Disable Area (shown when 2FA is on) -->
+                      <div id="2fa-disable-area" style="display: none;">
+                        <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 10px;">Enter your current authenticator code to disable 2FA:</p>
+                        <div style="display: flex; gap: 8px; align-items: center; max-width: 320px;">
+                          <input type="text" id="2fa-disable-code" class="form-input" placeholder="6-digit code" maxlength="6" style="font-size: 0.9rem; text-align: center; letter-spacing: 4px; padding: 8px 12px;">
+                          <button type="button" class="btn btn-ghost" onclick="window.disable2FA()" style="white-space: nowrap; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; font-size: 0.82rem; padding: 8px 12px;">
+                            Disable 2FA
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- STEP 11: Voice Provider -->
+                  <div class="wizard-step-pane" data-step="11">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="radio-tower"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 10: Voice Provider</h3>
+                        <p>Select the underlying voice gateway provider.</p>
+                      </div>
+                    </div>
+                    <div class="form-group mb-4">
+                      <label>Select Voice AI Provider</label>
+                      <div class="voice-providers-grid">
+                        <div class="voice-provider-card active" data-provider="openai">
+                          <i data-lucide="phone-call" style="margin-bottom: 4px;"></i>
+                          <div class="voice-provider-title">OpenAI Realtime</div>
+                          <div class="voice-provider-desc">Active. Built-in ultra low-latency WebRTC streams.</div>
+                        </div>
+                        <div class="voice-provider-card" data-provider="vapi">
+                          <i data-lucide="radio" style="margin-bottom: 4px;"></i>
+                          <div class="voice-provider-title">Retell / VAPI</div>
+                          <div class="voice-provider-desc">Alternative provider. Custom endpoints supported.</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- STEP 12: Knowledge Base -->
+                  <div class="wizard-step-pane" data-step="12">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="database"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 11: Knowledge Base</h3>
+                        <p>Train your AI receptionist on your website content.</p>
+                      </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-template">Load Business Persona Template</label>
+                      <select id="settings-template" class="form-input">
+                        <option value="">-- Customize Manually (Or Select Template) --</option>
+                        <option value="dental">🦷 Dental Clinic (Dr. Smiles & Orthodontics)</option>
+                        <option value="medical">🏥 Medical Practice (Aura Clinic & Diagnostics)</option>
+                        <option value="spa">🌸 Beauty Spa & Wellness (Aura Retreat)</option>
+                        <option value="salon">💇 Hair Salon & Treatments (Style & Co.)</option>
+                        <option value="chiropractor">🦴 Chiropractic & Spinal Therapy (BackCare AI)</option>
+                        <option value="tcm">🌿 Traditional Chinese Medicine (TCM Harmony)</option>
+                        <option value="plumber">🚰 Plumbing & Home Maintenance (FlowForce)</option>
+                        <option value="realestate">🏠 Real Estate Agency (Aura Properties)</option>
+                        <option value="finance">📈 Financial Advisor & Wealth (Ascent Wealth)</option>
+                        <option value="veterinary">🐾 Veterinary Clinic (PawPrints Care)</option>
+                        <option value="restaurant">🍽️ Restaurant Reservation (Aura Bistro)</option>
+                        <option value="hotel">🏨 Hotel Reservation (Grand Aura Hotel)</option>
+                      </select>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-prompt" style="display: flex; justify-content: space-between;">
+                        <span>System Instructions (System Prompt)</span>
+                        <span class="text-red" id="prompt-locked-tag" style="display: none; font-size: 0.8rem; font-weight: 600;"><i data-lucide="lock" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Locked</span>
+                      </label>
+                      <textarea id="settings-prompt" class="form-input text-area prompt-textarea" rows="8" required placeholder="Describe the AI's persona, knowledge, and scheduling rules..."></textarea>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-website-url" style="display: flex; justify-content: space-between;">
+                        <span>Company Website URL(s)</span>
+                        <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-primary);">Comma-separated URLs</span>
+                      </label>
+                      <div style="display: flex; gap: 10px;">
+                        <input type="text" id="settings-website-url" class="form-input" placeholder="e.g. https://yoursite.com, https://yoursite.com/about" style="flex: 1;">
+                        <button type="button" id="btn-crawl-website" class="btn btn-primary" style="padding: 0 20px; white-space: nowrap; display: flex; align-items: center; gap: 8px;">
+                          <i data-lucide="globe" style="width: 16px; height: 16px;"></i> Crawl Site
+                        </button>
+                      </div>
+                      <div id="crawl-status-container" style="display: none; margin-top: 8px; padding: 10px; border-radius: 6px; background: rgba(255,255,255,0.05); font-size: 0.85rem; border: 1px solid var(--border-glass);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                          <span id="crawl-status-badge" class="badge" style="background: rgba(0, 200, 100, 0.2); color: #00c864; font-size: 0.75rem;">Status: Idle</span>
+                          <span id="crawl-status-length" style="color: var(--text-muted); font-size: 0.75rem;">0 characters</span>
+                        </div>
+                        <div id="crawl-status-preview" style="color: var(--text-muted); font-style: italic; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto; margin-top: 5px; font-size: 0.75rem; border-top: 1px solid var(--border-glass); padding-top: 5px;"></div>
+                      </div>
                     </div>
                   </div>
 
@@ -2118,85 +2388,6 @@
               </form>
             </div>
 
-          </div>
-
-          <!-- Security Card -->
-          <div class="glass" style="margin-top: 28px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(139,92,246,0.3);">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="width: 36px; height: 36px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                  <i data-lucide="shield" style="width: 18px; height: 18px; color: #8b5cf6;"></i>
-                </div>
-                <div>
-                  <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">Security</h3>
-                  <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Two-factor authentication &amp; account protection</p>
-                </div>
-              </div>
-              <span id="2fa-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Loading...</span>
-            </div>
-
-            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-              <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
-                <strong style="color: white;">Two-Factor Authentication (2FA)</strong> adds an extra layer of security to your account.
-                When enabled, you'll need to provide a 6-digit code from your authenticator app every time you sign in.
-              </p>
-            </div>
-
-            <!-- Enable Button -->
-            <button type="button" id="2fa-enable-btn" class="btn btn-primary" onclick="window.setup2FA()" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 8px 16px;">
-              <i data-lucide="shield-check" style="width: 15px; height: 15px;"></i> Enable Two-Factor Auth
-            </button>
-
-            <!-- Disable Area (shown when 2FA is on) -->
-            <div id="2fa-disable-area" style="display: none;">
-              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 10px;">Enter your current authenticator code to disable 2FA:</p>
-              <div style="display: flex; gap: 8px; align-items: center; max-width: 320px;">
-                <input type="text" id="2fa-disable-code" class="form-input" placeholder="6-digit code" maxlength="6" style="font-size: 0.9rem; text-align: center; letter-spacing: 4px; padding: 8px 12px;">
-                <button type="button" class="btn btn-ghost" onclick="window.disable2FA()" style="white-space: nowrap; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; font-size: 0.82rem; padding: 8px 12px;">
-                  Disable 2FA
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- OpenAI Project API Key Card -->
-          <div class="glass" style="margin-top: 16px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(6,182,212,0.3);">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="width: 36px; height: 36px; background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                  <i data-lucide="key" style="width: 18px; height: 18px; color: #06b6d4;"></i>
-                </div>
-                <div>
-                  <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">OpenAI Project API Key</h3>
-                  <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Use your own OpenAI project key — you control the budget &amp; usage</p>
-                </div>
-              </div>
-              <span id="openai-key-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Using Platform Default</span>
-            </div>
-
-            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-              <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
-                Create a <strong style="color: white;">Project</strong> in your <a href="https://platform.openai.com/settings/organization/projects" target="_blank" style="color: #06b6d4;">OpenAI dashboard</a>, generate a project API key, and paste it here.
-                Your calls will be billed directly to that project — giving you full cost visibility per tenant in one master account.
-              </p>
-            </div>
-
-            <div id="openai-key-display" style="display: none; background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-family: monospace; font-size: 0.85rem; color: #06b6d4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-              <span id="openai-key-masked-text">—</span>
-              <button type="button" onclick="window.clearOpenAIKey()" style="background: none; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;">Remove Key</button>
-            </div>
-
-            <div style="display: flex; gap: 8px; align-items: flex-end;">
-              <div style="flex: 1;">
-                <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 6px;">New API Key</label>
-                <input type="password" id="settings-openai-key" class="form-input" placeholder="sk-proj-..." autocomplete="off"
-                  style="font-family: monospace; letter-spacing: 1px;">
-              </div>
-              <button type="button" onclick="window.saveOpenAIKey()" class="btn btn-primary" style="padding: 10px 16px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save Key
-              </button>
-            </div>
-            <p class="text-muted" style="font-size: 0.75rem; margin-top: 8px;">Key is encrypted at rest and never sent back to your browser.</p>
           </div>
 
         </section>

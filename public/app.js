@@ -248,6 +248,8 @@ function switchTab(tabId) {
     } else {
       fetchTeamAndResources();
     }
+    if (window.load2FAStatus) window.load2FAStatus();
+    loadOpenAIKeyStatus();
   } else if (tabId === 'overview') {
     fetchOverviewData();
   } else if (tabId === 'crm') {
@@ -255,9 +257,6 @@ function switchTab(tabId) {
   } else if (tabId === 'billing') {
     fetchBillingDetails();
     loadNotificationPhone();
-  } else if (tabId === 'settings') {
-    if (window.load2FAStatus) window.load2FAStatus();
-    loadOpenAIKeyStatus();
   } else if (tabId === 'services') {
     fetchServicesCatalog();
   } else if (tabId === 'accounting') {
@@ -269,6 +268,24 @@ function switchTab(tabId) {
   }
 }
 window.switchTab = switchTab;
+
+function refreshSidebarAddonTabs() {
+  const tabs = document.querySelectorAll('.sidebar-addon-tab');
+  tabs.forEach(tab => {
+    const addonKey = tab.getAttribute('data-addon');
+    if (currentTenant && currentTenant[`addon_${addonKey}`] === 1) {
+      tab.classList.remove('inactive');
+      tab.style.opacity = '1';
+      tab.style.filter = 'none';
+      tab.style.cursor = 'pointer';
+    } else {
+      tab.classList.add('inactive');
+      tab.style.opacity = '0.4';
+      tab.style.filter = 'grayscale(100%)';
+    }
+  });
+}
+window.refreshSidebarAddonTabs = refreshSidebarAddonTabs;
 
 window.toggleMobileSidebar = function() {
   const sidebar = document.querySelector('.sidebar');
@@ -288,10 +305,51 @@ document.addEventListener('click', (e) => {
   }
 });
 
+function showSubscriptionWarning(addonKey, displayName) {
+  const modal = document.getElementById('subscription-warning-modal');
+  const titleEl = document.getElementById('subscription-warning-title');
+  const msgEl = document.getElementById('subscription-warning-message');
+  const subBtn = document.getElementById('btn-warning-subscribe');
+  
+  if (modal) {
+    if (titleEl) titleEl.textContent = `${displayName} Required`;
+    if (msgEl) {
+      msgEl.innerHTML = `Please subscribe to the <strong>${displayName}</strong> addon module in settings (Step 8: Add Modules) to access this feature.`;
+    }
+    
+    // Setup Subscribe Now button
+    if (subBtn) {
+      const newSubBtn = subBtn.cloneNode(true);
+      subBtn.parentNode.replaceChild(newSubBtn, subBtn);
+      newSubBtn.addEventListener('click', () => {
+        modal.classList.remove('active');
+        switchTab('settings');
+        switchSettingsGroup('basic');
+        showWizardStep(7);
+      });
+    }
+    
+    modal.classList.add('active');
+    initIcons();
+  }
+}
+window.showSubscriptionWarning = showSubscriptionWarning;
+
 menuItems.forEach(item => {
   item.addEventListener('click', (e) => {
     e.preventDefault();
     const tabId = item.getAttribute('data-tab');
+    
+    // Intercept clicks on inactive addon tabs and alert subscription popup/toast
+    if (tabId === 'crm' && (!currentTenant || currentTenant.addon_crm !== 1)) {
+      showSubscriptionWarning('crm', 'AI CRM Hub');
+      return;
+    }
+    if (tabId === 'accounting' && (!currentTenant || currentTenant.addon_accounting !== 1)) {
+      showSubscriptionWarning('accounting', 'Accounting & Invoicing');
+      return;
+    }
+
     switchTab(tabId);
     // Auto-close sidebar on mobile after selecting a tab
     const sidebar = document.querySelector('.sidebar');
@@ -1041,7 +1099,7 @@ async function fetchOverviewData() {
     const totalSteps = 11;
     if (settingsCompany && settingsCompany.value.trim()) completedCount++;
     if (settingsAgentName && settingsAgentName.value.trim()) completedCount++;
-    completedCount++;
+    completedCount++; // Voice provider (always true)
     if (settingsTwilio && settingsTwilio.value.trim()) completedCount++;
     if (settingsPrompt && settingsPrompt.value.trim()) completedCount++;
     
@@ -1056,11 +1114,11 @@ async function fetchOverviewData() {
                      !!(document.getElementById('settings-template')?.value) ||
                      (crawlStatusContainer && crawlStatusContainer.style.display === 'block');
     if (step8Comp) completedCount++;
-    completedCount++;
+    completedCount++; // Step 9: Add Modules (always true)
     const step10Comp = !!(settingsResources && settingsResources.value.trim()) || 
                       (workspaceTeamList && workspaceTeamList.length > 0);
     if (step10Comp) completedCount++;
-    completedCount++;
+    completedCount++; // Step 11: Go Live (always true)
     
     const setupScoreVal = Math.round((completedCount / totalSteps) * 100);
 
@@ -1568,6 +1626,8 @@ async function fetchCallLogs() {
       let transcripts = [];
       try { transcripts = JSON.parse(log.transcript || '[]'); } catch (e) {}
 
+      const hasHandoff = transcripts.some(bubble => bubble.speaker === 'human_agent');
+
       const durationMinutes = Math.floor(log.duration / 60);
       const durationSeconds = log.duration % 60;
       const durationDisplay = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
@@ -1590,6 +1650,7 @@ async function fetchCallLogs() {
               </div>
             </div>
             <div class="history-card-right">
+              ${hasHandoff ? `<span class="badge-transcribed" title="Call handoff conversation with human was recorded and transcribed"><i data-lucide="mic" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;"></i> Handoff Logged</span>` : ''}
               <span class="duration-tag"><i data-lucide="clock" style="width: 14px; height: 14px; display: inline; vertical-align: middle; margin-right: 4px;"></i> ${durationDisplay}</span>
               <span class="badge" style="background-color: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-transform: uppercase;">${log.status}</span>
               <i data-lucide="chevron-down" class="expand-chevron"></i>
@@ -1605,12 +1666,18 @@ async function fetchCallLogs() {
             <div class="history-transcript-section">
               <h5>Call Transcription</h5>
               <div class="history-transcript-feed">
-                ${transcripts.length > 0 ? transcripts.map(bubble => `
-                  <div class="speech-bubble ${bubble.speaker}" style="max-width: 90%; margin-bottom: 8px;">
-                    <span class="speaker-tag" style="font-size: 0.65rem;">${bubble.speaker === 'user' ? 'Customer' : 'Aura Assistant'}</span>
-                    <span>${escapeHtml(bubble.text)}</span>
-                  </div>
-                `).join('') : '<p class="text-muted text-center py-4">No audio transcripts recorded.</p>'}
+                ${transcripts.length > 0 ? transcripts.map(bubble => {
+                  let roleName = 'AI Assistant';
+                  if (bubble.speaker === 'user') roleName = 'Customer';
+                  else if (bubble.speaker === 'human_agent') roleName = 'Human Representative';
+                  
+                  return `
+                    <div class="speech-bubble ${bubble.speaker}" style="max-width: 90%; margin-bottom: 8px;">
+                      <span class="speaker-tag" style="font-size: 0.65rem;">${roleName}</span>
+                      <span>${escapeHtml(bubble.text)}</span>
+                    </div>
+                  `;
+                }).join('') : '<p class="text-muted text-center py-4">No audio transcripts recorded.</p>'}
               </div>
             </div>
           </div>
@@ -1644,17 +1711,450 @@ function updateSummaryInHistory(callSid, summaryText) {
 // AGENT SETTINGS
 // -------------------------------------------------------------
 
-function toggleStripeSettingsView() {
-  if (settingsPaymentProvider && settingsPaymentProvider.value === 'stripe') {
-    stripeKeysConfig.style.display = 'block';
-  } else if (stripeKeysConfig) {
-    stripeKeysConfig.style.display = 'none';
-  }
+// Refresh Sidebar Addon Tabs is defined globally above
+
+// Toggle WhatsApp addon status
+const whatsappToggle = document.getElementById('settings-addon-whatsapp');
+const whatsappStatus = document.getElementById('addon-whatsapp-status');
+if (whatsappToggle) {
+  whatsappToggle.addEventListener('change', async () => {
+    const active = whatsappToggle.checked;
+    try {
+      const res = await fetch('/api/addons/toggle-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_whatsapp === 1;
+        whatsappToggle.checked = activeVal;
+        if (whatsappStatus) {
+          whatsappStatus.textContent = activeVal ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
+          whatsappStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+        }
+        if (currentTenant) {
+          currentTenant.addon_whatsapp = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        refreshSidebarAddonTabs();
+        showToast(
+          activeVal ? 'Addon Activated' : 'Addon Deactivated',
+          activeVal ? 'WhatsApp, SMS, & Email Notifications is now active.' : 'Notification addon has been deactivated.',
+          activeVal ? 'success' : 'info'
+        );
+      } else {
+        whatsappToggle.checked = !active;
+        showToast('Error', 'Failed to toggle WhatsApp addon.', 'danger');
+      }
+    } catch (err) {
+      whatsappToggle.checked = !active;
+      console.error('Failed to toggle WhatsApp addon:', err);
+      showToast('Error', 'Network error toggling WhatsApp addon.', 'danger');
+    }
+  });
 }
 
-if (settingsPaymentProvider) {
-  settingsPaymentProvider.addEventListener('change', toggleStripeSettingsView);
+// Toggle CRM addon status
+const crmToggle = document.getElementById('settings-addon-crm');
+const crmStatus = document.getElementById('addon-crm-status');
+if (crmToggle) {
+  crmToggle.addEventListener('change', async () => {
+    const active = crmToggle.checked;
+    try {
+      const res = await fetch('/api/addons/toggle-crm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_crm === 1;
+        crmToggle.checked = activeVal;
+        if (crmStatus) {
+          crmStatus.textContent = activeVal ? 'Status: Active (+$50/mo)' : 'Status: Inactive';
+          crmStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+        }
+        if (currentTenant) {
+          currentTenant.addon_crm = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        
+        refreshSidebarAddonTabs();
+
+        showToast(
+          activeVal ? 'Addon Activated' : 'Addon Deactivated',
+          activeVal ? 'AI CRM Hub is now active.' : 'CRM addon has been deactivated.',
+          activeVal ? 'success' : 'info'
+        );
+      } else {
+        crmToggle.checked = !active;
+        showToast('Error', 'Failed to toggle CRM addon.', 'danger');
+      }
+    } catch (err) {
+      crmToggle.checked = !active;
+      console.error('Failed to toggle CRM addon:', err);
+      showToast('Error', 'Network error toggling CRM addon.', 'danger');
+    }
+  });
 }
+
+// Toggle Accounting addon status
+const accountingToggle = document.getElementById('settings-addon-accounting');
+const accountingStatus = document.getElementById('addon-accounting-status');
+if (accountingToggle) {
+  accountingToggle.addEventListener('change', async () => {
+    const active = accountingToggle.checked;
+    try {
+      const res = await fetch('/api/addons/toggle-accounting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_accounting === 1;
+        accountingToggle.checked = activeVal;
+        if (accountingStatus) {
+          accountingStatus.textContent = activeVal ? 'Status: Active (+$20/mo)' : 'Status: Inactive';
+          accountingStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+        }
+        if (currentTenant) {
+          currentTenant.addon_accounting = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        
+        refreshSidebarAddonTabs();
+
+        showToast(
+          activeVal ? 'Addon Activated' : 'Addon Deactivated',
+          activeVal ? 'Accounting & Invoicing is now active.' : 'Accounting addon has been deactivated.',
+          activeVal ? 'success' : 'info'
+        );
+      } else {
+        accountingToggle.checked = !active;
+        showToast('Error', 'Failed to toggle Accounting addon.', 'danger');
+      }
+    } catch (err) {
+      accountingToggle.checked = !active;
+      console.error('Failed to toggle Accounting addon:', err);
+      showToast('Error', 'Network error toggling Accounting addon.', 'danger');
+    }
+  });
+}
+
+// Toggle call recording addon status
+const recordingToggle = document.getElementById('settings-addon-recording');
+const recordingStatus = document.getElementById('addon-recording-status');
+if (recordingToggle) {
+  recordingToggle.addEventListener('change', async () => {
+    const active = recordingToggle.checked;
+    try {
+      const res = await fetch('/api/addons/toggle-recording', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_call_recording === 1;
+        recordingToggle.checked = activeVal;
+        if (recordingStatus) {
+          recordingStatus.textContent = activeVal ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
+          recordingStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+        }
+        if (currentTenant) {
+          currentTenant.addon_call_recording = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        refreshSidebarAddonTabs();
+        showToast(
+          activeVal ? 'Addon Activated' : 'Addon Deactivated',
+          activeVal ? 'Call handoff recording & transcription is now active.' : 'Call recording addon has been deactivated.',
+          activeVal ? 'success' : 'info'
+        );
+      } else {
+        recordingToggle.checked = !active;
+        showToast('Error', 'Failed to toggle call recording addon.', 'danger');
+      }
+    } catch (err) {
+      recordingToggle.checked = !active;
+      console.error('Failed to toggle recording addon:', err);
+      showToast('Error', 'Network error toggling addon.', 'danger');
+    }
+  });
+}
+
+// Toggle department routing addon status
+const deptToggle = document.getElementById('settings-addon-departments');
+const deptStatus = document.getElementById('addon-departments-status');
+const deptGridContainer = document.getElementById('departments-addon-grid-container');
+
+if (deptToggle) {
+  deptToggle.addEventListener('change', async () => {
+    const active = deptToggle.checked;
+    const globalTransferGroup = document.getElementById('global-transfer-number-group');
+    try {
+      const res = await fetch('/api/addons/toggle-departments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_department_routing === 1;
+        deptToggle.checked = activeVal;
+        if (deptGridContainer) deptGridContainer.style.display = activeVal ? 'flex' : 'none';
+        if (globalTransferGroup) globalTransferGroup.style.display = activeVal ? 'none' : 'block';
+        
+        if (currentTenant) {
+          currentTenant.addon_department_routing = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+
+        refreshSidebarAddonTabs();
+        if (activeVal) {
+          loadDepartmentsList();
+          showToast('Addon Activated', 'Multi-Department & Extension Routing is now active.', 'success');
+        } else {
+          if (deptStatus) {
+            deptStatus.textContent = 'Status: Inactive';
+            deptStatus.style.color = '#94a3b8';
+          }
+          showToast('Addon Deactivated', 'Department routing addon has been deactivated.', 'info');
+        }
+      } else {
+        deptToggle.checked = !active;
+        showToast('Error', 'Failed to toggle department routing addon.', 'danger');
+      }
+    } catch (err) {
+      deptToggle.checked = !active;
+      console.error('Failed to toggle department routing addon:', err);
+      showToast('Error', 'Network error toggling department routing addon.', 'danger');
+    }
+  });
+}
+
+// Toggle Stripe Payment Gateway addon status
+const stripeToggle = document.getElementById('settings-addon-stripe');
+const stripeStatus = document.getElementById('addon-stripe-status');
+const stripeKeysContainer = document.getElementById('stripe-keys-config');
+const paymentProviderHiddenInput = document.getElementById('settings-payment-provider');
+if (stripeToggle) {
+  stripeToggle.addEventListener('change', async () => {
+    const active = stripeToggle.checked;
+    try {
+      const res = await fetch('/api/addons/toggle-payment-gateway', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeVal = data.addon_payment_gateway === 1;
+        stripeToggle.checked = activeVal;
+        if (stripeKeysContainer) stripeKeysContainer.style.display = activeVal ? 'flex' : 'none';
+        if (stripeStatus) {
+          stripeStatus.textContent = activeVal ? 'Status: Active (+$5/mo)' : 'Status: Inactive';
+          stripeStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+        }
+        if (paymentProviderHiddenInput) {
+          paymentProviderHiddenInput.value = activeVal ? 'stripe' : 'sandbox';
+        }
+        if (currentTenant) {
+          currentTenant.addon_payment_gateway = activeVal ? 1 : 0;
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        refreshSidebarAddonTabs();
+        showToast(
+          activeVal ? 'Addon Activated' : 'Addon Deactivated',
+          activeVal ? 'Stripe Payment Gateway is now active.' : 'Stripe Payment Gateway addon has been deactivated.',
+          activeVal ? 'success' : 'info'
+        );
+      } else {
+        stripeToggle.checked = !active;
+        showToast('Error', 'Failed to toggle Stripe addon.', 'danger');
+      }
+    } catch (err) {
+      stripeToggle.checked = !active;
+      console.error('Failed to toggle Stripe addon:', err);
+      showToast('Error', 'Network error toggling Stripe addon.', 'danger');
+    }
+  });
+}
+
+// Load departments list from API and calculate extension costs
+async function loadDepartmentsList() {
+  const listTbody = document.getElementById('departments-list-tbody');
+  if (!listTbody) return;
+
+  try {
+    const res = await fetch('/api/settings/departments');
+    if (!res.ok) throw new Error('Failed to load departments');
+    
+    const departments = await res.json();
+    
+    // Calculate extensions billed at $25/mo each, plus $10/mo if recording is active for that extension
+    const numExts = departments.length;
+    const totalCost = departments.reduce((acc, d) => acc + 25 + (d.record_calls === 1 ? 10 : 0), 0);
+    
+    if (deptStatus && currentTenant && currentTenant.addon_department_routing === 1) {
+      deptStatus.innerHTML = `Status: <span style="color: #10b981;">Active</span> (+$${totalCost}/mo — ${numExts} billed extension${numExts === 1 ? '' : 's'})`;
+      deptStatus.style.color = '#10b981';
+    }
+
+    if (departments.length === 0) {
+      listTbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-muted" style="text-align: center; padding: 15px; font-style: italic;">
+            No departments configured. Click "Add Dept" to add one.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    listTbody.innerHTML = departments.map(d => {
+      const extensionCost = 25 + (d.record_calls === 1 ? 10 : 0);
+      return `
+        <tr style="border-bottom: 1px solid var(--border-glass);">
+          <td style="padding: 8px 10px; font-weight: 500; color: white;">${escapeHtml(d.name)}</td>
+          <td style="padding: 8px 10px; color: var(--text-muted);">${escapeHtml(d.phone_number)}</td>
+          <td style="padding: 8px 10px; color: var(--color-primary); font-weight: 600;">
+            ${d.extension ? escapeHtml(d.extension) : '<span class="text-muted" style="font-weight: normal;">None</span>'}
+          </td>
+          <td style="padding: 8px 10px; text-align: center; vertical-align: middle;">
+            <label class="switch" style="width: 32px; height: 18px; display: inline-block;">
+              <input type="checkbox" onchange="toggleDepartmentRecording(${d.id}, this.checked)" ${d.record_calls === 1 ? 'checked' : ''} style="opacity: 0; width: 0; height: 0; display: none;">
+              <span class="slider" style="border-radius: 18px;"></span>
+            </label>
+          </td>
+          <td style="padding: 8px 10px; color: #a78bfa; font-weight: 600;">$${extensionCost}/mo</td>
+          <td style="padding: 8px 10px; text-align: center;">
+            <button type="button" onclick="deleteDepartment(${d.id})" class="btn-delete-inline" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px 5px;" title="Delete department">
+              <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  } catch (err) {
+    console.error('Error rendering departments grid:', err);
+  }
+}
+window.loadDepartmentsList = loadDepartmentsList;
+
+// Toggle department recording handler
+window.toggleDepartmentRecording = async function(id, recordChecked) {
+  try {
+    const res = await fetch(`/api/settings/departments/${id}/record`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record_calls: recordChecked ? 1 : 0 })
+    });
+    if (res.ok) {
+      showToast('Updated', `Recording for this department is now ${recordChecked ? 'ON' : 'OFF'}.`, 'success');
+      loadDepartmentsList();
+    } else {
+      showToast('Error', 'Failed to update department recording setting.', 'danger');
+      loadDepartmentsList(); // Revert toggle state
+    }
+  } catch (err) {
+    console.error('Error toggling department recording:', err);
+    showToast('Error', 'Network error toggling department recording.', 'danger');
+    loadDepartmentsList();
+  }
+};
+
+// DELETE department handler
+window.deleteDepartment = async function(id) {
+  if (!confirm('Are you sure you want to delete this department routing entry?')) return;
+  try {
+    const res = await fetch(`/api/settings/departments/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Deleted', 'Department entry deleted successfully.', 'success');
+      loadDepartmentsList();
+    } else {
+      showToast('Error', 'Failed to delete department entry.', 'danger');
+    }
+  } catch (err) {
+    console.error('Error deleting department:', err);
+    showToast('Error', 'Network error deleting department.', 'danger');
+  }
+};
+
+// Bind inline add buttons and save handler
+document.addEventListener('DOMContentLoaded', () => {
+  const btnAddDept = document.getElementById('btn-add-dept-inline');
+  const btnCancelDept = document.getElementById('btn-cancel-dept-inline');
+  const btnSaveDept = document.getElementById('btn-save-dept-inline');
+  const formAddDept = document.getElementById('form-add-dept-inline');
+
+  const inputName = document.getElementById('input-dept-name');
+  const inputPhone = document.getElementById('input-dept-phone');
+  const inputExt = document.getElementById('input-dept-ext');
+  const inputRecord = document.getElementById('input-dept-record');
+
+  if (btnAddDept && formAddDept) {
+    btnAddDept.addEventListener('click', () => {
+      formAddDept.style.display = 'flex';
+      inputName.focus();
+    });
+  }
+
+  if (btnCancelDept && formAddDept) {
+    btnCancelDept.addEventListener('click', () => {
+      formAddDept.style.display = 'none';
+      inputName.value = '';
+      inputPhone.value = '';
+      inputExt.value = '';
+      if (inputRecord) inputRecord.checked = false;
+    });
+  }
+
+  if (btnSaveDept && formAddDept) {
+    btnSaveDept.addEventListener('click', async () => {
+      const name = inputName.value.trim();
+      const phone_number = inputPhone.value.trim();
+      const extension = inputExt.value.trim();
+      const record_calls = inputRecord ? (inputRecord.checked ? 1 : 0) : 0;
+
+      if (!name || !phone_number) {
+        showToast('Required Fields', 'Please provide both department name and destination phone number.', 'warning');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/settings/departments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone_number, extension, record_calls })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          formAddDept.style.display = 'none';
+          inputName.value = '';
+          inputPhone.value = '';
+          inputExt.value = '';
+          if (inputRecord) inputRecord.checked = false;
+          showToast('Added', `Department "${name}" added successfully.`, 'success');
+          loadDepartmentsList();
+        } else {
+          showToast('Error', data.error || 'Failed to add department.', 'danger');
+        }
+      } catch (err) {
+        console.error('Error adding department:', err);
+        showToast('Error', 'Network error saving department.', 'danger');
+      }
+    });
+  }
+});
 
 async function fetchSettings() {
   try {
@@ -1780,6 +2280,77 @@ async function fetchSettings() {
     
     const host = window.location.origin;
     webhookCopyUrl.textContent = `${host}/incoming-call`;
+
+    // Populate all addon switches
+    const whatsappToggle = document.getElementById('settings-addon-whatsapp');
+    const whatsappStatus = document.getElementById('addon-whatsapp-status');
+    if (whatsappToggle && currentTenant) {
+      const active = currentTenant.addon_whatsapp === 1;
+      whatsappToggle.checked = active;
+      if (whatsappStatus) {
+        whatsappStatus.textContent = active ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
+        whatsappStatus.style.color = active ? '#10b981' : '#94a3b8';
+      }
+    }
+
+    const crmToggle = document.getElementById('settings-addon-crm');
+    const crmStatus = document.getElementById('addon-crm-status');
+    if (crmToggle && currentTenant) {
+      const active = currentTenant.addon_crm === 1;
+      crmToggle.checked = active;
+      if (crmStatus) {
+        crmStatus.textContent = active ? 'Status: Active (+$50/mo)' : 'Status: Inactive';
+        crmStatus.style.color = active ? '#10b981' : '#94a3b8';
+      }
+    }
+
+    const accountingToggle = document.getElementById('settings-addon-accounting');
+    const accountingStatus = document.getElementById('addon-accounting-status');
+    if (accountingToggle && currentTenant) {
+      const active = currentTenant.addon_accounting === 1;
+      accountingToggle.checked = active;
+      if (accountingStatus) {
+        accountingStatus.textContent = active ? 'Status: Active (+$20/mo)' : 'Status: Inactive';
+        accountingStatus.style.color = active ? '#10b981' : '#94a3b8';
+      }
+    }
+
+    const stripeToggle = document.getElementById('settings-addon-stripe');
+    const stripeStatus = document.getElementById('addon-stripe-status');
+    const stripeKeysContainer = document.getElementById('stripe-keys-config');
+    const paymentProviderHiddenInput = document.getElementById('settings-payment-provider');
+    if (stripeToggle && currentTenant) {
+      const active = currentTenant.addon_payment_gateway === 1;
+      stripeToggle.checked = active;
+      if (stripeKeysContainer) stripeKeysContainer.style.display = active ? 'flex' : 'none';
+      if (stripeStatus) {
+        stripeStatus.textContent = active ? 'Status: Active (+$5/mo)' : 'Status: Inactive';
+        stripeStatus.style.color = active ? '#10b981' : '#94a3b8';
+      }
+      if (paymentProviderHiddenInput) {
+        paymentProviderHiddenInput.value = active ? 'stripe' : 'sandbox';
+      }
+    }
+
+    // Populate Department Routing Addon Switch
+    const deptToggle = document.getElementById('settings-addon-departments');
+    const deptStatus = document.getElementById('addon-departments-status');
+    const deptGridContainer = document.getElementById('departments-addon-grid-container');
+    const globalTransferGroup = document.getElementById('global-transfer-number-group');
+    if (deptToggle && currentTenant) {
+      const active = currentTenant.addon_department_routing === 1;
+      deptToggle.checked = active;
+      if (deptGridContainer) deptGridContainer.style.display = active ? 'flex' : 'none';
+      if (globalTransferGroup) globalTransferGroup.style.display = active ? 'none' : 'block';
+      if (active) {
+        loadDepartmentsList();
+      } else {
+        if (deptStatus) {
+          deptStatus.textContent = 'Status: Inactive';
+          deptStatus.style.color = '#94a3b8';
+        }
+      }
+    }
     
     // Initialize wizard step visual indicator
     if (typeof updateOnboardingProgress === 'function') {
@@ -2291,7 +2862,7 @@ formSettingsAi.addEventListener('submit', async (e) => {
       showWizardStep(nextVisible);
     }
   } else {
-    // Step 11: Save and Complete
+    // Step 12: Save and Complete
     const saved = await saveWizardSettings(false);
     if (saved) {
       showToast('Onboarding Complete', 'AI Receptionist is now active and live!', 'success');
@@ -2438,6 +3009,7 @@ function initAuthenticatedSession() {
     
     connectWebSocket();
     updateHeaderUserInfo();
+    refreshSidebarAddonTabs();
     
     // Super Admins start on Admin Console; regular tenants start on Overview
     if (currentTenant && currentTenant.is_admin === 1) {
@@ -2480,23 +3052,23 @@ function switchSettingsGroup(group) {
       advTab.style.color = 'var(--text-dark)';
     }
 
-    // Hide Advanced Steps in Sidebar Stepper: Steps 1, 3, 4, 8, 9 are Advanced or Hidden.
+    // Hide Advanced Steps in Sidebar Stepper: Steps 1, 9, 10, 11, 12 are Advanced or Hidden.
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([1, 3, 4, 8, 9].includes(step)) {
+      if ([1, 9, 10, 11, 12].includes(step)) {
         item.style.display = 'none';
       } else {
         item.style.display = 'flex';
       }
     });
 
-    // Hide Advanced elements in Step 5 & 6
+    // Hide Advanced elements in Step 3 & 4
     document.querySelectorAll('.settings-advanced-only').forEach(el => {
       el.style.display = 'none';
     });
 
     // If current wizard step is one of the hidden steps, switch to Step 2
-    if ([1, 3, 4, 8, 9].includes(currentWizardStep)) {
+    if ([1, 9, 10, 11, 12].includes(currentWizardStep)) {
       showWizardStep(2);
     }
   } else {
@@ -2512,14 +3084,14 @@ function switchSettingsGroup(group) {
     // Show Advanced Steps in Sidebar Stepper, Hide Basic ones
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([3, 4, 8, 9].includes(step)) {
+      if ([9, 10, 11, 12].includes(step)) {
         item.style.display = 'flex';
       } else {
         item.style.display = 'none';
       }
     });
 
-    // Show Advanced elements in Step 5 & 6
+    // Show Advanced elements in Step 3 & 4
     document.querySelectorAll('.settings-advanced-only').forEach(el => {
       if (el.classList.contains('form-row')) {
         el.style.display = 'flex';
@@ -2528,9 +3100,9 @@ function switchSettingsGroup(group) {
       }
     });
 
-    // If current wizard step is not one of the advanced steps, switch to Step 3
-    if (![3, 4, 9].includes(currentWizardStep)) {
-      showWizardStep(3);
+    // If current wizard step is not one of the advanced steps, switch to Step 9
+    if (![9, 10, 11, 12].includes(currentWizardStep)) {
+      showWizardStep(9);
     }
   }
   
@@ -2542,7 +3114,7 @@ window.switchSettingsGroup = switchSettingsGroup;
 
 function getNextVisibleStep(currentStep, direction) {
   let next = currentStep + direction;
-  while (next >= 1 && next <= 11) {
+  while (next >= 1 && next <= 12) {
     const item = document.querySelector(`.stepper-item[data-step="${next}"]`);
     if (item && item.style.display !== 'none') {
       return next;
@@ -6729,20 +7301,22 @@ function showWizardStep(stepNum) {
     }
   });
 
-  // Toggle Back button visibility
+  // Toggle Back button visibility dynamically based on previous visible step existence
   const backBtn = document.getElementById('btn-wizard-back');
   if (backBtn) {
-    if (stepNum === 2) {
+    const prevVisible = getNextVisibleStep(stepNum, -1);
+    if (prevVisible === stepNum) {
       backBtn.style.visibility = 'hidden';
     } else {
       backBtn.style.visibility = 'visible';
     }
   }
 
-  // Set Next button text or class
+  // Set Next button text dynamically based on next visible step existence
   const nextBtn = document.getElementById('btn-wizard-next');
   if (nextBtn) {
-    if (stepNum === 11) {
+    const nextVisible = getNextVisibleStep(stepNum, 1);
+    if (nextVisible === stepNum) {
       nextBtn.innerHTML = 'Save & Complete <i data-lucide="check" style="width: 16px; height: 16px;"></i>';
     } else {
       nextBtn.innerHTML = 'Next Step <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>';
@@ -6755,62 +7329,69 @@ window.showWizardStep = showWizardStep;
 
 function updateOnboardingProgress() {
   let completedCount = 0;
-  const totalSteps = 10;
+  const totalSteps = 12;
+
+  // Step 1: Account Created - Hidden, always true
+  markStepCompletedState(1, true);
+  completedCount++;
 
   // Step 2: Business Profile - Check company name & system mode
   const step2Comp = !!(settingsCompany && settingsCompany.value.trim());
   markStepCompletedState(2, step2Comp);
   if (step2Comp) completedCount++;
 
-  // Step 3: Branding - Check agent name
-  const step3Comp = !!(settingsAgentName && settingsAgentName.value.trim());
+  // Step 3: Phone Number - Check twilio phone number
+  const step3Comp = !!(settingsTwilio && settingsTwilio.value.trim());
   markStepCompletedState(3, step3Comp);
   if (step3Comp) completedCount++;
 
-  // Step 4: Voice Provider - Always true (default selected)
-  markStepCompletedState(4, true);
-  completedCount++;
+  // Step 4: AI Receptionist - Check agent name and system instructions prompt
+  const step4Comp = !!(settingsAgentName && settingsAgentName.value.trim()) && !!(settingsPrompt && settingsPrompt.value.trim());
+  markStepCompletedState(4, step4Comp);
+  if (step4Comp) completedCount++;
 
-  // Step 5: Phone Number - Check twilio phone number
-  const step5Comp = !!(settingsTwilio && settingsTwilio.value.trim());
-  markStepCompletedState(5, step5Comp);
-  if (step5Comp) completedCount++;
-
-  // Step 6: AI Receptionist - Check system instructions prompt
-  const step6Comp = !!(settingsPrompt && settingsPrompt.value.trim());
-  markStepCompletedState(6, step6Comp);
-  if (step6Comp) completedCount++;
-
-  // Step 7: Business Hours - Check if any day pill/checkbox is active
+  // Step 5: Business Hours - Check if any day pill/checkbox is active
   let anyActiveDay = false;
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   days.forEach(day => {
     const checkbox = document.getElementById('work-day-' + day);
     if (checkbox && checkbox.checked) anyActiveDay = true;
   });
-  markStepCompletedState(7, anyActiveDay);
+  markStepCompletedState(5, anyActiveDay);
   if (anyActiveDay) completedCount++;
 
-  // Step 8: Knowledge Base - Check template or crawler URL or crawled content
-  const step8Comp = !!(settingsWebsiteUrl && settingsWebsiteUrl.value.trim()) || 
-                   !!(document.getElementById('settings-template')?.value) ||
-                   (crawlStatusContainer && crawlStatusContainer.style.display === 'block');
-  markStepCompletedState(8, step8Comp);
-  if (step8Comp) completedCount++;
+  // Step 6: Team Members - Check resources list or team list length
+  const step6Comp = !!(settingsResources && settingsResources.value.trim()) || 
+                    (workspaceTeamList && workspaceTeamList.length > 0);
+  markStepCompletedState(6, step6Comp);
+  if (step6Comp) completedCount++;
 
-  // Step 9: Add-on Modules - Sandbox/Stripe selected (always true)
+  // Step 7: Add Modules - Always true
+  markStepCompletedState(7, true);
+  completedCount++;
+
+  // Step 8: Go Live - Always true
+  markStepCompletedState(8, true);
+  completedCount++;
+
+  // Step 9: OpenAI API Key - Always true
   markStepCompletedState(9, true);
   completedCount++;
 
-  // Step 10: Team Members - Check resources list or team list length
-  const step10Comp = !!(settingsResources && settingsResources.value.trim()) || 
-                    (workspaceTeamList && workspaceTeamList.length > 0);
-  markStepCompletedState(10, step10Comp);
-  if (step10Comp) completedCount++;
+  // Step 10: Security (2FA) - Always true
+  markStepCompletedState(10, true);
+  completedCount++;
 
-  // Step 11: Go Live - Always true
+  // Step 11: Voice Provider - Always true (default selected)
   markStepCompletedState(11, true);
   completedCount++;
+
+  // Step 12: Knowledge Base - Check template or crawler URL or crawled content
+  const step12Comp = !!(settingsWebsiteUrl && settingsWebsiteUrl.value.trim()) || 
+                    !!(document.getElementById('settings-template')?.value) ||
+                    (crawlStatusContainer && crawlStatusContainer.style.display === 'block');
+  markStepCompletedState(12, step12Comp);
+  if (step12Comp) completedCount++;
 
   // Update progress UI elements
   const progressText = document.getElementById('wizard-progress-text');

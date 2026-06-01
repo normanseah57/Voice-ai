@@ -125,6 +125,12 @@ export const initDb = async () => {
       custom_minute_limit INTEGER DEFAULT NULL,
       custom_contact_limit INTEGER DEFAULT NULL,
       custom_appointment_limit INTEGER DEFAULT NULL,
+      addon_call_recording INTEGER DEFAULT 0,
+      addon_department_routing INTEGER DEFAULT 0,
+      addon_whatsapp INTEGER DEFAULT 0,
+      addon_crm INTEGER DEFAULT 0,
+      addon_accounting INTEGER DEFAULT 0,
+      addon_payment_gateway INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -204,6 +210,34 @@ export const initDb = async () => {
 
   try {
     await run('ALTER TABLE tenants ADD COLUMN notification_phone TEXT DEFAULT NULL');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_call_recording INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_department_routing INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_whatsapp INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_crm INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_accounting INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN addon_payment_gateway INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenant_departments ADD COLUMN record_calls INTEGER DEFAULT 0');
   } catch (e) { /* already exists */ }
 
   // Security columns on tenant_users
@@ -451,6 +485,20 @@ export const initDb = async () => {
       activity_type TEXT NOT NULL, -- 'registration', 'billing_upgrade', 'settings_update', 'call_started', 'call_completed', 'appointment_booked', 'suspension_toggle'
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 17. Tenant Departments Table (For Department & Extension forwarding addon)
+  await run(`
+    CREATE TABLE IF NOT EXISTS tenant_departments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      phone_number TEXT NOT NULL,
+      extension TEXT DEFAULT NULL,
+      record_calls INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     )
   `);
 
@@ -1011,6 +1059,12 @@ export const authenticateTenant = async (email, password) => {
     billing_cycle: tenant.billing_cycle || 'monthly',
     subscription_status: tenant.subscription_status,
     is_admin: tenant.is_admin,
+    addon_call_recording: tenant.addon_call_recording || 0,
+    addon_department_routing: tenant.addon_department_routing || 0,
+    addon_whatsapp: tenant.addon_whatsapp || 0,
+    addon_crm: tenant.addon_crm || 0,
+    addon_accounting: tenant.addon_accounting || 0,
+    addon_payment_gateway: tenant.addon_payment_gateway || 0,
     role: user.role,
     totp_enabled: user.totp_enabled === 1,
     totp_secret: user.totp_secret
@@ -1031,8 +1085,7 @@ export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
     }
   }
   if (user) {
-    const tenant = await get('SELECT * FROM tenants WHERE id = ?', [user.tenant_id]);
-    return { existing: true, id: tenant.id, userId: user.id, name: user.name, email: user.email, company_name: tenant.company_name, subscription_tier: tenant.subscription_tier, billing_cycle: tenant.billing_cycle || 'monthly', subscription_status: tenant.subscription_status, is_admin: tenant.is_admin, role: user.role, totp_enabled: false };
+    return { existing: true, id: tenant.id, userId: user.id, name: user.name, email: user.email, company_name: tenant.company_name, subscription_tier: tenant.subscription_tier, billing_cycle: tenant.billing_cycle || 'monthly', subscription_status: tenant.subscription_status, is_admin: tenant.is_admin, addon_call_recording: tenant.addon_call_recording || 0, addon_department_routing: tenant.addon_department_routing || 0, addon_whatsapp: tenant.addon_whatsapp || 0, addon_crm: tenant.addon_crm || 0, addon_accounting: tenant.addon_accounting || 0, addon_payment_gateway: tenant.addon_payment_gateway || 0, role: user.role, totp_enabled: false };
   }
   // Create new account
   const randomPw = crypto.randomBytes(24).toString('hex');
@@ -1043,7 +1096,7 @@ export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
   await run(`INSERT INTO settings (tenant_id, company_name, business_hours, services_offered, openai_model, system_prompt, twilio_phone_number, transfer_phone_number, resources_list, voice, voice_accent, agent_name, working_hours, break_periods, appointment_gap, max_call_duration, max_no_speech_timeout) VALUES (?, ?, 'Mon-Fri 9am-6pm', 'General Services', 'gpt-4o-realtime-preview-2024-12-17', 'You are a helpful receptionist.', '', '', '', 'alloy', 'default', 'Aura', ?, '[]', 15, 10, 30)`, [tenantId, name, defHours]);
   const uRes = await run(`INSERT INTO tenant_users (tenant_id, name, email, password_hash, role, google_id, password_is_hashed) VALUES (?, ?, ?, ?, 'owner', ?, 1)`, [tenantId, name, email, hash, googleId]);
   await logTenantActivity(tenantId, 'registration', `New workspace created via Google Sign-In for ${name} (${email})`);
-  return { existing: false, id: tenantId, userId: uRes.id, name, email, company_name: name, subscription_tier: 'free', billing_cycle: 'monthly', subscription_status: 'active', is_admin: 0, role: 'owner', totp_enabled: false };
+  return { existing: false, id: tenantId, userId: uRes.id, name, email, company_name: name, subscription_tier: 'free', billing_cycle: 'monthly', subscription_status: 'active', is_admin: 0, addon_call_recording: 0, addon_department_routing: 0, addon_whatsapp: 0, addon_crm: 0, addon_accounting: 0, addon_payment_gateway: 0, role: 'owner', totp_enabled: false };
 };
 
 // =============================================
@@ -2534,6 +2587,63 @@ export const simulateLatePaymentInDb = async (tenant_id) => {
   await run("UPDATE tenants SET next_payment_due = datetime('now', '-1 day') WHERE id = ?", [tenant_id]);
   await checkSubscriptionGracePeriodsAndSuspend();
   return getTenantUsage(tenant_id);
+};
+
+export const updateTenantAddonRecording = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_call_recording = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_call_recording: val };
+};
+
+export const updateTenantAddonDepartmentRouting = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_department_routing = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_department_routing: val };
+};
+
+export const updateTenantAddonWhatsapp = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_whatsapp = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_whatsapp: val };
+};
+
+export const updateTenantAddonCrm = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_crm = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_crm: val };
+};
+
+export const updateTenantAddonAccounting = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_accounting = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_accounting: val };
+};
+
+export const updateTenantAddonPaymentGateway = async (tenant_id, active) => {
+  const val = active ? 1 : 0;
+  await run('UPDATE tenants SET addon_payment_gateway = ? WHERE id = ?', [val, tenant_id]);
+  return { tenant_id, addon_payment_gateway: val };
+};
+
+export const getTenantDepartments = async (tenant_id) => {
+  return await all('SELECT * FROM tenant_departments WHERE tenant_id = ? ORDER BY created_at ASC', [tenant_id]);
+};
+
+export const addTenantDepartment = async (tenant_id, { name, phone_number, extension, record_calls = 0 }) => {
+  const res = await run(
+    'INSERT INTO tenant_departments (tenant_id, name, phone_number, extension, record_calls) VALUES (?, ?, ?, ?, ?)',
+    [tenant_id, name.trim(), phone_number.trim(), extension ? extension.trim() : null, record_calls ? 1 : 0]
+  );
+  return { id: res.id, tenant_id, name, phone_number, extension, record_calls: record_calls ? 1 : 0 };
+};
+
+export const updateTenantDepartmentRecordCalls = async (tenant_id, id, record_calls) => {
+  const val = record_calls ? 1 : 0;
+  return await run('UPDATE tenant_departments SET record_calls = ? WHERE tenant_id = ? AND id = ?', [val, tenant_id, id]);
+};
+
+export const deleteTenantDepartment = async (tenant_id, id) => {
+  return await run('DELETE FROM tenant_departments WHERE tenant_id = ? AND id = ?', [tenant_id, id]);
 };
 
 // ==========================================
