@@ -2040,7 +2040,7 @@
                       <div class="settings-card-side glass" id="team-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
                         <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                           <h3 style="margin: 0; font-size: 0.95rem;">Workspace Team Roles</h3>
-                          <button type="button" class="btn btn-primary" id="btn-add-team-member" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                          <button type="button" class="btn btn-primary" id="btn-add-team-member" onclick="openAddMemberForm()" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
                             <i data-lucide="user-plus" style="width: 12px; height: 12px;"></i> Add Member
                           </button>
                         </div>
@@ -2119,6 +2119,86 @@
             </div>
 
           </div>
+
+          <!-- Security Card -->
+          <div class="glass" style="margin-top: 28px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(139,92,246,0.3);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="shield" style="width: 18px; height: 18px; color: #8b5cf6;"></i>
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">Security</h3>
+                  <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Two-factor authentication &amp; account protection</p>
+                </div>
+              </div>
+              <span id="2fa-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Loading...</span>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+              <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
+                <strong style="color: white;">Two-Factor Authentication (2FA)</strong> adds an extra layer of security to your account.
+                When enabled, you'll need to provide a 6-digit code from your authenticator app every time you sign in.
+              </p>
+            </div>
+
+            <!-- Enable Button -->
+            <button type="button" id="2fa-enable-btn" class="btn btn-primary" onclick="window.setup2FA()" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 8px 16px;">
+              <i data-lucide="shield-check" style="width: 15px; height: 15px;"></i> Enable Two-Factor Auth
+            </button>
+
+            <!-- Disable Area (shown when 2FA is on) -->
+            <div id="2fa-disable-area" style="display: none;">
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 10px;">Enter your current authenticator code to disable 2FA:</p>
+              <div style="display: flex; gap: 8px; align-items: center; max-width: 320px;">
+                <input type="text" id="2fa-disable-code" class="form-input" placeholder="6-digit code" maxlength="6" style="font-size: 0.9rem; text-align: center; letter-spacing: 4px; padding: 8px 12px;">
+                <button type="button" class="btn btn-ghost" onclick="window.disable2FA()" style="white-space: nowrap; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; font-size: 0.82rem; padding: 8px 12px;">
+                  Disable 2FA
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- OpenAI Project API Key Card -->
+          <div class="glass" style="margin-top: 16px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(6,182,212,0.3);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="key" style="width: 18px; height: 18px; color: #06b6d4;"></i>
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">OpenAI Project API Key</h3>
+                  <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Use your own OpenAI project key — you control the budget &amp; usage</p>
+                </div>
+              </div>
+              <span id="openai-key-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Using Platform Default</span>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+              <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
+                Create a <strong style="color: white;">Project</strong> in your <a href="https://platform.openai.com/settings/organization/projects" target="_blank" style="color: #06b6d4;">OpenAI dashboard</a>, generate a project API key, and paste it here.
+                Your calls will be billed directly to that project — giving you full cost visibility per tenant in one master account.
+              </p>
+            </div>
+
+            <div id="openai-key-display" style="display: none; background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-family: monospace; font-size: 0.85rem; color: #06b6d4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span id="openai-key-masked-text">—</span>
+              <button type="button" onclick="window.clearOpenAIKey()" style="background: none; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;">Remove Key</button>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: flex-end;">
+              <div style="flex: 1;">
+                <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 6px;">New API Key</label>
+                <input type="password" id="settings-openai-key" class="form-input" placeholder="sk-proj-..." autocomplete="off"
+                  style="font-family: monospace; letter-spacing: 1px;">
+              </div>
+              <button type="button" onclick="window.saveOpenAIKey()" class="btn btn-primary" style="padding: 10px 16px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save Key
+              </button>
+            </div>
+            <p class="text-muted" style="font-size: 0.75rem; margin-top: 8px;">Key is encrypted at rest and never sent back to your browser.</p>
+          </div>
+
         </section>
 
         <!-- PANE: SERVICES AND PRICING -->
@@ -2522,6 +2602,23 @@
                   <button type="button" class="btn btn-ghost" style="border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; font-size: 0.8rem; padding: 6px 12px; height: 32px; display: inline-flex; align-items: center; gap: 6px;" onclick="simulateLatePayment()">
                     <i data-lucide="alert-triangle" style="width: 14px; height: 14px;"></i> Simulate Late Payment Suspension
                   </button>
+                </div>
+
+                <!-- Notification Settings -->
+                <div style="margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 20px;">
+                  <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                    <i data-lucide="bell" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+                    <h4 style="font-size: 0.9rem; font-weight: 600; color: white; margin: 0;">Billing Notification Settings</h4>
+                  </div>
+                  <p class="text-muted" style="font-size: 0.8rem; line-height: 1.4; margin-bottom: 12px;">
+                    Set a WhatsApp number to receive payment reminders 7, 3, and 1 day before your due date. Leave blank to use your Agent Settings phone number.
+                  </p>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="tel" id="billing-notification-phone" class="form-input" placeholder="+60123456789 (with country code)" style="flex: 1; font-size: 0.85rem; padding: 8px 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveNotificationPhone()" style="white-space: nowrap; font-size: 0.8rem; padding: 8px 14px; display: flex; align-items: center; gap: 6px;">
+                      <i data-lucide="save" style="width: 13px; height: 13px;"></i> Save
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3397,6 +3494,31 @@
               </button>
             </div>
           </div>
+
+          <!-- Platform Owner Profile -->
+          <div class="section-card glass" style="margin-top: 24px; width: 100%;">
+            <div class="pane-section-header">
+              <h3>Platform Owner Profile</h3>
+              <p class="text-muted" style="font-size: 0.85rem;">Update your Super Admin login credentials</p>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Full Name</label>
+                <input type="text" id="admin-profile-name" class="form-input" placeholder="Super Admin">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Email Address</label>
+                <input type="email" id="admin-profile-email" class="form-input" placeholder="admin@yourdomain.com">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">New Password <span style="font-weight:400; opacity:0.6;">(leave blank to keep current)</span></label>
+                <input type="password" id="admin-profile-password" class="form-input" placeholder="••••••••">
+              </div>
+              <button class="btn btn-primary" onclick="saveAdminProfile()" style="white-space: nowrap; display: flex; align-items: center; gap: 8px; height: 42px;">
+                <i data-lucide="save" style="width: 15px; height: 15px;"></i> Save Profile
+              </button>
+            </div>
+          </div>
         </section>
 
         <!-- PANE: MOBILE SIMULATOR -->
@@ -3799,62 +3921,136 @@
     </div>
   </div>
 
-  <!-- MODAL: REGISTER / SIGN IN SAAS (placed at body level to avoid overflow trap) -->
+  <!-- MODAL: REGISTER / SIGN IN SAAS -->
   <div class="modal-overlay" id="saas-auth-modal" onclick="if(event.target===this) closeAuthModal()" style="z-index: 99999;">
-    <div class="modal-card glass" style="width: 90%; max-width: 400px;" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3 id="auth-modal-title">Sign In to VoiceDesk</h3>
+    <div class="modal-card glass" style="width: 90%; max-width: 420px; padding: 0; overflow: hidden;" onclick="event.stopPropagation()">
+
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15)); padding: 24px 28px 20px; border-bottom: 1px solid var(--border-glass); display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <h3 id="auth-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Sign In to VoiceDesk</h3>
+          <p style="margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted);">Secure access to your AI receptionist</p>
+        </div>
         <button class="btn-close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
       </div>
+
       <!-- Tab Toggles -->
-      <div class="auth-tabs mb-4" style="display: flex; border-bottom: 1px solid var(--border-glass); margin-bottom: 20px;">
-        <div class="auth-tab active" id="auth-tab-login" onclick="toggleAuthTab('login')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Login</div>
-        <div class="auth-tab" id="auth-tab-register" onclick="toggleAuthTab('register')" style="flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 500;">Create Account</div>
+      <div class="auth-tabs" style="display: flex; border-bottom: 1px solid var(--border-glass);">
+        <div class="auth-tab active" id="auth-tab-login" onclick="toggleAuthTab('login')" style="flex: 1; text-align: center; padding: 12px; cursor: pointer; color: var(--text-muted); font-weight: 500; font-size: 0.9rem; transition: all 0.2s;">Login</div>
+        <div class="auth-tab" id="auth-tab-register" onclick="toggleAuthTab('register')" style="flex: 1; text-align: center; padding: 12px; cursor: pointer; color: var(--text-muted); font-weight: 500; font-size: 0.9rem; transition: all 0.2s;">Create Account</div>
       </div>
+
       <!-- FORM: LOGIN -->
-      <form id="form-saas-login">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="login-email">Email Address</label>
-            <input type="email" id="login-email" class="form-input" required placeholder="e.g. manager@spa.com">
-          </div>
-          <div class="form-group">
-            <label for="login-password">Password</label>
-            <input type="password" id="login-password" class="form-input" required placeholder="••••••••">
-          </div>
+      <form id="form-saas-login" style="padding: 24px 28px;">
+        <!-- Google Sign-In -->
+        <div id="google-signin-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or sign in with email</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary btn-block">Log In</button>
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="form-input" required placeholder="e.g. manager@spa.com" autocomplete="email">
         </div>
+        <div class="form-group">
+          <label for="login-password" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Password</span>
+            <button type="button" onclick="showForgotPassword()" style="background: none; border: none; color: var(--color-primary); font-size: 0.78rem; cursor: pointer; padding: 0;">Forgot password?</button>
+          </label>
+          <input type="password" id="login-password" class="form-input" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top: 8px;">Log In</button>
       </form>
+
+      <!-- 2FA Step (hidden until needed) -->
+      <div id="auth-2fa-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="shield-check" style="width: 26px; height: 26px; color: #8b5cf6;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Two-Factor Authentication</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">Enter the 6-digit code from your authenticator app</p>
+        </div>
+        <form id="form-saas-2fa">
+          <input type="text" id="login-2fa-code" class="form-input" placeholder="000 000" maxlength="6" pattern="\d{6}" style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; margin-bottom: 16px;" autocomplete="one-time-code">
+          <button type="submit" class="btn btn-primary btn-block">Verify</button>
+          <button type="button" onclick="document.getElementById('auth-2fa-step').style.display='none'; document.getElementById('form-saas-login').style.display='block';" style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; cursor: pointer; width: 100%; margin-top: 10px;">← Back to Login</button>
+        </form>
+      </div>
+
+      <!-- Forgot Password Step (hidden until needed) -->
+      <div id="auth-forgot-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(6,182,212,0.15); border: 1px solid rgba(6,182,212,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="mail" style="width: 26px; height: 26px; color: #06b6d4;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Reset Password</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">Enter your email and we'll send a reset link</p>
+        </div>
+        <form id="form-forgot-password">
+          <input type="email" id="forgot-email" class="form-input" placeholder="your@email.com" required style="margin-bottom: 16px;" autocomplete="email">
+          <button type="submit" class="btn btn-primary btn-block">Send Reset Link</button>
+          <button type="button" onclick="document.getElementById('auth-forgot-step').style.display='none'; document.getElementById('form-saas-login').style.display='block';" style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; cursor: pointer; width: 100%; margin-top: 10px;">← Back to Login</button>
+        </form>
+      </div>
+
       <!-- FORM: REGISTER -->
-      <form id="form-saas-register" style="display: none;">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="reg-name">Your Full Name</label>
-            <input type="text" id="reg-name" class="form-input" required placeholder="e.g. John Doe">
-          </div>
-          <div class="form-group">
-            <label for="reg-email">Email Address</label>
-            <input type="email" id="reg-email" class="form-input" required placeholder="e.g. manager@spa.com">
-          </div>
-          <div class="form-group">
-            <label for="reg-password">Password</label>
-            <input type="password" id="reg-password" class="form-input" required placeholder="At least 6 characters">
-          </div>
-          <div class="form-group">
-            <label for="reg-company">Company Name</label>
-            <input type="text" id="reg-company" class="form-input" required placeholder="e.g. Aura Wellness Spa">
-          </div>
+      <form id="form-saas-register" style="display: none; padding: 24px 28px;">
+        <!-- Google Sign-Up -->
+        <div id="google-signup-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or register with email</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary btn-block">Register &amp; Start Sandbox</button>
+        <div class="form-group">
+          <label for="reg-name">Your Full Name</label>
+          <input type="text" id="reg-name" class="form-input" required placeholder="e.g. John Doe" autocomplete="name">
         </div>
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <input type="email" id="reg-email" class="form-input" required placeholder="e.g. manager@spa.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password <span style="color: var(--text-muted); font-size: 0.75rem;">(min. 8 characters)</span></label>
+          <input type="password" id="reg-password" class="form-input" required placeholder="At least 8 characters" minlength="8" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reg-company">Company Name</label>
+          <input type="text" id="reg-company" class="form-input" required placeholder="e.g. Aura Wellness Spa" autocomplete="organization">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Register &amp; Start Sandbox</button>
       </form>
+
     </div>
   </div>
 
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <!-- Local Script Injection -->
-  <script src="app.js?v=1.0.4"></script>
+  <script src="app.js?v=1.0.7"></script>
+  <script>
+    // Initialize Google Sign-In buttons after GSI loads
+    window.addEventListener('load', () => {
+      const GOOGLE_CLIENT_ID = '24852228544-ot87litjmt1r5u17pjrs7reoethmsab7.apps.googleusercontent.com';
+      function initGoogleButtons() {
+        if (!window.google) return setTimeout(initGoogleButtons, 300);
+        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: window.handleGoogleCredential });
+        const loginBtn = document.getElementById('google-signin-btn');
+        const registerBtn = document.getElementById('google-signup-btn');
+        if (loginBtn) google.accounts.id.renderButton(loginBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signin_with' });
+        if (registerBtn) google.accounts.id.renderButton(registerBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
+      }
+      initGoogleButtons();
+    });
+
+    // Show forgot password step
+    window.showForgotPassword = function() {
+      document.getElementById('form-saas-login').style.display = 'none';
+      document.getElementById('auth-forgot-step').style.display = 'block';
+    };
+  </script>
 </body>
 </html>

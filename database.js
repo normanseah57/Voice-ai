@@ -1,6 +1,47 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+dotenv.config();
+
+// =============================================================
+// AES-256-GCM helpers for sensitive fields (e.g. OpenAI API keys)
+// =============================================================
+const ENC_KEY = Buffer.from(
+  crypto.createHash('sha256').update(process.env.JWT_SECRET || 'default-fallback-secret').digest('hex'),
+  'hex'
+).slice(0, 32);
+
+export const encryptField = (text) => {
+  if (!text) return '';
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+};
+
+export const decryptField = (stored) => {
+  if (!stored) return '';
+  try {
+    const [ivHex, tagHex, encHex] = stored.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const encrypted = Buffer.from(encHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(encrypted) + decipher.final('utf8');
+  } catch (e) {
+    return ''; // corrupted or wrong key
+  }
+};
+
+export const maskApiKey = (key) => {
+  if (!key || key.length < 8) return '';
+  return key.slice(0, 10) + '****' + key.slice(-4);
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -149,6 +190,47 @@ export const initDb = async () => {
     // Column already exists, ignore
   }
 
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN reminder_7_sent INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN reminder_3_sent INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN reminder_1_sent INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  try {
+    await run('ALTER TABLE tenants ADD COLUMN notification_phone TEXT DEFAULT NULL');
+  } catch (e) { /* already exists */ }
+
+  // Security columns on tenant_users
+  const secCols = [
+    "ALTER TABLE tenant_users ADD COLUMN totp_secret TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
+    "ALTER TABLE tenant_users ADD COLUMN google_id TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0",
+    "ALTER TABLE tenant_users ADD COLUMN locked_until DATETIME DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN password_is_hashed INTEGER DEFAULT 0"
+  ];
+  for (const sql of secCols) {
+    try { await run(sql); } catch (e) { /* already exists */ }
+  }
+
+  // Password reset tokens table
+  await run(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Global Settings Table
   await run(`
     CREATE TABLE IF NOT EXISTS global_settings (
@@ -231,6 +313,12 @@ export const initDb = async () => {
 
   try {
     await run('ALTER TABLE appointments ADD COLUMN party_size INTEGER DEFAULT 1');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    await run('ALTER TABLE settings ADD COLUMN openai_api_key TEXT DEFAULT NULL');
   } catch (e) {
     // Column already exists, ignore
   }
@@ -762,6 +850,21 @@ export const initDb = async () => {
 // SAAS TENANCY OPERATIONS
 // ==========================================
 
+export const getTenantById = async (id) => {
+  return get('SELECT * FROM tenants WHERE id = ?', [id]);
+};
+
+export const getTenantByEmail = async (email) => {
+  return get('SELECT id, email FROM tenants WHERE email = ?', [email]);
+};
+
+export const updateTenantProfile = async (id, { name, email, password_hash }) => {
+  await run('UPDATE tenants SET name = ?, email = ?, password_hash = ? WHERE id = ?', [name, email, password_hash, id]);
+  // Keep tenant_users in sync for the owner row
+  await run('UPDATE tenant_users SET name = ?, email = ?, password_hash = ? WHERE tenant_id = ? AND role = ?', [name, email, password_hash, id, 'owner']);
+  return { id, name, email };
+};
+
 export const registerTenant = async ({ name, email, password, company_name }) => {
   const existingTenant = await get('SELECT id FROM tenants WHERE email = ?', [email]);
   const existingUser = await get('SELECT id FROM tenant_users WHERE email = ?', [email]);
@@ -769,11 +872,14 @@ export const registerTenant = async ({ name, email, password, company_name }) =>
     throw new Error('Email address already registered.');
   }
 
+  // Hash password with bcrypt
+  const passwordHash = await bcrypt.hash(password, 12);
+
   // Insert Tenant
   const result = await run(`
     INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status)
     VALUES (?, ?, ?, ?, 'free', 'active')
-  `, [name, email, password, company_name]);
+  `, [name, email, passwordHash, company_name]);
 
   const tenantId = result.id;
 
@@ -825,9 +931,9 @@ Conversational Style:
 
   // Insert primary user (owner) into tenant_users
   await run(`
-    INSERT INTO tenant_users (tenant_id, name, email, password_hash, role, working_hours, break_periods, appointment_gap)
-    VALUES (?, ?, ?, ?, 'owner', ?, ?, 15)
-  `, [tenantId, name, email, password, defaultWorkingHours, defaultBreakPeriods]);
+    INSERT INTO tenant_users (tenant_id, name, email, password_hash, role, working_hours, break_periods, appointment_gap, password_is_hashed)
+    VALUES (?, ?, ?, ?, 'owner', ?, ?, 15, 1)
+  `, [tenantId, name, email, passwordHash, defaultWorkingHours, defaultBreakPeriods]);
 
   // Insert demo CRM data for this new tenant
   const c1 = await run(`
@@ -857,13 +963,44 @@ Conversational Style:
 
 export const authenticateTenant = async (email, password) => {
   const user = await get('SELECT * FROM tenant_users WHERE email = ?', [email]);
-  if (!user || user.password_hash !== password) {
+  if (!user) throw new Error('Invalid email or password.');
+
+  // Check brute-force lock
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    const mins = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
+    throw new Error(`Account temporarily locked. Try again in ${mins} minute(s).`);
+  }
+
+  // Verify password — bcrypt or legacy plaintext with auto-upgrade
+  let passwordValid = false;
+  if (user.password_is_hashed) {
+    passwordValid = await bcrypt.compare(password, user.password_hash);
+  } else {
+    passwordValid = (user.password_hash === password);
+    if (passwordValid) {
+      // Transparently upgrade to bcrypt
+      const hash = await bcrypt.hash(password, 12);
+      await run('UPDATE tenant_users SET password_hash = ?, password_is_hashed = 1 WHERE id = ?', [hash, user.id]);
+    }
+  }
+
+  if (!passwordValid) {
+    const failures = (user.failed_login_attempts || 0) + 1;
+    if (failures >= 5) {
+      const lockUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await run('UPDATE tenant_users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?', [failures, lockUntil, user.id]);
+      throw new Error('Too many failed attempts. Account locked for 15 minutes.');
+    }
+    await run('UPDATE tenant_users SET failed_login_attempts = ? WHERE id = ?', [failures, user.id]);
     throw new Error('Invalid email or password.');
   }
+
+  // Clear failures on success
+  await run('UPDATE tenant_users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?', [user.id]);
+
   const tenant = await get('SELECT * FROM tenants WHERE id = ?', [user.tenant_id]);
-  if (!tenant) {
-    throw new Error('Workspace not found.');
-  }
+  if (!tenant) throw new Error('Workspace not found.');
+
   return {
     id: tenant.id,
     userId: user.id,
@@ -874,8 +1011,77 @@ export const authenticateTenant = async (email, password) => {
     billing_cycle: tenant.billing_cycle || 'monthly',
     subscription_status: tenant.subscription_status,
     is_admin: tenant.is_admin,
-    role: user.role
+    role: user.role,
+    totp_enabled: user.totp_enabled === 1,
+    totp_secret: user.totp_secret
   };
+};
+
+// =============================================
+// GOOGLE OAUTH
+// =============================================
+export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
+  // Look up by google_id first
+  let user = await get('SELECT tu.*, t.* FROM tenant_users tu JOIN tenants t ON t.id = tu.tenant_id WHERE tu.google_id = ?', [googleId]);
+  if (!user) {
+    // Try to link by email
+    user = await get('SELECT tu.*, t.id as tenant_row_id FROM tenant_users tu JOIN tenants t ON t.id = tu.tenant_id WHERE tu.email = ?', [email]);
+    if (user) {
+      await run('UPDATE tenant_users SET google_id = ? WHERE id = ?', [googleId, user.id]);
+    }
+  }
+  if (user) {
+    const tenant = await get('SELECT * FROM tenants WHERE id = ?', [user.tenant_id]);
+    return { existing: true, id: tenant.id, userId: user.id, name: user.name, email: user.email, company_name: tenant.company_name, subscription_tier: tenant.subscription_tier, billing_cycle: tenant.billing_cycle || 'monthly', subscription_status: tenant.subscription_status, is_admin: tenant.is_admin, role: user.role, totp_enabled: false };
+  }
+  // Create new account
+  const randomPw = crypto.randomBytes(24).toString('hex');
+  const hash = await bcrypt.hash(randomPw, 12);
+  const tRes = await run(`INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, 'free', 'active')`, [name, email, hash, name]);
+  const tenantId = tRes.id;
+  const defHours = JSON.stringify({ monday:{active:true,start:'09:00',end:'17:00'}, tuesday:{active:true,start:'09:00',end:'17:00'}, wednesday:{active:true,start:'09:00',end:'17:00'}, thursday:{active:true,start:'09:00',end:'17:00'}, friday:{active:true,start:'09:00',end:'17:00'}, saturday:{active:false,start:'10:00',end:'14:00'}, sunday:{active:false,start:'10:00',end:'14:00'} });
+  await run(`INSERT INTO settings (tenant_id, company_name, business_hours, services_offered, openai_model, system_prompt, twilio_phone_number, transfer_phone_number, resources_list, voice, voice_accent, agent_name, working_hours, break_periods, appointment_gap, max_call_duration, max_no_speech_timeout) VALUES (?, ?, 'Mon-Fri 9am-6pm', 'General Services', 'gpt-4o-realtime-preview-2024-12-17', 'You are a helpful receptionist.', '', '', '', 'alloy', 'default', 'Aura', ?, '[]', 15, 10, 30)`, [tenantId, name, defHours]);
+  const uRes = await run(`INSERT INTO tenant_users (tenant_id, name, email, password_hash, role, google_id, password_is_hashed) VALUES (?, ?, ?, ?, 'owner', ?, 1)`, [tenantId, name, email, hash, googleId]);
+  await logTenantActivity(tenantId, 'registration', `New workspace created via Google Sign-In for ${name} (${email})`);
+  return { existing: false, id: tenantId, userId: uRes.id, name, email, company_name: name, subscription_tier: 'free', billing_cycle: 'monthly', subscription_status: 'active', is_admin: 0, role: 'owner', totp_enabled: false };
+};
+
+// =============================================
+// FORGOT PASSWORD / RESET
+// =============================================
+export const createPasswordResetToken = async (email) => {
+  const user = await get('SELECT id FROM tenant_users WHERE email = ?', [email]);
+  if (!user) return null; // Don't reveal if email exists
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+  await run('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]); // clear old tokens
+  await run('INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)', [user.id, token, expiresAt]);
+  return { token, email, userId: user.id };
+};
+
+export const resetPasswordWithToken = async (token, newPassword) => {
+  const record = await get('SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0', [token]);
+  if (!record) throw new Error('Invalid or expired reset link.');
+  if (new Date(record.expires_at) < new Date()) throw new Error('Reset link has expired. Please request a new one.');
+  const hash = await bcrypt.hash(newPassword, 12);
+  await run('UPDATE tenant_users SET password_hash = ?, password_is_hashed = 1, failed_login_attempts = 0, locked_until = NULL WHERE id = ?', [hash, record.user_id]);
+  await run('UPDATE password_reset_tokens SET used = 1 WHERE id = ?', [record.id]);
+  return { success: true };
+};
+
+// =============================================
+// TOTP 2FA
+// =============================================
+export const enableTotp = async (userId, secret) => {
+  await run('UPDATE tenant_users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?', [secret, userId]);
+};
+
+export const disableTotp = async (userId) => {
+  await run('UPDATE tenant_users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?', [userId]);
+};
+
+export const getTotpUser = async (userId) => {
+  return get('SELECT totp_secret, totp_enabled, email, name FROM tenant_users WHERE id = ?', [userId]);
 };
 
 export const getGlobalOverageRate = async () => {
@@ -1002,7 +1208,8 @@ export const getSettings = async (tenant_id) => {
     max_call_duration: r.max_call_duration !== null && r.max_call_duration !== undefined ? r.max_call_duration : 10,
     max_no_speech_timeout: r.max_no_speech_timeout !== null && r.max_no_speech_timeout !== undefined ? r.max_no_speech_timeout : 30,
     website_url: r.website_url || '',
-    crawled_content: r.crawled_content || ''
+    crawled_content: r.crawled_content || '',
+    openai_api_key: decryptField(r.openai_api_key || '')
   };
 };
 
@@ -1020,6 +1227,16 @@ export const updateSettings = async (tenant_id, settingsObj) => {
     { name: 'Lunch', start: '12:00', end: '13:00' }
   ]);
 
+  // Encrypt the OpenAI API key before storing — only update if a new value was passed
+  let encryptedKey = undefined;
+  if (settingsObj.openai_api_key !== undefined) {
+    encryptedKey = settingsObj.openai_api_key ? encryptField(settingsObj.openai_api_key) : '';
+  } else {
+    // Preserve existing encrypted key
+    const existing = await get('SELECT openai_api_key FROM settings WHERE tenant_id = ?', [tenant_id]);
+    encryptedKey = existing?.openai_api_key || '';
+  }
+
   await run(`
     INSERT OR REPLACE INTO settings (
       tenant_id, company_name, business_hours, services_offered, openai_model, system_prompt, 
@@ -1027,9 +1244,9 @@ export const updateSettings = async (tenant_id, settingsObj) => {
       working_hours, break_periods, appointment_gap, system_mode,
       payment_gateway_provider, stripe_publishable_key, stripe_secret_key,
       max_call_duration, max_no_speech_timeout,
-      website_url, crawled_content
+      website_url, crawled_content, openai_api_key
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     tenant_id,
     settingsObj.company_name,
@@ -1053,7 +1270,8 @@ export const updateSettings = async (tenant_id, settingsObj) => {
     settingsObj.max_call_duration !== undefined && settingsObj.max_call_duration !== null ? parseInt(settingsObj.max_call_duration) : 10,
     settingsObj.max_no_speech_timeout !== undefined && settingsObj.max_no_speech_timeout !== null ? parseInt(settingsObj.max_no_speech_timeout) : 30,
     settingsObj.website_url || '',
-    settingsObj.crawled_content || ''
+    settingsObj.crawled_content || '',
+    encryptedKey
   ]);
   await logTenantActivity(tenant_id, 'settings_update', `AI settings updated (Receptionist: "${settingsObj.agent_name || 'Aura'}", Voice: "${settingsObj.voice || 'alloy'}", Accent: "${settingsObj.voice_accent || 'default'}")`);
   return getSettings(tenant_id);
@@ -2231,6 +2449,85 @@ export const checkSubscriptionGracePeriodsAndSuspend = async () => {
     await logTenantActivity(tenant.id, 'suspension_toggle', `Workspace automatically suspended by system due to late payment (due date was ${tenant.next_payment_due})`);
   }
   return overdueTenants;
+};
+
+/**
+ * Returns tenants that need a payment reminder today (7, 3, or 1 day before due).
+ * Joins with settings to get the notification phone number.
+ * Only returns tenants where the corresponding reminder flag has NOT been sent yet.
+ */
+export const checkAndSendPaymentReminders = async () => {
+  const now = new Date();
+  const toRemind = [];
+
+  // Fetch all paid active tenants with upcoming payment due dates (within 8 days)
+  const candidates = await all(`
+    SELECT t.id, t.name, t.email, t.company_name, t.next_payment_due,
+           t.reminder_7_sent, t.reminder_3_sent, t.reminder_1_sent,
+           t.notification_phone,
+           s.twilio_phone_number AS settings_phone
+    FROM tenants t
+    LEFT JOIN settings s ON s.tenant_id = t.id
+    WHERE t.subscription_tier != 'free'
+      AND t.subscription_status = 'active'
+      AND t.next_payment_due IS NOT NULL
+      AND t.next_payment_due > datetime('now')
+      AND t.next_payment_due <= datetime('now', '+8 days')
+  `);
+
+  for (const tenant of candidates) {
+    const dueDate = new Date(tenant.next_payment_due);
+    const diffMs = dueDate - now;
+    const daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const phone = tenant.notification_phone || tenant.settings_phone || null;
+
+    // Check each threshold
+    const checks = [
+      { days: 7, flag: 'reminder_7_sent', sent: tenant.reminder_7_sent },
+      { days: 3, flag: 'reminder_3_sent', sent: tenant.reminder_3_sent },
+      { days: 1, flag: 'reminder_1_sent', sent: tenant.reminder_1_sent },
+    ];
+
+    for (const check of checks) {
+      if (daysLeft <= check.days && daysLeft > check.days - 1 && !check.sent) {
+        toRemind.push({
+          id: tenant.id,
+          name: tenant.name,
+          email: tenant.email,
+          company_name: tenant.company_name || tenant.name,
+          next_payment_due: tenant.next_payment_due,
+          daysLeft: check.days,
+          flag: check.flag,
+          phone
+        });
+      }
+    }
+  }
+
+  return toRemind;
+};
+
+/**
+ * Mark a specific reminder as sent so it doesn't fire again.
+ * flag is one of: 'reminder_7_sent', 'reminder_3_sent', 'reminder_1_sent'
+ */
+export const markReminderSent = async (tenant_id, flag) => {
+  await run(`UPDATE tenants SET ${flag} = 1 WHERE id = ?`, [tenant_id]);
+};
+
+/**
+ * Reset all reminder flags to 0 — call this when a tenant renews their subscription.
+ */
+export const resetPaymentReminderFlags = async (tenant_id) => {
+  await run(`UPDATE tenants SET reminder_7_sent = 0, reminder_3_sent = 0, reminder_1_sent = 0 WHERE id = ?`, [tenant_id]);
+};
+
+/**
+ * Save/update the notification phone for a tenant.
+ */
+export const updateNotificationPhone = async (tenant_id, phone) => {
+  await run('UPDATE tenants SET notification_phone = ? WHERE id = ?', [phone || null, tenant_id]);
+  return { tenant_id, notification_phone: phone };
 };
 
 export const simulateLatePaymentInDb = async (tenant_id) => {

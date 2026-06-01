@@ -24,20 +24,19 @@ let loggedInUserProfile = null;
 const originalFetch = window.fetch;
 window.fetch = async function (url, options = {}) {
   const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : '');
-  
+
   if (urlStr.startsWith('/api/') && !urlStr.startsWith('/api/auth/')) {
     options.headers = options.headers || {};
-    
-    if (saasToken) {
+    const authVal = saasToken ? (saasToken.startsWith('Bearer ') ? saasToken : `Bearer ${saasToken}`) : null;
+    if (authVal) {
       if (options.headers instanceof Headers) {
-        options.headers.set('Authorization', saasToken);
+        options.headers.set('Authorization', authVal);
       } else if (Array.isArray(options.headers)) {
-        options.headers.push(['Authorization', saasToken]);
+        options.headers.push(['Authorization', authVal]);
       } else {
-        options.headers['Authorization'] = saasToken;
+        options.headers['Authorization'] = authVal;
       }
     }
-    
     // Inject Impersonation header if active
     if (window.impersonateTenantId) {
       if (options.headers instanceof Headers) {
@@ -49,10 +48,11 @@ window.fetch = async function (url, options = {}) {
       }
     }
   }
-  
+
   const response = await originalFetch(url, options);
   if (response.status === 401) {
-    logout();
+    // Don't auto-logout on auth endpoints
+    if (!urlStr.includes('/api/auth/')) logout();
   }
   return response;
 };
@@ -241,6 +241,7 @@ function switchTab(tabId) {
   } else if (tabId === 'settings') {
     fetchSettings();
     fetchPersonalCalendar();
+    loadTeamMembers();
     const mode = document.getElementById('settings-system-mode')?.value || 'service';
     if (mode === 'restaurant') {
       fetchRestaurantTables();
@@ -253,6 +254,10 @@ function switchTab(tabId) {
     fetchCrmData();
   } else if (tabId === 'billing') {
     fetchBillingDetails();
+    loadNotificationPhone();
+  } else if (tabId === 'settings') {
+    if (window.load2FAStatus) window.load2FAStatus();
+    loadOpenAIKeyStatus();
   } else if (tabId === 'services') {
     fetchServicesCatalog();
   } else if (tabId === 'accounting') {
@@ -389,6 +394,94 @@ formTriggerOutbound.addEventListener('submit', async (e) => {
     btnSubmit.innerHTML = originalText;
   }
 });
+
+// Click-to-call from Call History — pre-fills outbound modal
+window.callBackNumber = function(phoneNumber, hint) {
+  if (!phoneNumber || phoneNumber === 'unknown') {
+    showToast('Cannot call back — number is unknown.', 'error');
+    return;
+  }
+  if (outboundPhoneInput) outboundPhoneInput.value = phoneNumber;
+  if (outboundNameInput && hint) outboundNameInput.value = '';
+  toggleOutboundModal(true);
+};
+
+// -------------------------------------------------------------
+// OPENAI PROJECT API KEY MANAGEMENT
+// -------------------------------------------------------------
+async function loadOpenAIKeyStatus() {
+  try {
+    const res = await fetch('/api/settings');
+    const s = await res.json();
+    const badge = document.getElementById('openai-key-status-badge');
+    const display = document.getElementById('openai-key-display');
+    const maskedText = document.getElementById('openai-key-masked-text');
+    if (s.openai_api_key_set && s.openai_api_key_masked) {
+      if (badge) {
+        badge.textContent = '✓ Custom Key Active';
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#10b981';
+        badge.style.border = '1px solid rgba(16,185,129,0.3)';
+      }
+      if (display) display.style.display = 'flex';
+      if (maskedText) maskedText.textContent = s.openai_api_key_masked;
+    } else {
+      if (badge) {
+        badge.textContent = 'Using Platform Default';
+        badge.style.background = 'rgba(100,116,139,0.2)';
+        badge.style.color = '#94a3b8';
+        badge.style.border = '1px solid rgba(100,116,139,0.3)';
+      }
+      if (display) display.style.display = 'none';
+    }
+  } catch (e) { console.error('Failed to load OpenAI key status:', e); }
+}
+
+window.saveOpenAIKey = async function() {
+  const input = document.getElementById('settings-openai-key');
+  const key = input ? input.value.trim() : '';
+  if (!key) {
+    showToast('No key entered', 'Please paste your OpenAI project API key first.', 'warning');
+    return;
+  }
+  if (!key.startsWith('sk-')) {
+    showToast('Invalid Key', 'OpenAI API keys start with "sk-". Please check and try again.', 'danger');
+    return;
+  }
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_api_key: key })
+    });
+    if (res.ok) {
+      if (input) input.value = '';
+      await loadOpenAIKeyStatus();
+      showToast('Key Saved', 'Your OpenAI project API key has been encrypted and saved.', 'success');
+    } else {
+      showToast('Save Failed', 'Could not save the API key.', 'danger');
+    }
+  } catch (e) {
+    showToast('Error', 'Network error saving key.', 'danger');
+  }
+};
+
+window.clearOpenAIKey = async function() {
+  if (!confirm('Remove your OpenAI project key? Calls will fall back to the platform default key.')) return;
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_api_key: '' })
+    });
+    if (res.ok) {
+      await loadOpenAIKeyStatus();
+      showToast('Key Removed', 'Reverted to platform default OpenAI key.', 'success');
+    }
+  } catch (e) {
+    showToast('Error', 'Could not remove key.', 'danger');
+  }
+};
 
 // -------------------------------------------------------------
 // WEBSOCKET (REAL-TIME EVENTS)
@@ -1487,7 +1580,12 @@ async function fetchCallLogs() {
                 <i data-lucide="${log.direction === 'inbound' ? 'phone-incoming' : 'phone-outgoing'}"></i>
               </div>
               <div class="history-card-info">
-                <h4>${formatPhoneNumber(log.phone_number)}</h4>
+                <h4 style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;" 
+                    onclick="event.stopPropagation(); callBackNumber('${log.phone_number}', '${escapeHtml(log.summary ? log.summary.split(' ').slice(0,3).join(' ') : '')}');"
+                    title="Click to call this number">
+                  ${formatPhoneNumber(log.phone_number)}
+                  <i data-lucide="phone-outgoing" style="width:13px;height:13px;color:var(--color-primary);opacity:0.8;"></i>
+                </h4>
                 <p class="text-muted">${formatDate(log.created_at)} at ${formatTime(log.created_at)}</p>
               </div>
             </div>
@@ -2847,18 +2945,22 @@ window.toggleAddDealModal = toggleAddDealModal;
 window.toggleInsightsModal = toggleInsightsModal;
 
 // Authentication Forms Listeners
+// Temp store for 2FA pending login
+let pending2FATempToken = null;
+
 document.getElementById('form-saas-login').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
-  
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+
   try {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    
     const data = await response.json();
     if (response.ok && data.success) {
       saasToken = data.token;
@@ -2867,14 +2969,112 @@ document.getElementById('form-saas-login').addEventListener('submit', async (e) 
       localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
       window.closeAuthModal();
       initAuthenticatedSession();
+    } else if (data.requires2FA) {
+      // Show 2FA step
+      pending2FATempToken = data.tempToken;
+      document.getElementById('form-saas-login').style.display = 'none';
+      const twoFAStep = document.getElementById('auth-2fa-step');
+      if (twoFAStep) twoFAStep.style.display = 'block';
     } else {
-      alert(`Login failed: ${data.error || 'Check your credentials.'}`);
+      showToast(data.error || 'Login failed. Check your credentials.', 'error');
     }
   } catch (err) {
-    console.error(err);
-    alert('Error connecting to authentication service.');
+    showToast('Error connecting to authentication service.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
   }
 });
+
+// 2FA verification submit
+const form2FA = document.getElementById('form-saas-2fa');
+if (form2FA) {
+  form2FA.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('login-2fa-code').value.trim();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+    try {
+      const res = await fetch('/api/auth/login/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tempToken: pending2FATempToken, code })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        saasToken = data.token;
+        localStorage.setItem('saas_token', saasToken);
+        pending2FATempToken = null;
+        window.closeAuthModal();
+        // Reload tenant info
+        const profileRes = await fetch('/api/profile');
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          currentTenant = { ...currentTenant, ...profile };
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        }
+        initAuthenticatedSession();
+      } else {
+        showToast(data.error || 'Invalid code.', 'error');
+      }
+    } catch (err) {
+      showToast('Error verifying 2FA code.', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Verify'; }
+    }
+  });
+}
+
+// Google Sign-In callback (called by Google GSI)
+window.handleGoogleCredential = async function(response) {
+  try {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      saasToken = data.token;
+      localStorage.setItem('saas_token', saasToken);
+      currentTenant = data.tenant;
+      localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+      window.closeAuthModal();
+      initAuthenticatedSession();
+      if (data.isNew) showToast('Welcome to VoiceDesk! Your account has been created.', 'success');
+    } else {
+      showToast(data.error || 'Google Sign-In failed.', 'error');
+    }
+  } catch (err) {
+    showToast('Google Sign-In error. Please try again.', 'error');
+  }
+};
+
+// Forgot password form
+const formForgot = document.getElementById('form-forgot-password');
+if (formForgot) {
+  formForgot.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('forgot-email').value.trim();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      showToast(data.message || 'Reset email sent.', 'success');
+      // Show back to login
+      document.getElementById('auth-forgot-step').style.display = 'none';
+      document.getElementById('form-saas-login').style.display = 'block';
+    } catch (err) {
+      showToast('Error sending reset email.', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Send Reset Link'; }
+    }
+  });
+}
 
 document.getElementById('form-saas-register').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -2882,14 +3082,15 @@ document.getElementById('form-saas-register').addEventListener('submit', async (
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
   const companyName = document.getElementById('reg-company').value.trim();
-  
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
+
   try {
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password, companyName })
     });
-    
     const data = await response.json();
     if (response.ok && data.success) {
       // Auto login
@@ -2908,11 +3109,12 @@ document.getElementById('form-saas-register').addEventListener('submit', async (
         initAuthenticatedSession();
       }
     } else {
-      alert(`Registration failed: ${data.error}`);
+      showToast(data.error || 'Registration failed.', 'error');
     }
   } catch (err) {
-    console.error(err);
-    alert('Error connecting to registration service.');
+    showToast('Error connecting to registration service.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Register & Start Sandbox'; }
   }
 });
 
@@ -3013,6 +3215,7 @@ document.getElementById('form-overage-reminder').addEventListener('submit', asyn
 // =============================================================
 
 async function fetchAdminDashboard() {
+  loadAdminProfileFields();
   // ---- Global SaaS Config ----
   try {
     const configResponse = await fetch('/api/admin/global-settings');
@@ -3837,6 +4040,188 @@ window.saveGlobalSettings = async function() {
   } catch (err) {
     console.error(err);
     alert('Error saving global settings.');
+  }
+};
+
+// =============================================================
+// SUPER ADMIN PROFILE
+// =============================================================
+
+window.saveAdminProfile = async function() {
+  const name = document.getElementById('admin-profile-name')?.value?.trim();
+  const email = document.getElementById('admin-profile-email')?.value?.trim();
+  const new_password = document.getElementById('admin-profile-password')?.value || '';
+
+  if (!name || !email) {
+    showToast('Name and email are required.', 'error');
+    return;
+  }
+
+  try {
+    const btn = document.querySelector('[onclick="saveAdminProfile()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+    const res = await fetch('/api/admin/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, new_password })
+    });
+    const result = await res.json();
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="save" style="width:15px;height:15px;"></i> Save Profile'; initIcons(); }
+
+    if (res.ok && result.success) {
+      document.getElementById('admin-profile-password').value = '';
+      showToast('Profile updated successfully. Please log in again if you changed your email or password.', 'success');
+    } else {
+      showToast(result.error || 'Failed to update profile.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Error saving profile.', 'error');
+  }
+};
+
+async function loadAdminProfileFields() {
+  try {
+    const res = await fetch('/api/profile');
+    if (!res.ok) return;
+    const profile = await res.json();
+    const nameEl = document.getElementById('admin-profile-name');
+    const emailEl = document.getElementById('admin-profile-email');
+    if (nameEl && profile.name) nameEl.value = profile.name;
+    if (emailEl && profile.email) emailEl.value = profile.email;
+  } catch (e) { /* silently ignore */ }
+}
+
+// =============================================================
+// WORKSPACE TEAM MEMBERS
+// =============================================================
+
+async function loadTeamMembers() {
+  const container = document.getElementById('team-list-container');
+  if (!container) return;
+  container.innerHTML = '<p class="text-muted" style="font-size:0.8rem;padding:8px 0;">Loading...</p>';
+
+  try {
+    const res = await fetch('/api/team');
+    if (!res.ok) throw new Error('Failed to load team.');
+    const members = await res.json();
+
+    if (!members || members.length === 0) {
+      container.innerHTML = '<p class="text-muted" style="font-size:0.8rem;padding:8px 0;text-align:center;">No team members yet. Add one above.</p>';
+      return;
+    }
+
+    container.innerHTML = members.map(m => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border-glass);">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--color-primary),var(--color-secondary));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:white;flex-shrink:0;">
+            ${(m.name || '?').charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:0.85rem;color:white;">${m.name}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">${m.email}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:0.7rem;padding:3px 8px;border-radius:12px;font-weight:600;background:${m.role === 'owner' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)'};color:${m.role === 'owner' ? '#10b981' : '#818cf8'};">${m.role === 'owner' ? 'Owner' : 'Member'}</span>
+          ${m.role !== 'owner' ? `<button onclick="removeTeamMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.75rem;display:flex;align-items:center;gap:4px;">
+            <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Remove
+          </button>` : '<span style="font-size:0.75rem;color:var(--text-muted);">You</span>'}
+        </div>
+      </div>
+    `).join('');
+    initIcons();
+  } catch (err) {
+    container.innerHTML = `<p class="text-muted" style="font-size:0.8rem;">${err.message}</p>`;
+  }
+}
+
+window.removeTeamMember = async function(id, name) {
+  if (!confirm(`Remove ${name} from the workspace? They will no longer be able to log in.`)) return;
+  try {
+    const res = await fetch(`/api/team/${id}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (res.ok) {
+      showToast(`${name} has been removed.`, 'success');
+      loadTeamMembers();
+    } else {
+      showToast(result.error || 'Failed to remove member.', 'error');
+    }
+  } catch (err) {
+    showToast('Error removing team member.', 'error');
+  }
+};
+
+window.openAddMemberForm = function() {
+  const existing = document.getElementById('add-member-form-inline');
+  if (existing) { existing.remove(); return; }
+
+  const container = document.getElementById('team-list-container');
+  if (!container) return;
+
+  const form = document.createElement('div');
+  form.id = 'add-member-form-inline';
+  form.style.cssText = 'padding:14px;background:rgba(6,182,212,0.05);border:1px solid var(--color-primary);border-radius:10px;margin-bottom:10px;';
+  form.innerHTML = `
+    <h4 style="font-size:0.85rem;color:white;margin:0 0 12px;">Add New Team Member</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div>
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Full Name</label>
+        <input type="text" id="new-member-name" class="form-input" placeholder="Jane Smith" style="font-size:0.85rem;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Role</label>
+        <select id="new-member-role" class="form-input" style="font-size:0.85rem;padding:8px 12px;">
+          <option value="member">Member</option>
+          <option value="owner">Owner</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Email</label>
+        <input type="email" id="new-member-email" class="form-input" placeholder="jane@company.com" style="font-size:0.85rem;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Password</label>
+        <input type="password" id="new-member-password" class="form-input" placeholder="Set a login password" style="font-size:0.85rem;padding:8px 12px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('add-member-form-inline').remove()" style="padding:6px 14px;background:transparent;border:1px solid var(--border-glass);color:var(--text-muted);border-radius:6px;cursor:pointer;font-size:0.8rem;">Cancel</button>
+      <button type="button" onclick="submitNewMember()" class="btn btn-primary" style="padding:6px 14px;font-size:0.8rem;">Add Member</button>
+    </div>
+  `;
+  container.prepend(form);
+};
+
+window.submitNewMember = async function() {
+  const name = document.getElementById('new-member-name')?.value?.trim();
+  const email = document.getElementById('new-member-email')?.value?.trim();
+  const password = document.getElementById('new-member-password')?.value;
+  const role = document.getElementById('new-member-role')?.value || 'member';
+
+  if (!name || !email || !password) {
+    showToast('Name, email, and password are required.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/team', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password, role })
+    });
+    const result = await res.json();
+    if (res.ok) {
+      document.getElementById('add-member-form-inline')?.remove();
+      showToast(`${name} added to the workspace.`, 'success');
+      loadTeamMembers();
+    } else {
+      showToast(result.error || 'Failed to add member.', 'error');
+    }
+  } catch (err) {
+    showToast('Error adding team member.', 'error');
   }
 };
 
@@ -8222,4 +8607,140 @@ window.exitImpersonationMode = function() {
   switchTab('admin');
 };
 
+// =============================================================
+// BILLING NOTIFICATION PHONE (WhatsApp Payment Reminders)
+// =============================================================
 
+window.saveNotificationPhone = async function() {
+  const phone = document.getElementById('billing-notification-phone')?.value?.trim() || null;
+  try {
+    const res = await fetch('/api/billing/notification-phone', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_phone: phone })
+    });
+    const result = await res.json();
+    if (res.ok && result.success) {
+      showToast(phone ? `WhatsApp reminders will be sent to ${phone}` : 'Notification phone cleared — reminders go to Agent Settings phone.', 'success');
+    } else {
+      showToast(result.error || 'Failed to save.', 'error');
+    }
+  } catch (err) {
+    showToast('Error saving notification phone.', 'error');
+  }
+};
+
+async function loadNotificationPhone() {
+  try {
+    const res = await fetch('/api/profile');
+    if (!res.ok) return;
+    const profile = await res.json();
+    const el = document.getElementById('billing-notification-phone');
+    if (el && profile.notification_phone) el.value = profile.notification_phone;
+  } catch (e) { /* silently ignore */ }
+}
+
+// =============================================================
+// 2FA MANAGEMENT (Security Settings)
+// =============================================================
+
+// Stored during setup flow
+let _2fa_pending_secret = null;
+
+window.load2FAStatus = async function() {
+  try {
+    const res = await fetch('/api/auth/2fa/status');
+    if (!res.ok) return;
+    const { totp_enabled } = await res.json();
+    const badge = document.getElementById('2fa-status-badge');
+    const enableBtn = document.getElementById('2fa-enable-btn');
+    const disableArea = document.getElementById('2fa-disable-area');
+    if (badge) {
+      badge.textContent = totp_enabled ? '✓ Enabled' : 'Disabled';
+      badge.style.background = totp_enabled ? 'rgba(16,185,129,0.2)' : 'rgba(100,116,139,0.2)';
+      badge.style.color = totp_enabled ? '#34d399' : '#94a3b8';
+      badge.style.border = totp_enabled ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)';
+    }
+    if (enableBtn) enableBtn.style.display = totp_enabled ? 'none' : 'inline-flex';
+    if (disableArea) disableArea.style.display = totp_enabled ? 'block' : 'none';
+  } catch (e) { /* ignore */ }
+};
+
+window.setup2FA = async function() {
+  try {
+    const res = await fetch('/api/auth/2fa/setup');
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Could not generate QR code.', 'error'); return; }
+    _2fa_pending_secret = data.secret;
+    // Build modal
+    const modal = document.createElement('div');
+    modal.id = 'modal-2fa-setup';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+    modal.innerHTML = `
+      <div onclick="event.stopPropagation()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px;max-width:380px;width:90%;text-align:center;">
+        <div style="width:52px;height:52px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <svg width="24" height="24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3 style="color:white;margin:0 0 8px;font-size:1.15rem;">Enable Two-Factor Auth</h3>
+        <p style="color:#94a3b8;font-size:0.82rem;margin:0 0 20px;line-height:1.5;">Scan this QR code with <strong style="color:white;">Google Authenticator</strong> or <strong style="color:white;">Authy</strong>, then enter the 6-digit code to confirm.</p>
+        <img src="${data.qrCodeDataUrl}" alt="2FA QR Code" style="border-radius:8px;width:180px;height:180px;margin-bottom:16px;border:4px solid white;">
+        <p style="color:#64748b;font-size:0.75rem;margin-bottom:16px;">Manual key: <code style="color:#06b6d4;font-size:0.7rem;">${data.secret}</code></p>
+        <input type="text" id="modal-2fa-code" placeholder="Enter 6-digit code" maxlength="6" pattern="\\d{6}" autocomplete="one-time-code"
+          style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px;color:white;font-size:1.2rem;text-align:center;letter-spacing:6px;margin-bottom:16px;outline:none;font-family:monospace;">
+        <div style="display:flex;gap:10px;">
+          <button onclick="document.getElementById('modal-2fa-setup').remove()" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;">Cancel</button>
+          <button onclick="window.confirm2FA()" style="flex:1;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#06b6d4,#8b5cf6);color:white;font-weight:600;cursor:pointer;">Verify & Enable</button>
+        </div>
+      </div>`;
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  } catch (err) {
+    showToast('Error loading 2FA setup.', 'error');
+  }
+};
+
+window.confirm2FA = async function() {
+  const code = document.getElementById('modal-2fa-code')?.value?.trim();
+  if (!code || code.length !== 6) { showToast('Enter a 6-digit code.', 'error'); return; }
+  try {
+    const res = await fetch('/api/auth/2fa/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: _2fa_pending_secret, code })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      document.getElementById('modal-2fa-setup')?.remove();
+      showToast('🛡️ Two-factor authentication enabled!', 'success');
+      _2fa_pending_secret = null;
+      window.load2FAStatus();
+    } else {
+      showToast(data.error || 'Invalid code.', 'error');
+    }
+  } catch (err) {
+    showToast('Error enabling 2FA.', 'error');
+  }
+};
+
+window.disable2FA = async function() {
+  const code = document.getElementById('2fa-disable-code')?.value?.trim();
+  if (!code) { showToast('Enter your authenticator code to disable 2FA.', 'error'); return; }
+  try {
+    const res = await fetch('/api/auth/2fa/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('2FA has been disabled.', 'success');
+      const el = document.getElementById('2fa-disable-code');
+      if (el) el.value = '';
+      window.load2FAStatus();
+    } else {
+      showToast(data.error || 'Invalid code.', 'error');
+    }
+  } catch (err) {
+    showToast('Error disabling 2FA.', 'error');
+  }
+};

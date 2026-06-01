@@ -10,6 +10,13 @@ import { RestClient as signalwire } from '@signalwire/compatibility-api';
 import cors from 'cors';
 import os from 'os';
 import { spawn } from 'child_process';
+import { Resend } from 'resend';
+import bcrypt from 'bcryptjs';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+import { OAuth2Client } from 'google-auth-library';
+import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 
 import {
   initDb,
@@ -117,13 +124,127 @@ import {
   // Payments
   updateAppointmentPaymentStatus,
   getAppointmentById,
-  isTenantLocked
+  isTenantLocked,
+
+  // Admin Profile Imports
+  getTenantById,
+  getTenantByEmail,
+  updateTenantProfile,
+
+  // Payment Reminder Imports
+  checkAndSendPaymentReminders,
+  markReminderSent,
+  resetPaymentReminderFlags,
+  updateNotificationPhone,
+
+  // Security Imports
+  findOrCreateGoogleUser,
+  createPasswordResetToken,
+  resetPasswordWithToken,
+  enableTotp,
+  disableTotp,
+  getTotpUser,
+
+  // Encryption helpers
+  maskApiKey
 } from './database.js';
 
 import Stripe from 'stripe';
 
 
 dotenv.config();
+
+// JWT helpers
+const JWT_SECRET = process.env.JWT_SECRET || 'vd_fallback_secret_change_me';
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+function issueJWT(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+}
+function issue2FAToken(payload) {
+  return jwt.sign({ ...payload, is2FAStep: true }, JWT_SECRET, { expiresIn: '5m' });
+}
+
+// Brute-force rate limiter on login
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts from this IP. Please try again in 15 minutes.' }
+});
+
+// Initialize Resend email client
+const resendClient = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM = process.env.RESEND_FROM || 'VoiceDesk Billing <onboarding@resend.dev>';
+
+/**
+ * Send a payment reminder email via Resend.
+ */
+async function sendPaymentReminderEmail(tenant, daysLeft) {
+  if (!resendClient) {
+    console.log(`[Email Reminder - Simulated] Would send ${daysLeft}-day reminder to ${tenant.email}`);
+    return;
+  }
+  const dueDate = new Date(tenant.next_payment_due).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const urgency = daysLeft === 1 ? '🚨 URGENT: ' : '⚠️ ';
+  try {
+    await resendClient.emails.send({
+      from: RESEND_FROM,
+      to: [tenant.email],
+      subject: `${urgency}Payment Due in ${daysLeft} Day${daysLeft > 1 ? 's' : ''} — VoiceDesk Subscription`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; border-radius: 12px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #06b6d4, #8b5cf6); padding: 32px; text-align: center;">
+            <h1 style="margin: 0; color: white; font-size: 24px;">VoiceDesk</h1>
+            <p style="margin: 8px 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">Subscription Billing Reminder</p>
+          </div>
+          <div style="padding: 32px;">
+            <h2 style="color: #f8fafc; margin-top: 0;">Hi ${tenant.company_name},</h2>
+            <p style="color: #94a3b8; line-height: 1.6;">This is a reminder that your VoiceDesk subscription payment is due in <strong style="color: #f8fafc;">${daysLeft} day${daysLeft > 1 ? 's' : ''}</strong>.</p>
+            <div style="background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; padding: 20px; margin: 24px 0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 14px;">Payment Due Date</p>
+              <p style="margin: 4px 0 0; color: #06b6d4; font-size: 22px; font-weight: bold;">${dueDate}</p>
+            </div>
+            <p style="color: #94a3b8; line-height: 1.6;">To avoid service interruption, please ensure your payment is made before the due date. Your workspace will be <strong style="color: #f87171;">automatically suspended</strong> if payment is not received by ${dueDate}.</p>
+            <p style="color: #64748b; font-size: 13px; margin-top: 32px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">This is an automated billing reminder from VoiceDesk.</p>
+          </div>
+        </div>
+      `
+    });
+    console.log(`[Email Reminder] Sent ${daysLeft}-day reminder to ${tenant.email}`);
+  } catch (err) {
+    console.error(`[Email Reminder Error] Failed to send to ${tenant.email}:`, err.message);
+  }
+}
+
+/**
+ * Send a payment reminder via WhatsApp using Twilio.
+ */
+async function sendPaymentReminderWhatsApp(tenant, phone, daysLeft) {
+  if (!phone) {
+    console.log(`[WhatsApp Reminder - Skipped] No phone number for tenant ${tenant.id} (${tenant.company_name})`);
+    return;
+  }
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const isMock = !accountSid || !accountSid.startsWith('AC');
+  const dueDate = new Date(tenant.next_payment_due).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const urgencyEmoji = daysLeft === 1 ? '🚨' : '⚠️';
+  const body = `${urgencyEmoji} *VoiceDesk Payment Reminder*\n\nHi ${tenant.company_name},\n\nYour VoiceDesk subscription payment is due in *${daysLeft} day${daysLeft > 1 ? 's' : ''}* on *${dueDate}*.\n\nPlease make payment to avoid automatic account suspension.\n\n— VoiceDesk Billing Team`;
+
+  if (isMock) {
+    console.log(`[WhatsApp Reminder - Simulated] Would send to ${phone}: ${body}`);
+    return;
+  }
+  try {
+    const client = getSignalWireClient();
+    const fromWhatsApp = `whatsapp:${process.env.TWILIO_PHONE_NUMBER || '+14155238886'}`;
+    await client.messages.create({ from: fromWhatsApp, to: `whatsapp:${phone}`, body });
+    console.log(`[WhatsApp Reminder] Sent ${daysLeft}-day reminder to ${phone}`);
+  } catch (err) {
+    console.error(`[WhatsApp Reminder Error] Failed to send to ${phone}:`, err.message);
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -271,14 +392,24 @@ app.post('/api/checkout/:appointmentId/pay', async (req, res) => {
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Authentication required. Please login.' });
-  }
+  if (!authHeader) return res.status(401).json({ error: 'Authentication required. Please login.' });
 
   let tenantId = null;
   let userId = null;
 
-  if (authHeader.includes(':')) {
+  if (authHeader.startsWith('Bearer ')) {
+    // New JWT format
+    const token = authHeader.slice(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded.is2FAStep) return res.status(401).json({ error: '2FA verification required.' });
+      tenantId = decoded.tenantId;
+      userId = decoded.userId;
+    } catch (err) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+  } else if (authHeader.includes(':')) {
+    // Legacy format: tenantId:userId
     const parts = authHeader.split(':');
     tenantId = parseInt(parts[0]);
     userId = parseInt(parts[1]);
@@ -286,34 +417,20 @@ async function requireAuth(req, res, next) {
     tenantId = parseInt(authHeader);
   }
 
-  if (isNaN(tenantId)) {
-    return res.status(400).json({ error: 'Invalid authentication token.' });
-  }
-  
+  if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid authentication token.' });
+
   try {
     const status = await getTenantStatus(tenantId);
-    if (!status) {
-      return res.status(401).json({ error: 'Account does not exist.' });
-    }
+    if (!status) return res.status(401).json({ error: 'Account does not exist.' });
 
     const lockStatus = await isTenantLocked(tenantId);
     if (lockStatus.locked) {
-      const allowedPaths = [
-        '/api/saas/billing',
-        '/api/saas/billing/upgrade',
-        '/api/saas/billing/buy-overage',
-        '/api/auth/profile'
-      ];
+      const allowedPaths = ['/api/saas/billing', '/api/saas/billing/upgrade', '/api/saas/billing/buy-overage', '/api/auth/profile'];
       if (!allowedPaths.includes(req.path)) {
-        return res.status(403).json({
-          error: 'Account Restricted: Your workspace is restricted due to outstanding due payments (Tier Subscription fee or 0 minute credit balance). Please make a payment to unlock your account.',
-          locked: true,
-          reason: lockStatus.reason
-        });
+        return res.status(403).json({ error: 'Account Restricted: Your workspace is restricted due to outstanding due payments. Please make a payment to unlock your account.', locked: true, reason: lockStatus.reason });
       }
     }
 
-    // Fallback: If no userId was parsed from composite token, get the owner user id
     if (!userId) {
       const users = await getWorkspaceUsers(tenantId);
       const owner = users.find(u => u.role === 'owner') || users[0];
@@ -324,14 +441,11 @@ async function requireAuth(req, res, next) {
     req.userId = userId;
     req.isAdmin = status.is_admin === 1;
 
-    // SaaS Owner Impersonation mode
     if (req.isAdmin && req.headers['x-impersonate-tenant-id']) {
       const impId = parseInt(req.headers['x-impersonate-tenant-id']);
       if (!isNaN(impId)) {
         const impStatus = await getTenantStatus(impId);
-        if (impStatus) {
-          req.tenantId = impId;
-        }
+        if (impStatus) req.tenantId = impId;
       }
     }
     next();
@@ -390,6 +504,87 @@ function getSignalWireClient() {
 // AUTHENTICATION & REGISTRATION ENDPOINTS
 // =============================================================
 
+// Auto-provision an OpenAI Project + Service Account for a new tenant
+async function provisionOpenAIProject(tenantId, tenantName, companyName) {
+  const adminKey = process.env.OPENAI_ADMIN_KEY;
+  const orgId    = process.env.OPENAI_ORG_ID;
+
+  if (!adminKey || !orgId) {
+    console.log(`[OpenAI Provision] Skipped for Tenant ${tenantId} — OPENAI_ADMIN_KEY or OPENAI_ORG_ID not set.`);
+    return;
+  }
+
+  const label = (companyName || tenantName || `Tenant ${tenantId}`)
+    .replace(/[^a-zA-Z0-9 _-]/g, '')
+    .trim()
+    .slice(0, 60);
+
+  try {
+    // 1. Create a Project
+    const projRes = await fetch(`https://api.openai.com/v1/organization/projects`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Organization': orgId
+      },
+      body: JSON.stringify({ name: `VoiceDesk — ${label}` })
+    });
+    if (!projRes.ok) {
+      const err = await projRes.text();
+      console.error(`[OpenAI Provision] Project creation failed for Tenant ${tenantId}:`, err);
+      return;
+    }
+    const project = await projRes.json();
+    const projectId = project.id;
+    console.log(`[OpenAI Provision] Project created: ${project.name} (${projectId}) for Tenant ${tenantId}`);
+
+    // 2. Create a Service Account inside the project
+    const saRes = await fetch(`https://api.openai.com/v1/organization/projects/${projectId}/service_accounts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Organization': orgId
+      },
+      body: JSON.stringify({ name: `voicedesk-t${tenantId}` })
+    });
+    if (!saRes.ok) {
+      const err = await saRes.text();
+      console.error(`[OpenAI Provision] Service account creation failed for Tenant ${tenantId}:`, err);
+      return;
+    }
+    const sa = await saRes.json();
+    const apiKey = sa.api_key?.value;
+    if (!apiKey) {
+      console.error(`[OpenAI Provision] No API key returned for Tenant ${tenantId} — check service account response.`);
+      return;
+    }
+
+    // 3. Set a default monthly budget on the project ($20 soft limit — adjustable per plan)
+    const defaultBudget = 20;
+    await fetch(`https://api.openai.com/v1/organization/projects/${projectId}/rate_limits`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Organization': orgId
+      },
+      body: JSON.stringify({ soft_limit_usd: defaultBudget })
+    }).catch(() => {}); // Non-fatal if budget endpoint isn't available
+
+    // 4. Encrypt and store the key in the tenant's settings
+    const existing = await getSettings(tenantId);
+    await updateSettings(tenantId, { ...existing, openai_api_key: apiKey });
+    console.log(`[OpenAI Provision] ✅ API key stored (encrypted) for Tenant ${tenantId}. Project: ${projectId}`);
+
+  } catch (err) {
+    // Non-fatal — tenant account is still created, admin can add key manually
+    console.error(`[OpenAI Provision] Unexpected error for Tenant ${tenantId}:`, err.message);
+  }
+}
+
+
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, companyName } = req.body;
   if (!name || !email || !password) {
@@ -397,25 +592,197 @@ app.post('/api/auth/register', async (req, res) => {
   }
   try {
     const tenant = await registerTenant({ name, email, password, company_name: companyName });
+
+    // Auto-provision OpenAI project in background — non-blocking so signup is instant
+    provisionOpenAIProject(tenant.id, name, companyName).catch(e =>
+      console.error('[OpenAI Provision] Background error:', e.message)
+    );
+
     res.json({ success: true, tenant });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   try {
     const tenant = await authenticateTenant(email, password);
     if (tenant.subscription_status === 'suspended') {
       return res.status(403).json({ error: 'Account Suspended: Your access has been deactivated by the system administrator.' });
     }
-    res.json({ success: true, token: `${tenant.id}:${tenant.userId}`, tenant });
+    // If 2FA is enabled, issue a short-lived temp token
+    if (tenant.totp_enabled) {
+      const tempToken = issue2FAToken({ tenantId: tenant.id, userId: tenant.userId });
+      return res.json({ success: false, requires2FA: true, tempToken });
+    }
+    // No 2FA — issue full JWT session
+    const token = issueJWT({ tenantId: tenant.id, userId: tenant.userId, is_admin: tenant.is_admin });
+    const { totp_enabled, totp_secret, ...safeTenant } = tenant;
+    res.json({ success: true, token, tenant: safeTenant });
   } catch (err) {
     res.status(401).json({ error: err.message });
+  }
+});
+
+// 2FA login step — verify TOTP code with temp token
+app.post('/api/auth/login/2fa', async (req, res) => {
+  const { tempToken, code } = req.body;
+  if (!tempToken || !code) return res.status(400).json({ error: 'tempToken and code are required' });
+  try {
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: '2FA session expired. Please log in again.' });
+    }
+    if (!decoded.is2FAStep) return res.status(400).json({ error: 'Invalid token type.' });
+    const user = await getTotpUser(decoded.userId);
+    if (!user || !user.totp_secret) return res.status(400).json({ error: '2FA not configured.' });
+    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 1 });
+    if (!valid) return res.status(401).json({ error: 'Invalid authenticator code. Please try again.' });
+    // Issue full session JWT using tenantId/userId from temp token
+    const token = issueJWT({ tenantId: decoded.tenantId, userId: decoded.userId });
+    res.json({ success: true, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Google OAuth Sign-In
+app.post('/api/auth/google', async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) return res.status(400).json({ error: 'Google credential required.' });
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name } = payload;
+    const tenant = await findOrCreateGoogleUser({ googleId, email, name });
+    if (tenant.subscription_status === 'suspended') {
+      return res.status(403).json({ error: 'Account Suspended.' });
+    }
+    const token = issueJWT({ tenantId: tenant.id, userId: tenant.userId, is_admin: tenant.is_admin });
+    const { totp_enabled, totp_secret, ...safeTenant } = tenant;
+    res.json({ success: true, token, tenant: safeTenant, isNew: !tenant.existing });
+  } catch (err) {
+    console.error('[Google Auth Error]', err.message);
+    res.status(401).json({ error: 'Google Sign-In failed. Please try again.' });
+  }
+});
+
+// Forgot Password — send reset email
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  try {
+    const record = await createPasswordResetToken(email);
+    // Always return success to prevent email enumeration
+    if (record && resendClient) {
+      const resetUrl = `${req.protocol}://${req.get('host')}/reset-password.html?token=${record.token}`;
+      await resendClient.emails.send({
+        from: RESEND_FROM,
+        to: [email],
+        subject: '🔐 Reset Your VoiceDesk Password',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #06b6d4, #8b5cf6); padding: 32px; text-align: center;">
+              <h1 style="margin: 0; color: white; font-size: 24px;">VoiceDesk</h1>
+              <p style="margin: 8px 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">Password Reset Request</p>
+            </div>
+            <div style="padding: 32px;">
+              <h2 style="color: #f8fafc; margin-top: 0;">Reset Your Password</h2>
+              <p style="color: #94a3b8; line-height: 1.6;">We received a request to reset your VoiceDesk password. Click the button below to set a new password. This link expires in <strong style="color: white;">1 hour</strong>.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${resetUrl}" style="background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">Reset Password</a>
+              </div>
+              <p style="color: #64748b; font-size: 13px;">If you didn't request a password reset, you can safely ignore this email.</p>
+              <p style="color: #475569; font-size: 11px; word-break: break-all;">Or copy this link: ${resetUrl}</p>
+            </div>
+          </div>
+        `
+      });
+    } else if (record) {
+      console.log(`[Password Reset] Link for ${email}: /reset-password.html?token=${record.token}`);
+    }
+    res.json({ success: true, message: 'If this email is registered, a reset link has been sent.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset password with token
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  try {
+    await resetPasswordWithToken(token, newPassword);
+    res.json({ success: true, message: 'Password updated successfully. You can now log in.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 2FA Setup — generate secret + QR code (not saved until confirmed)
+app.get('/api/auth/2fa/setup', requireAuth, async (req, res) => {
+  try {
+    const user = await getTotpUser(req.userId);
+    const secret = speakeasy.generateSecret({ name: `VoiceDesk (${user?.email || 'account'})`, length: 20 });
+    const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+    res.json({ secret: secret.base32, qrCodeDataUrl, otpauthUrl: secret.otpauth_url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2FA Enable — verify code then save secret
+app.post('/api/auth/2fa/enable', requireAuth, async (req, res) => {
+  const { secret, code } = req.body;
+  if (!secret || !code) return res.status(400).json({ error: 'Secret and code are required.' });
+  const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token: code, window: 1 });
+  if (!valid) return res.status(400).json({ error: 'Invalid code. Please try again with your authenticator app.' });
+  try {
+    await enableTotp(req.userId, secret);
+    res.json({ success: true, message: '2FA enabled successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2FA Disable — re-verify code before disabling
+app.post('/api/auth/2fa/disable', requireAuth, async (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Current authenticator code is required to disable 2FA.' });
+  try {
+    const user = await getTotpUser(req.userId);
+    if (!user?.totp_secret) return res.status(400).json({ error: '2FA is not enabled.' });
+    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 1 });
+    if (!valid) return res.status(400).json({ error: 'Invalid code. 2FA not disabled.' });
+    await disableTotp(req.userId);
+    res.json({ success: true, message: '2FA disabled.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2FA Status
+app.get('/api/auth/2fa/status', requireAuth, async (req, res) => {
+  try {
+    const user = await getTotpUser(req.userId);
+    res.json({ totp_enabled: user?.totp_enabled === 1 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/profile', requireAuth, async (req, res) => {
+  try {
+    const tenant = await getTenantById(req.tenantId);
+    if (!tenant) return res.status(404).json({ error: 'Not found' });
+    res.json({ id: tenant.id, name: tenant.name, email: tenant.email, is_admin: tenant.is_admin });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -696,7 +1063,54 @@ app.get('/api/admin/global-settings', requireAuth, requireAdmin, async (req, res
   }
 });
 
+app.put('/api/admin/profile', requireAuth, requireAdmin, async (req, res) => {
+  const { name, email, new_password } = req.body;
+  if (!name || !email) return res.status(400).json({ error: 'Name and email are required.' });
+  try {
+    const existing = await getTenantById(req.tenantId);
+    if (!existing) return res.status(404).json({ error: 'Admin account not found.' });
+    // Check email uniqueness if changed
+    if (email !== existing.email) {
+      const conflict = await getTenantByEmail(email);
+      if (conflict) return res.status(409).json({ error: 'That email is already in use by another account.' });
+    }
+    const password_hash = new_password && new_password.trim() ? new_password.trim() : existing.password_hash;
+    await updateTenantProfile(req.tenantId, { name, email, password_hash });
+    res.json({ success: true, name, email });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save tenant notification phone (for WhatsApp payment reminders)
+app.put('/api/billing/notification-phone', requireAuth, async (req, res) => {
+  const { notification_phone } = req.body;
+  try {
+    await updateNotificationPhone(req.tenantId, notification_phone || null);
+    res.json({ success: true, notification_phone });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: manually trigger reminder check (for testing)
+app.post('/api/admin/test-reminders', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const reminders = await checkAndSendPaymentReminders();
+    for (const r of reminders) {
+      await sendPaymentReminderEmail(r, r.daysLeft);
+      await sendPaymentReminderWhatsApp(r, r.phone, r.daysLeft);
+      await markReminderSent(r.id, r.flag);
+      await logTenantActivity(r.id, 'billing_reminder', `[Manual Test] Payment reminder sent (${r.daysLeft} day${r.daysLeft > 1 ? 's' : ''} before due date)`);
+    }
+    res.json({ success: true, remindersSent: reminders.length, details: reminders.map(r => ({ id: r.id, name: r.company_name, email: r.email, daysLeft: r.daysLeft, phone: r.phone })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/admin/global-settings', requireAuth, requireAdmin, async (req, res) => {
+
   const { global_overage_rate } = req.body;
   const rate = parseFloat(global_overage_rate);
   if (isNaN(rate) || rate < 0) {
@@ -755,7 +1169,14 @@ app.get('/api/admin/accounting', requireAuth, requireAdmin, async (req, res) => 
 app.get('/api/settings', requireAuth, async (req, res) => {
   try {
     const settings = await getSettings(req.tenantId);
-    res.json(settings);
+    // Never send the raw API key to the browser — send masked version only
+    const safeSettings = {
+      ...settings,
+      openai_api_key: undefined,
+      openai_api_key_set: !!settings.openai_api_key,
+      openai_api_key_masked: maskApiKey(settings.openai_api_key)
+    };
+    res.json(safeSettings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2399,12 +2820,16 @@ mediaStreamWss.on('connection', (ws) => {
           'gpt-4o-realtime-preview-2024-10-01': 'gpt-realtime-2'
         };
         const model = MODEL_MAPPING[dbModel] || dbModel;
-        const apiKey = process.env.OPENAI_API_KEY;
-        
+        const apiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
+
         if (!apiKey) {
-          console.error('CRITICAL: OPENAI_API_KEY is not defined in your environment variables.');
+          console.error('CRITICAL: No OpenAI API key configured for Tenant', tenantId, '— neither tenant key nor OPENAI_API_KEY env var is set.');
           ws.close();
           return;
+        }
+
+        if (settings.openai_api_key) {
+          console.log(`Tenant ${tenantId}: Using custom OpenAI project API key for this call.`);
         }
 
         console.log(`Connecting OpenAI Realtime API (${model}) for Tenant ${tenantId}...`);
@@ -3034,7 +3459,7 @@ initDb().then(async () => {
     console.log(`======================================================\n`);
   });
 
-  // Start automated subscription check loop
+  // Suspension check — runs every 15 seconds
   setInterval(async () => {
     try {
       const suspended = await checkSubscriptionGracePeriodsAndSuspend();
@@ -3042,12 +3467,31 @@ initDb().then(async () => {
         console.log(`[Billing System] Auto-suspended ${suspended.length} overdue tenants.`);
         for (const t of suspended) {
           broadcastToDashboard(t.id, 'refresh_crm', {});
+          await logTenantActivity(t.id, 'suspension_toggle', `Account suspended due to non-payment. Reminder flags reset.`);
         }
       }
     } catch (err) {
       console.error('[Billing System Error] Failed to run automated checks:', err);
     }
-  }, 15000); // Check every 15 seconds
+  }, 15000);
+
+  // Payment reminder check — runs every hour
+  setInterval(async () => {
+    try {
+      const reminders = await checkAndSendPaymentReminders();
+      if (reminders.length > 0) {
+        console.log(`[Billing System] Sending payment reminders to ${reminders.length} tenant(s).`);
+        for (const r of reminders) {
+          await sendPaymentReminderEmail(r, r.daysLeft);
+          await sendPaymentReminderWhatsApp(r, r.phone, r.daysLeft);
+          await markReminderSent(r.id, r.flag);
+          await logTenantActivity(r.id, 'billing_reminder', `Payment reminder sent (${r.daysLeft} day${r.daysLeft > 1 ? 's' : ''} before due date) via Email${r.phone ? ' + WhatsApp' : ''}`);
+        }
+      }
+    } catch (err) {
+      console.error('[Billing System Error] Failed to run payment reminder checks:', err);
+    }
+  }, 60 * 60 * 1000); // Every hour
 }).catch(err => {
   console.error('Database initialization failed. Server could not start.', err);
 });
