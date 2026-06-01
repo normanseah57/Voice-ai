@@ -183,6 +183,22 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts from this IP. Please try again in 15 minutes.' }
 });
 
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many signup attempts from this IP. Please try again in an hour.' }
+});
+
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many password reset requests. Please try again in 15 minutes.' }
+});
+
 // Initialize Resend email client
 const resendClient = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const RESEND_FROM = process.env.RESEND_FROM || 'VoiceDesk Billing <onboarding@resend.dev>';
@@ -407,7 +423,6 @@ async function requireAuth(req, res, next) {
   let userId = null;
 
   if (authHeader.startsWith('Bearer ')) {
-    // New JWT format
     const token = authHeader.slice(7);
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
@@ -417,16 +432,11 @@ async function requireAuth(req, res, next) {
     } catch (err) {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
     }
-  } else if (authHeader.includes(':')) {
-    // Legacy format: tenantId:userId
-    const parts = authHeader.split(':');
-    tenantId = parseInt(parts[0]);
-    userId = parseInt(parts[1]);
   } else {
-    tenantId = parseInt(authHeader);
+    return res.status(401).json({ error: 'Invalid authentication scheme. Bearer token required.' });
   }
 
-  if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid authentication token.' });
+  if (!tenantId || isNaN(tenantId)) return res.status(400).json({ error: 'Invalid authentication token.' });
 
   try {
     const status = await getTenantStatus(tenantId);
@@ -594,7 +604,7 @@ async function provisionOpenAIProject(tenantId, tenantName, companyName) {
 }
 
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', signupLimiter, async (req, res) => {
   const { name, email, password, companyName } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
@@ -681,7 +691,7 @@ app.post('/api/auth/google', async (req, res) => {
 });
 
 // Forgot Password — send reset email
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', forgotPasswordLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required.' });
   try {
@@ -1621,7 +1631,7 @@ app.put('/api/team/:id/calendar', requireAuth, async (req, res) => {
   const { working_hours, break_periods, appointment_gap } = req.body;
   try {
     const userId = parseInt(req.params.id);
-    const updated = await updateUserCalendarSettings(userId, { working_hours, break_periods, appointment_gap });
+    const updated = await updateUserCalendarSettings(req.tenantId, userId, { working_hours, break_periods, appointment_gap });
     broadcastToDashboard(req.tenantId, 'refresh_crm', {});
     res.json(updated);
   } catch (err) {
@@ -3669,10 +3679,22 @@ server.on('upgrade', (request, socket, head) => {
       mediaStreamWss.emit('connection', ws, request);
     });
   } else if (pathname === '/dashboard-ws') {
-    // Extract token query parameter from ws upgrade request
     const token = parsedUrl.query.token;
     dashboardWss.handleUpgrade(request, socket, head, (ws) => {
-      ws.tenantId = token ? parseInt(token) : null;
+      let tenantId = null;
+      if (token) {
+        let cleanToken = token;
+        if (token.startsWith('Bearer ')) {
+          cleanToken = token.slice(7);
+        }
+        try {
+          const decoded = jwt.verify(cleanToken, JWT_SECRET);
+          tenantId = decoded.tenantId;
+        } catch (err) {
+          console.error('[Dashboard WS] Authentication failed:', err.message);
+        }
+      }
+      ws.tenantId = tenantId;
       dashboardWss.emit('connection', ws, request);
     });
   } else if (pathname === '/api/live-demo') {

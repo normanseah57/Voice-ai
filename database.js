@@ -2297,15 +2297,19 @@ export const getUserCalendarSettings = async (userId) => {
   return r;
 };
 
-export const updateUserCalendarSettings = async (userId, { working_hours, break_periods, appointment_gap }) => {
+export const updateUserCalendarSettings = async (tenantId, userId, { working_hours, break_periods, appointment_gap }) => {
+  const user = await get('SELECT id FROM tenant_users WHERE tenant_id = ? AND id = ?', [tenantId, userId]);
+  if (!user) throw new Error('User not found in this workspace.');
+
   await run(`
     UPDATE tenant_users 
     SET working_hours = ?, break_periods = ?, appointment_gap = ?
-    WHERE id = ?
+    WHERE tenant_id = ? AND id = ?
   `, [
     typeof working_hours === 'object' ? JSON.stringify(working_hours) : working_hours,
     typeof break_periods === 'object' ? JSON.stringify(break_periods) : break_periods,
     parseInt(appointment_gap),
+    tenantId,
     userId
   ]);
   return getUserCalendarSettings(userId);
