@@ -370,6 +370,7 @@ linkGotoAppointments.addEventListener('click', (e) => {
 crmTabs.forEach(tab => {
   tab.addEventListener('click', () => {
     const subtabId = tab.getAttribute('data-subtab');
+    console.log('[CRM Subtab Clicked] target subtab =', subtabId);
     currentCrmSubtab = subtabId;
 
     // Toggle active tab style
@@ -389,6 +390,8 @@ crmTabs.forEach(tab => {
       fetchContacts();
     } else if (subtabId === 'deals') {
       fetchDeals();
+    } else if (subtabId === 'campaigns') {
+      loadCampaignsList();
     }
   });
 });
@@ -614,8 +617,21 @@ function connectWebSocket() {
           if (currentTab === 'crm') {
             if (currentCrmSubtab === 'contacts') fetchContacts();
             else if (currentCrmSubtab === 'deals') fetchDeals();
+            else if (currentCrmSubtab === 'campaigns') loadCampaignsList();
           }
           fetchOverviewData();
+          break;
+          
+        case 'refresh_campaigns':
+          if (currentTab === 'crm' && currentCrmSubtab === 'campaigns') {
+            loadCampaignsList();
+          }
+          break;
+
+        case 'refresh_templates':
+          if (currentTab === 'crm' && currentCrmSubtab === 'campaigns') {
+            loadTemplatesList();
+          }
           break;
           
         case 'google_calendar_sync':
@@ -1288,6 +1304,9 @@ function fetchCrmData() {
     fetchContacts();
   } else if (currentCrmSubtab === 'deals') {
     fetchDeals();
+  } else if (currentCrmSubtab === 'campaigns') {
+    loadCampaignsList();
+    loadTemplatesList();
   }
 }
 
@@ -2160,6 +2179,7 @@ async function fetchSettings() {
   try {
     const response = await fetch('/api/settings');
     const settings = await response.json();
+    window.lastLoadedSettings = settings;
     
     settingsCompany.value = settings.company_name;
     if (settingsAgentName) {
@@ -2806,7 +2826,7 @@ async function saveWizardSettings(silent = false) {
     voice: settingsVoice ? settingsVoice.value : 'alloy',
     voice_accent: settingsAccent ? settingsAccent.value : 'default',
     twilio_phone_number: settingsTwilio ? settingsTwilio.value.trim() : '',
-    transfer_phone_number: settingsTransfer ? settingsTransfer.value.trim() : '',
+    transfer_phone_number: settingsTransfer ? settingsTransfer.value.trim() : (window.lastLoadedSettings ? window.lastLoadedSettings.transfer_phone_number || '' : ''),
     resources_list: settingsResources ? settingsResources.value.trim() : '',
     working_hours: JSON.stringify(workingHours),
     break_periods: JSON.stringify(breakPeriods),
@@ -2862,10 +2882,23 @@ formSettingsAi.addEventListener('submit', async (e) => {
       showWizardStep(nextVisible);
     }
   } else {
-    // Step 12: Save and Complete
-    const saved = await saveWizardSettings(false);
+    // Save and Complete
+    const saved = await saveWizardSettings(true);
     if (saved) {
-      showToast('Onboarding Complete', 'AI Receptionist is now active and live!', 'success');
+      const originalText = btn.innerHTML;
+      btn.textContent = 'SAVED';
+      btn.style.background = '#10b981';
+      btn.style.borderColor = '#10b981';
+      
+      setTimeout(() => {
+        showToast('Onboarding Complete', 'AI Receptionist is now active and live!', 'success');
+        btn.innerHTML = originalText;
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.disabled = false;
+        if (window.lucide) window.lucide.createIcons();
+      }, 1000);
+      return;
     }
   }
   
@@ -3343,19 +3376,36 @@ window.toggleAuthTab = function(mode) {
   const formLogin = document.getElementById('form-saas-login');
   const formReg = document.getElementById('form-saas-register');
   const modalTitle = document.getElementById('auth-modal-title');
+  const formInvite = document.getElementById('auth-invite-step');
+  const authTabs = document.querySelector('.auth-tabs');
+  const step2fa = document.getElementById('auth-2fa-step');
+  const stepForgot = document.getElementById('auth-forgot-step');
   
-  if (mode === 'login') {
-    if (tabLogin) tabLogin.classList.add('active');
-    if (tabReg) tabReg.classList.remove('active');
-    if (formLogin) formLogin.style.display = 'block';
-    if (formReg) formReg.style.display = 'none';
-    if (modalTitle) modalTitle.textContent = 'Sign In to VoiceDesk';
-  } else {
-    if (tabLogin) tabLogin.classList.remove('active');
-    if (tabReg) tabReg.classList.add('active');
+  if (mode === 'invite') {
+    if (authTabs) authTabs.style.display = 'none';
     if (formLogin) formLogin.style.display = 'none';
-    if (formReg) formReg.style.display = 'block';
-    if (modalTitle) modalTitle.textContent = 'Create VoiceDesk Account';
+    if (formReg) formReg.style.display = 'none';
+    if (step2fa) step2fa.style.display = 'none';
+    if (stepForgot) stepForgot.style.display = 'none';
+    if (formInvite) formInvite.style.display = 'block';
+    if (modalTitle) modalTitle.textContent = 'Accept Workspace Invitation';
+  } else {
+    if (authTabs) authTabs.style.display = 'flex';
+    if (formInvite) formInvite.style.display = 'none';
+    
+    if (mode === 'login') {
+      if (tabLogin) tabLogin.classList.add('active');
+      if (tabReg) tabReg.classList.remove('active');
+      if (formLogin) formLogin.style.display = 'block';
+      if (formReg) formReg.style.display = 'none';
+      if (modalTitle) modalTitle.textContent = 'Sign In to VoiceDesk';
+    } else {
+      if (tabLogin) tabLogin.classList.remove('active');
+      if (tabReg) tabReg.classList.add('active');
+      if (formLogin) formLogin.style.display = 'none';
+      if (formReg) formReg.style.display = 'block';
+      if (modalTitle) modalTitle.textContent = 'Create VoiceDesk Account';
+    }
   }
 };
 
@@ -3602,7 +3652,10 @@ window.handleGoogleCredential = async function(response) {
     const res = await fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential })
+      body: JSON.stringify({ 
+        credential: response.credential,
+        inviteToken: window.activeInviteToken || null
+      })
     });
     const data = await res.json();
     if (res.ok && data.success) {
@@ -3610,9 +3663,18 @@ window.handleGoogleCredential = async function(response) {
       localStorage.setItem('saas_token', saasToken);
       currentTenant = data.tenant;
       localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+      
+      // Clear invite token from URL and state
+      if (window.activeInviteToken) {
+        window.activeInviteToken = null;
+        const newUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+      }
+
       window.closeAuthModal();
       initAuthenticatedSession();
       if (data.isNew) showToast('Welcome to VoiceDesk! Your account has been created.', 'success');
+      showToast('Successfully accepted invitation!', 'success');
     } else {
       showToast(data.error || 'Google Sign-In failed.', 'error');
     }
@@ -3689,6 +3751,70 @@ document.getElementById('form-saas-register').addEventListener('submit', async (
     if (btn) { btn.disabled = false; btn.textContent = 'Register & Start Sandbox'; }
   }
 });
+
+window.showInviteAcceptStep = async function(token) {
+  try {
+    const res = await fetch(`/api/team/invite/verify/${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (res.ok && data.valid) {
+      document.getElementById('invite-email').value = data.email;
+      document.getElementById('invite-welcome-text').innerHTML = `You have been invited to join <strong>${data.company_name}</strong> as <strong>${data.role}</strong>.`;
+      
+      // Open the modal in 'invite' mode
+      window.openAuthModal('invite');
+    } else {
+      showToast(data.error || 'Invitation is invalid or has expired.', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to fetch invitation details.', 'error');
+  }
+};
+
+const formInvite = document.getElementById('form-saas-invite');
+if (formInvite) {
+  formInvite.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('invite-name').value.trim();
+    const password = document.getElementById('invite-password').value;
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Joining Workspace…'; }
+    
+    try {
+      const response = await fetch('/api/team/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          inviteToken: window.activeInviteToken, 
+          name, 
+          password 
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        saasToken = data.token;
+        localStorage.setItem('saas_token', saasToken);
+        currentTenant = data.tenant;
+        localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+        
+        // Clear invite token from URL and state
+        window.activeInviteToken = null;
+        const newUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.history.replaceState({ path: newUrl }, '', newUrl);
+
+        window.closeAuthModal();
+        initAuthenticatedSession();
+        showToast('Successfully accepted invitation! Welcome to your workspace.', 'success');
+      } else {
+        showToast(data.error || 'Failed to accept invitation.', 'error');
+      }
+    } catch (err) {
+      showToast('Error connecting to invitation service.', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Accept & Join Workspace'; }
+    }
+  });
+}
+
 
 // Logout Listener
 document.getElementById('btn-logout').addEventListener('click', (e) => {
@@ -4671,43 +4797,7 @@ async function loadAdminProfileFields() {
 // =============================================================
 
 async function loadTeamMembers() {
-  const container = document.getElementById('team-list-container');
-  if (!container) return;
-  container.innerHTML = '<p class="text-muted" style="font-size:0.8rem;padding:8px 0;">Loading...</p>';
-
-  try {
-    const res = await fetch('/api/team');
-    if (!res.ok) throw new Error('Failed to load team.');
-    const members = await res.json();
-
-    if (!members || members.length === 0) {
-      container.innerHTML = '<p class="text-muted" style="font-size:0.8rem;padding:8px 0;text-align:center;">No team members yet. Add one above.</p>';
-      return;
-    }
-
-    container.innerHTML = members.map(m => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border-glass);">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--color-primary),var(--color-secondary));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;color:white;flex-shrink:0;">
-            ${(m.name || '?').charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div style="font-weight:600;font-size:0.85rem;color:white;">${m.name}</div>
-            <div style="font-size:0.75rem;color:var(--text-muted);">${m.email}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:0.7rem;padding:3px 8px;border-radius:12px;font-weight:600;background:${m.role === 'owner' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)'};color:${m.role === 'owner' ? '#10b981' : '#818cf8'};">${m.role === 'owner' ? 'Owner' : 'Member'}</span>
-          ${m.role !== 'owner' ? `<button onclick="removeTeamMember(${m.id}, '${m.name.replace(/'/g, "\\'")}')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.75rem;display:flex;align-items:center;gap:4px;">
-            <i data-lucide="trash-2" style="width:12px;height:12px;"></i> Remove
-          </button>` : '<span style="font-size:0.75rem;color:var(--text-muted);">You</span>'}
-        </div>
-      </div>
-    `).join('');
-    initIcons();
-  } catch (err) {
-    container.innerHTML = `<p class="text-muted" style="font-size:0.8rem;">${err.message}</p>`;
-  }
+  await fetchTeamAndResources();
 }
 
 window.removeTeamMember = async function(id, name) {
@@ -4726,74 +4816,132 @@ window.removeTeamMember = async function(id, name) {
   }
 };
 
-window.openAddMemberForm = function() {
-  const existing = document.getElementById('add-member-form-inline');
+window.openInviteMemberForm = function() {
+  const existing = document.getElementById('invite-member-form-inline');
   if (existing) { existing.remove(); return; }
 
   const container = document.getElementById('team-list-container');
   if (!container) return;
 
   const form = document.createElement('div');
-  form.id = 'add-member-form-inline';
+  form.id = 'invite-member-form-inline';
   form.style.cssText = 'padding:14px;background:rgba(6,182,212,0.05);border:1px solid var(--color-primary);border-radius:10px;margin-bottom:10px;';
   form.innerHTML = `
-    <h4 style="font-size:0.85rem;color:white;margin:0 0 12px;">Add New Team Member</h4>
+    <h4 style="font-size:0.85rem;color:white;margin:0 0 12px;">Invite New Team Member</h4>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <div>
-        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Full Name</label>
-        <input type="text" id="new-member-name" class="form-input" placeholder="Jane Smith" style="font-size:0.85rem;padding:8px 12px;">
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Email Address</label>
+        <input type="email" id="invite-member-email" class="form-input" placeholder="colleague@company.com" style="font-size:0.85rem;padding:8px 12px;">
       </div>
       <div>
-        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Role</label>
-        <select id="new-member-role" class="form-input" style="font-size:0.85rem;padding:8px 12px;">
-          <option value="member">Member</option>
-          <option value="owner">Owner</option>
+        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Workspace Role</label>
+        <select id="invite-member-role" class="form-input" style="font-size:0.85rem;padding:8px 12px;">
+          <option value="member">Member (Restricted Access)</option>
+          <option value="owner">Owner (Full Admin Access)</option>
         </select>
-      </div>
-      <div>
-        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Email</label>
-        <input type="email" id="new-member-email" class="form-input" placeholder="jane@company.com" style="font-size:0.85rem;padding:8px 12px;">
-      </div>
-      <div>
-        <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Password</label>
-        <input type="password" id="new-member-password" class="form-input" placeholder="Set a login password" style="font-size:0.85rem;padding:8px 12px;">
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('add-member-form-inline').remove()" style="padding:6px 14px;background:transparent;border:1px solid var(--border-glass);color:var(--text-muted);border-radius:6px;cursor:pointer;font-size:0.8rem;">Cancel</button>
-      <button type="button" onclick="submitNewMember()" class="btn btn-primary" style="padding:6px 14px;font-size:0.8rem;">Add Member</button>
+      <button type="button" onclick="document.getElementById('invite-member-form-inline').remove()" style="padding:6px 14px;background:transparent;border:1px solid var(--border-glass);color:var(--text-muted);border-radius:6px;cursor:pointer;font-size:0.8rem;">Cancel</button>
+      <button type="button" onclick="submitMemberInvite()" class="btn btn-primary" style="padding:6px 14px;font-size:0.8rem;">Send Invitation</button>
     </div>
   `;
   container.prepend(form);
 };
 
-window.submitNewMember = async function() {
-  const name = document.getElementById('new-member-name')?.value?.trim();
-  const email = document.getElementById('new-member-email')?.value?.trim();
-  const password = document.getElementById('new-member-password')?.value;
-  const role = document.getElementById('new-member-role')?.value || 'member';
+window.submitMemberInvite = async function() {
+  const email = document.getElementById('invite-member-email')?.value?.trim();
+  const role = document.getElementById('invite-member-role')?.value || 'member';
 
-  if (!name || !email || !password) {
-    showToast('Name, email, and password are required.', 'error');
+  if (!email) {
+    showToast('Email address is required to send an invitation.', 'error');
     return;
   }
 
   try {
-    const res = await fetch('/api/team', {
+    const res = await fetch('/api/team/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role })
+      body: JSON.stringify({ email, role })
     });
     const result = await res.json();
-    if (res.ok) {
-      document.getElementById('add-member-form-inline')?.remove();
-      showToast(`${name} added to the workspace.`, 'success');
+    if (res.ok && result.success) {
+      document.getElementById('invite-member-form-inline')?.remove();
+      showToast(`Invitation sent to ${email}.`, 'success');
       loadTeamMembers();
+      loadPendingInvitations();
     } else {
-      showToast(result.error || 'Failed to add member.', 'error');
+      showToast(result.error || 'Failed to send invitation.', 'error');
     }
   } catch (err) {
-    showToast('Error adding team member.', 'error');
+    showToast('Error sending invitation.', 'error');
+  }
+};
+
+window.loadPendingInvitations = async function() {
+  try {
+    const res = await fetch('/api/team/invitations');
+    if (!res.ok) throw new Error('Failed to fetch invitations');
+    const invitations = await res.json();
+    
+    const container = document.getElementById('invitations-list-container');
+    if (container) {
+      if (invitations.length === 0) {
+        container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No pending invitations.</div>';
+      } else {
+        container.innerHTML = invitations.map(i => {
+          const host = window.location.origin;
+          const inviteUrl = `${host}/?invite_token=${i.token}`;
+          
+          return `
+            <div class="team-member-item glass" style="padding: 12px; border-radius: 12px; border: 1px solid var(--border-glass); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="flex: 1; min-width: 0;">
+                <h5 style="margin: 0; font-weight: 600; color: white; display: flex; align-items: center; gap: 6px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                  ${escapeHtml(i.email)} 
+                  <span class="lead-stage-pill lead" style="font-size: 0.65rem; padding: 2px 6px;">${escapeHtml(i.role)}</span>
+                </h5>
+                <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-muted);">
+                  Expires: ${new Date(i.expires_at).toLocaleDateString()} ${new Date(i.expires_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </p>
+              </div>
+              <div style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 10px;">
+                <button type="button" class="btn btn-secondary btn-icon" onclick="copyInviteLink('${escapeHtml(inviteUrl)}')" title="Copy Invite Link" style="padding: 6px; height: 32px; width: 32px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+                </button>
+                <button type="button" class="btn btn-danger btn-icon" onclick="revokeInvitation(${i.id}, '${escapeHtml(i.email)}')" title="Revoke Invitation" style="padding: 6px; height: 32px; width: 32px; display: flex; align-items: center; justify-content: center; background-color: var(--color-danger); border-color: var(--color-danger);">
+                  <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+      initIcons();
+    }
+  } catch (err) {
+    console.error('Failed to load pending invitations:', err);
+  }
+};
+
+window.copyInviteLink = function(url) {
+  navigator.clipboard.writeText(url)
+    .then(() => showToast('Invite link copied to clipboard!', 'success'))
+    .catch(err => console.error('Could not copy invite link:', err));
+};
+
+window.revokeInvitation = async function(id, email) {
+  if (!confirm(`Revoke invitation sent to ${email}?`)) return;
+  try {
+    const res = await fetch(`/api/team/invitations/${id}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (res.ok) {
+      showToast(`Invitation for ${email} has been revoked.`, 'success');
+      loadPendingInvitations();
+    } else {
+      showToast(result.error || 'Failed to revoke invitation.', 'error');
+    }
+  } catch (err) {
+    showToast('Error revoking invitation.', 'error');
   }
 };
 
@@ -4858,6 +5006,16 @@ window.updateROICalculator = function() {
 // STARTUP
 // -------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+  // Check for workspace invitation token
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteToken = urlParams.get('invite_token');
+  if (inviteToken) {
+    window.activeInviteToken = inviteToken;
+    setTimeout(() => {
+      window.showInviteAcceptStep(inviteToken);
+    }, 500);
+  }
+
   // Fetch and display dynamic demo phone number on landing page
   fetch('/api/demo-number')
     .then(res => res.json())
@@ -5518,6 +5676,7 @@ async function fetchTeamAndResources() {
           `;
         }).join('');
       }
+      loadPendingInvitations();
       initIcons();
     }
   } catch (err) {
@@ -5533,6 +5692,14 @@ window.openStaffCalendarModal = (userId, name) => {
 
   document.getElementById('staff-calendar-userid').value = userId;
   document.getElementById('staff-calendar-title').textContent = `Configure ${name}'s Calendar`;
+
+  const btnSave = document.getElementById('btn-save-staff-calendar');
+  if (btnSave) {
+    btnSave.disabled = false;
+    btnSave.textContent = 'Save Calendar';
+    btnSave.style.background = '';
+    btnSave.style.borderColor = '';
+  }
 
   // Populate Working Hours
   let workingHours = {};
@@ -5576,7 +5743,195 @@ window.openStaffCalendarModal = (userId, name) => {
   // Populate Gap
   document.getElementById('staff-appointment-gap').value = member.appointment_gap !== undefined && member.appointment_gap !== null ? member.appointment_gap.toString() : '15';
 
+  // Populate Staff Google Calendar sync status
+  const gcalStatusText = document.getElementById('staff-gcal-status-text');
+  const btnStaffConnect = document.getElementById('btn-staff-connect-gcal');
+
+  if (gcalStatusText && btnStaffConnect) {
+    if (member.google_calendar_connected) {
+      gcalStatusText.textContent = `Synced: ${member.google_calendar_email}`;
+      btnStaffConnect.textContent = 'Disconnect';
+      btnStaffConnect.className = 'btn btn-danger btn-sm';
+      btnStaffConnect.style.backgroundColor = 'var(--color-danger)';
+      btnStaffConnect.style.borderColor = 'var(--color-danger)';
+      btnStaffConnect.onclick = async () => {
+        if (!confirm(`Are you sure you want to disconnect Google Calendar for ${name}?`)) return;
+        try {
+          const res = await fetch(`/api/team/${userId}/gcal/disconnect`, { method: 'POST' });
+          if (res.ok) {
+            showToast('Calendar disconnected.', 'success');
+            const updatedUser = await res.json();
+            
+            // Update local cache
+            const cacheIdx = workspaceTeamList.findIndex(u => u.id === userId);
+            if (cacheIdx !== -1) workspaceTeamList[cacheIdx] = updatedUser.user;
+            
+            // Reload modal view
+            openStaffCalendarModal(userId, name);
+            fetchTeamAndResources();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+    } else {
+      gcalStatusText.textContent = 'Disconnected';
+      btnStaffConnect.textContent = 'Connect';
+      btnStaffConnect.className = 'btn btn-secondary btn-sm';
+      btnStaffConnect.style.backgroundColor = '';
+      btnStaffConnect.style.borderColor = '';
+      btnStaffConnect.onclick = () => {
+        // Open OAuth flow in a popup
+        const width = 500;
+        const height = 650;
+        const left = (window.innerWidth - width) / 2;
+        const top = (window.innerHeight - height) / 2;
+        const popup = window.open(`/api/team/${userId}/gcal/oauth`, 'GoogleCalendarOAuth', `width=${width},height=${height},top=${top},left=${left}`);
+        
+        // Listen for postMessage from callback window
+        const handleMessage = async (event) => {
+          if (event.data && event.data.type === 'gcal_connected' && event.data.userId === userId) {
+            window.removeEventListener('message', handleMessage);
+            showToast('Google Calendar connected successfully!', 'success');
+            
+            // Reload user data from server
+            await fetchTeamAndResources();
+            openStaffCalendarModal(userId, name);
+          }
+        };
+        window.addEventListener('message', handleMessage);
+      };
+    }
+  }
+
+  // Reset blocked inputs
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  document.getElementById('staff-block-date').value = '';
+  document.getElementById('staff-block-date').min = todayStr;
+  document.getElementById('staff-block-start').value = '';
+  document.getElementById('staff-block-end').value = '';
+  document.getElementById('staff-block-notes').value = '';
+
+  // Load blocked slots
+  loadBlockedSlotsForStaff(userId, name);
+
+  // Wire Block button
+  const btnBlock = document.getElementById('btn-staff-add-block');
+  if (btnBlock) {
+    btnBlock.onclick = async () => {
+      const date = document.getElementById('staff-block-date').value;
+      const start_time = document.getElementById('staff-block-start').value;
+      const end_time = document.getElementById('staff-block-end').value;
+      const notes = document.getElementById('staff-block-notes').value.trim();
+
+      if (!date || !start_time || !end_time) {
+        alert('Please fill out Date, Start Time, and End Time to block a slot.');
+        return;
+      }
+
+      if (date < todayStr) {
+        alert('Validation Error: You cannot block a date in the past.');
+        return;
+      }
+
+      if (start_time >= end_time) {
+        alert('Validation Error: The End Time must be later than the Start Time.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/blocked-slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            resource_name: name,
+            date,
+            start_time,
+            end_time,
+            notes
+          })
+        });
+
+        if (res.ok) {
+          showToast('Calendar slot blocked successfully!', 'success');
+          // Reset inputs
+          document.getElementById('staff-block-date').value = '';
+          document.getElementById('staff-block-start').value = '';
+          document.getElementById('staff-block-end').value = '';
+          document.getElementById('staff-block-notes').value = '';
+          // Reload
+          loadBlockedSlotsForStaff(userId, name);
+        } else {
+          const err = await res.json();
+          alert(`Error: ${err.error}`);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+  }
+
   document.getElementById('modal-staff-calendar').classList.add('active');
+  if (window.lucide) lucide.createIcons();
+};
+
+async function loadBlockedSlotsForStaff(userId, resourceName) {
+  const tbody = document.getElementById('staff-blocked-slots-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 12px; color: var(--text-muted);">Loading blocked slots...</td></tr>';
+  
+  try {
+    const res = await fetch(`/api/blocked-slots/user/${userId}`);
+    if (!res.ok) throw new Error('Failed to fetch blocked slots');
+    const slots = await res.json();
+    
+    if (slots.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 12px; color: var(--text-muted);">No blocked slots configured.</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = slots.map(slot => {
+      return `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <td style="padding: 8px 10px; color: white;">${slot.date}</td>
+          <td style="padding: 8px 10px; color: #94a3b8;">${slot.start_time} - ${slot.end_time}</td>
+          <td style="padding: 8px 10px; color: #94a3b8; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${slot.notes || ''}">${slot.notes || '—'}</td>
+          <td style="padding: 8px 10px; text-align: center;">
+            <button type="button" class="btn btn-icon-only" onclick="deleteBlockedSlotFromModal(${slot.id}, ${userId}, '${resourceName}')" style="background: transparent; border: none; padding: 2px; cursor: pointer; color: var(--color-danger);">
+              <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 12px; color: var(--color-danger);">Error loading slots.</td></tr>';
+  }
+}
+
+window.deleteBlockedSlotFromModal = async (slotId, userId, resourceName) => {
+  if (!confirm('Are you sure you want to unblock this calendar slot?')) return;
+  try {
+    const res = await fetch(`/api/blocked-slots/${slotId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Calendar slot unblocked.', 'success');
+      loadBlockedSlotsForStaff(userId, resourceName);
+    } else {
+      const err = await res.json();
+      alert(`Error: ${err.error}`);
+    }
+  } catch (e) {
+    console.error(e);
+  }
 };
 
 window.closeStaffCalendarModal = () => {
@@ -5808,6 +6163,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const appointment_gap = parseInt(document.getElementById('staff-appointment-gap').value);
 
+      const btnSave = document.getElementById('btn-save-staff-calendar');
+      if (btnSave) {
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving...';
+      }
+
       try {
         const response = await fetch(`/api/team/${userId}/calendar`, {
           method: 'PUT',
@@ -5815,17 +6176,40 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ working_hours, break_periods, appointment_gap })
         });
         if (response.ok) {
-          window.closeStaffCalendarModal();
+          if (btnSave) {
+            btnSave.textContent = 'SAVED';
+            btnSave.style.background = '#10b981';
+            btnSave.style.borderColor = '#10b981';
+          }
+          
+          setTimeout(() => {
+            window.closeStaffCalendarModal();
+            if (btnSave) {
+              btnSave.disabled = false;
+              btnSave.textContent = 'Save Calendar';
+              btnSave.style.background = '';
+              btnSave.style.borderColor = '';
+            }
+          }, 1000);
+
           fetchTeamAndResources();
           const loggedInUserId = getLoggedInUserId();
           if (loggedInUserId && loggedInUserId === parseInt(userId)) {
             fetchPersonalCalendar();
           }
         } else {
+          if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.textContent = 'Save Calendar';
+          }
           const err = await response.json();
           alert(`Error saving calendar config: ${err.error}`);
         }
       } catch (err) {
+        if (btnSave) {
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save Calendar';
+        }
         console.error(err);
       }
     });
@@ -9348,3 +9732,736 @@ window.disable2FA = async function() {
     showToast('Error disabling 2FA.', 'error');
   }
 };
+
+// =============================================================
+// MARKETING CAMPAIGNS HUB FRONTEND LOGIC
+// =============================================================
+
+window.toggleCreateCampaignModal = function(show) {
+  console.log('[toggleCreateCampaignModal] show =', show);
+  const modal = document.getElementById('modal-create-campaign');
+  if (!modal) {
+    console.error('[toggleCreateCampaignModal] Error: modal-create-campaign element not found in DOM!');
+    return;
+  }
+  
+  if (show) {
+    modal.classList.add('active');
+    const form = document.getElementById('form-create-campaign');
+    if (form) {
+      form.reset();
+    } else {
+      console.error('[toggleCreateCampaignModal] Error: form-create-campaign element not found in DOM!');
+    }
+    toggleCampaignChannelFields();
+
+    // Reset save-as checkbox and hide name group
+    const saveAsTemplateCheck = document.getElementById('campaign-save-as-template');
+    if (saveAsTemplateCheck) saveAsTemplateCheck.checked = false;
+    toggleCampaignSaveAsTemplateName();
+
+    // Fetch and populate templates dropdown menu selectors dynamically
+    loadTemplatesList();
+  } else {
+    modal.classList.remove('active');
+  }
+};
+
+window.toggleCampaignLogsModal = function(show) {
+  console.log('[toggleCampaignLogsModal] show =', show);
+  const modal = document.getElementById('modal-campaign-logs');
+  if (!modal) {
+    console.error('[toggleCampaignLogsModal] Error: modal-campaign-logs element not found in DOM!');
+    return;
+  }
+  if (show) {
+    modal.classList.add('active');
+  } else {
+    modal.classList.remove('active');
+  }
+};
+
+window.toggleCampaignChannelFields = function() {
+  console.log('[toggleCampaignChannelFields] Toggling template fields...');
+  const emailFields = document.getElementById('campaign-email-fields');
+  const smsFields = document.getElementById('campaign-sms-fields');
+  const callFields = document.getElementById('campaign-call-fields');
+
+  const emailChan = document.getElementById('campaign-chan-email');
+  const smsChan = document.getElementById('campaign-chan-sms');
+  const callChan = document.getElementById('campaign-chan-call');
+
+  if (!emailFields || !smsFields || !callFields || !emailChan || !smsChan || !callChan) {
+    console.error('[toggleCampaignChannelFields] Missing elements:', {
+      emailFields: !!emailFields,
+      smsFields: !!smsFields,
+      callFields: !!callFields,
+      emailChan: !!emailChan,
+      smsChan: !!smsChan,
+      callChan: !!callChan
+    });
+    return;
+  }
+
+  const emailChecked = emailChan.checked;
+  const smsChecked = smsChan.checked;
+  const callChecked = callChan.checked;
+
+  emailFields.style.display = emailChecked ? 'flex' : 'none';
+  smsFields.style.display = smsChecked ? 'flex' : 'none';
+  callFields.style.display = callChecked ? 'flex' : 'none';
+};
+
+// Wire Create Campaign click button
+document.getElementById('btn-create-campaign-modal')?.addEventListener('click', () => {
+  toggleCreateCampaignModal(true);
+});
+
+// Form Submit Handler for Campaign template creation
+document.getElementById('form-create-campaign')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const name = document.getElementById('campaign-name').value.trim();
+  const target_audience = document.getElementById('campaign-audience').value;
+  
+  const channelsList = [];
+  if (document.getElementById('campaign-chan-email').checked) channelsList.push('email');
+  if (document.getElementById('campaign-chan-sms').checked) channelsList.push('whatsapp');
+  if (document.getElementById('campaign-chan-call').checked) channelsList.push('call');
+
+  if (channelsList.length === 0) {
+    showToast('Please check at least one marketing channel.', 'error');
+    return;
+  }
+
+  const email_subject = document.getElementById('campaign-email-subject').value.trim();
+  const email_body = document.getElementById('campaign-email-body').value.trim();
+  const sms_body = document.getElementById('campaign-sms-body').value.trim();
+  const call_prompt = document.getElementById('campaign-call-prompt').value.trim();
+
+  const payload = {
+    name,
+    target_audience,
+    channels: channelsList.join(','),
+    email_subject,
+    email_body,
+    sms_body,
+    call_prompt
+  };
+
+  try {
+    const res = await fetch('/api/crm/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save campaign template');
+    }
+
+    // Check if user wants to save as a reusable library template
+    if (document.getElementById('campaign-save-as-template')?.checked) {
+      const templateName = document.getElementById('campaign-template-name').value.trim() || `${name} Template`;
+      if (channelsList.includes('email') && email_body) {
+        await fetch('/api/crm/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `${templateName} (Email)`, type: 'email', subject: email_subject, content: email_body })
+        }).catch(err => console.error('Failed to save email template:', err));
+      }
+      if (channelsList.includes('call') && call_prompt) {
+        await fetch('/api/crm/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `${templateName} (Call Script)`, type: 'call', subject: '', content: call_prompt })
+        }).catch(err => console.error('Failed to save call prompt template:', err));
+      }
+    }
+
+    showToast('Campaign template saved successfully!', 'success');
+    toggleCreateCampaignModal(false);
+    loadCampaignsList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+// =============================================================
+// REUSABLE TEMPLATE LIBRARY FRONTEND CONTROL
+// =============================================================
+let libraryTemplates = [];
+
+window.switchCampaignsSubTab = function(subtab) {
+  const tabList = document.getElementById('campaign-subtab-list');
+  const tabTemplates = document.getElementById('campaign-subtab-templates');
+  const paneList = document.getElementById('campaign-subpane-list-container');
+  const paneTemplates = document.getElementById('campaign-subpane-templates-container');
+
+  if (!tabList || !tabTemplates || !paneList || !paneTemplates) return;
+
+  if (subtab === 'list') {
+    tabList.classList.add('active');
+    tabTemplates.classList.remove('active');
+    tabList.style.color = 'white';
+    tabTemplates.style.color = 'var(--text-muted)';
+    paneList.style.display = 'flex';
+    paneTemplates.style.display = 'none';
+    loadCampaignsList();
+  } else {
+    tabList.classList.remove('active');
+    tabTemplates.classList.add('active');
+    tabList.style.color = 'var(--text-muted)';
+    tabTemplates.style.color = 'white';
+    paneList.style.display = 'none';
+    paneTemplates.style.display = 'flex';
+    loadTemplatesList();
+  }
+};
+
+window.loadTemplatesList = async function() {
+  try {
+    const res = await fetch('/api/crm/templates');
+    if (!res.ok) throw new Error('Could not fetch templates.');
+    libraryTemplates = await res.json();
+    
+    // Filter and render templates inside grid
+    filterLibraryTemplates();
+    
+    // Populate dropdown selectors inside campaigns builder modal
+    populateCampaignCreationSelectors();
+  } catch (err) {
+    console.error('Error loading template library:', err);
+  }
+};
+
+function renderTemplatesGrid(templates) {
+  const grid = document.getElementById('templates-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  if (templates.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-muted); background: rgba(255,255,255,0.01); border: 1px dashed var(--border-glass); border-radius: 8px;">
+        <p style="margin: 0 0 10px;">No templates found in your library.</p>
+        <span style="font-size: 0.8rem;">Create a custom preset or upload a 3rd party template file to get started.</span>
+      </div>
+    `;
+    return;
+  }
+
+  templates.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'glass';
+    card.style.cssText = 'padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; background: rgba(255,255,255,0.02); height: 180px;';
+    
+    const isSystem = t.tenant_id === null;
+    const badgeColor = t.type === 'email' ? 'rgba(139,92,246,0.15)' : 'rgba(6,182,212,0.15)';
+    const badgeText = t.type === 'email' ? '#a78bfa' : '#22d3ee';
+    const borderCol = t.type === 'email' ? 'rgba(139,92,246,0.3)' : 'rgba(6,182,212,0.3)';
+
+    card.innerHTML = `
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+          <span style="background: ${badgeColor}; color: ${badgeText}; border: 1px solid ${borderCol}; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">
+            ${t.type === 'email' ? '📧 Email' : '📞 Call script'}
+          </span>
+          <span style="font-size: 0.7rem; color: ${isSystem ? '#94a3b8' : '#34d399'}; font-weight: 600; padding: 2px 6px; background: ${isSystem ? 'rgba(255,255,255,0.05)' : 'rgba(52,211,153,0.1)'}; border-radius: 4px;">
+            ${isSystem ? 'System Preset' : 'My Template'}
+          </span>
+        </div>
+        <h4 style="color: white; margin: 0 0 8px; font-size: 0.95rem; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(t.name)}</h4>
+        <p style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 0;">
+          ${t.type === 'email' ? `Subject: ${escapeHtml(t.subject || '')}` : escapeHtml(t.content)}
+        </p>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; margin-top: 10px;">
+        <button class="btn btn-sm btn-ghost" onclick="previewTemplate(${t.id})" style="padding: 2px 8px; font-size: 0.75rem;">
+          <i data-lucide="eye" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-right: 2px;"></i> View
+        </button>
+        ${!isSystem ? `
+          <button class="btn btn-sm btn-ghost" onclick="editTemplate(${t.id})" style="padding: 2px 8px; font-size: 0.75rem; color: #38bdf8;">
+            <i data-lucide="edit" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-right: 2px;"></i> Edit
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="deleteTemplate(${t.id})" style="padding: 2px 8px; font-size: 0.75rem; color: #ef4444;">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-right: 2px;"></i> Delete
+          </button>
+        ` : ''}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  if (window.lucide) lucide.createIcons();
+}
+
+window.filterLibraryTemplates = function() {
+  const query = document.getElementById('template-search-input')?.value.toLowerCase().trim() || '';
+  const type = document.getElementById('template-type-filter')?.value || 'all';
+
+  const filtered = libraryTemplates.filter(t => {
+    const matchesQuery = t.name.toLowerCase().includes(query) || t.content.toLowerCase().includes(query) || (t.subject && t.subject.toLowerCase().includes(query));
+    const matchesType = type === 'all' || t.type === type;
+    return matchesQuery && matchesType;
+  });
+
+  renderTemplatesGrid(filtered);
+};
+
+function populateCampaignCreationSelectors() {
+  const emailSel = document.getElementById('campaign-email-template-select');
+  const callSel = document.getElementById('campaign-call-template-select');
+
+  if (emailSel) {
+    emailSel.innerHTML = '<option value="">-- Select Email Template Preset --</option>';
+    const emailTemplates = libraryTemplates.filter(t => t.type === 'email');
+    emailTemplates.forEach(t => {
+      const isSystem = t.tenant_id === null;
+      emailSel.innerHTML += `<option value="${t.id}">${isSystem ? '🌐 [Preset]' : '👤 [Custom]'} ${escapeHtml(t.name)}</option>`;
+    });
+  }
+
+  if (callSel) {
+    callSel.innerHTML = '<option value="">-- Select Call Script Preset --</option>';
+    const callTemplates = libraryTemplates.filter(t => t.type === 'call');
+    callTemplates.forEach(t => {
+      const isSystem = t.tenant_id === null;
+      callSel.innerHTML += `<option value="${t.id}">${isSystem ? '🌐 [Preset]' : '👤 [Custom]'} ${escapeHtml(t.name)}</option>`;
+    });
+  }
+}
+
+window.applyCampaignTemplateSelection = function(type) {
+  if (type === 'email') {
+    const val = document.getElementById('campaign-email-template-select').value;
+    if (!val) return;
+    const template = libraryTemplates.find(t => t.id === parseInt(val));
+    if (template) {
+      document.getElementById('campaign-email-subject').value = template.subject || '';
+      document.getElementById('campaign-email-body').value = template.content || '';
+      showToast('Template Applied', `Applied "${template.name}" template to email fields.`, 'success');
+    }
+  } else if (type === 'call') {
+    const val = document.getElementById('campaign-call-template-select').value;
+    if (!val) return;
+    const template = libraryTemplates.find(t => t.id === parseInt(val));
+    if (template) {
+      document.getElementById('campaign-call-prompt').value = template.content || '';
+      showToast('Template Applied', `Applied "${template.name}" prompt to voice objective.`, 'success');
+    }
+  }
+};
+
+window.loadCampaignFile = function(event, type) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const contents = e.target.result;
+    if (type === 'email') {
+      document.getElementById('campaign-email-body').value = contents;
+      const subjectInput = document.getElementById('campaign-email-subject');
+      if (subjectInput && !subjectInput.value.trim()) {
+        subjectInput.value = file.name.replace(/\.[^/.]+$/, "");
+      }
+      showToast('File Imported', `Successfully read HTML body from "${file.name}"!`, 'success');
+    } else if (type === 'call') {
+      document.getElementById('campaign-call-prompt').value = contents;
+      showToast('File Imported', `Successfully read Call Prompt from "${file.name}"!`, 'success');
+    }
+  };
+  reader.onerror = function() {
+    showToast('Import Failed', 'Could not read template file.', 'danger');
+  };
+  reader.readAsText(file);
+};
+
+window.importTemplateFromFileDirect = async function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const contents = e.target.result;
+    const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm');
+    const type = isHtml ? 'email' : 'call';
+    const name = file.name.replace(/\.[^/.]+$/, ""); 
+
+    const payload = {
+      name: name + ' (Imported)',
+      type,
+      subject: isHtml ? name : '',
+      content: contents
+    };
+
+    try {
+      const res = await fetch('/api/crm/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showToast('Template Imported', `Saved 3rd party template "${payload.name}" to your library.`, 'success');
+        loadTemplatesList();
+      } else {
+        const err = await res.json();
+        showToast('Import Error', err.error || 'Failed to save imported template.', 'danger');
+      }
+    } catch (err) {
+      showToast('Connection Error', err.message, 'danger');
+    }
+  };
+  reader.readAsText(file);
+};
+
+window.toggleTemplateEditorModal = function(show) {
+  const modal = document.getElementById('modal-template-editor');
+  if (!modal) return;
+  if (show) {
+    modal.classList.add('active');
+  } else {
+    modal.classList.remove('active');
+  }
+};
+
+window.openCreateTemplateModal = function() {
+  document.getElementById('template-editor-title').innerHTML = '<i data-lucide="folder-heart" class="text-cyan"></i> Create Custom Template';
+  document.getElementById('template-editor-id').value = '';
+  document.getElementById('form-template-editor').reset();
+  toggleTemplateEditorFields();
+  toggleTemplateEditorModal(true);
+  if (window.lucide) lucide.createIcons();
+};
+
+window.toggleTemplateEditorFields = function() {
+  const type = document.getElementById('template-editor-type').value;
+  const subjectGroup = document.getElementById('template-editor-email-subject-group');
+  const label = document.getElementById('template-editor-content-label');
+
+  if (!subjectGroup || !label) return;
+
+  if (type === 'email') {
+    subjectGroup.style.display = 'block';
+    label.textContent = 'Email Template HTML Content';
+  } else {
+    subjectGroup.style.display = 'none';
+    label.textContent = 'Outbound Call Script / Prompt text';
+  }
+};
+
+window.loadEditorFile = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('template-editor-content').value = e.target.result;
+    
+    const nameInput = document.getElementById('template-editor-name');
+    if (nameInput && !nameInput.value.trim()) {
+      nameInput.value = file.name.replace(/\.[^/.]+$/, "");
+    }
+    
+    const typeSelect = document.getElementById('template-editor-type');
+    const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm');
+    if (typeSelect) {
+      typeSelect.value = isHtml ? 'email' : 'call';
+      toggleTemplateEditorFields();
+    }
+
+    if (isHtml) {
+      const subjectInput = document.getElementById('template-editor-subject');
+      if (subjectInput && !subjectInput.value.trim()) {
+        subjectInput.value = file.name.replace(/\.[^/.]+$/, "");
+      }
+    }
+    showToast('File Loaded', `Loaded contents of "${file.name}" into editor.`, 'success');
+  };
+  reader.readAsText(file);
+};
+
+window.previewTemplate = function(id) {
+  const template = libraryTemplates.find(t => t.id === id);
+  if (!template) return;
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-template-preview';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  
+  const isHtml = template.type === 'email';
+  
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;max-width:650px;width:90%;max-height:85vh;display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-glass);padding-bottom:12px;margin-bottom:16px;">
+        <h3 style="color:white;margin:0;font-size:1.1rem;display:flex;align-items:center;gap:8px;">
+          <i data-lucide="eye" style="color: #06b6d4;"></i> ${escapeHtml(template.name)}
+        </h3>
+        <button onclick="document.getElementById('modal-template-preview').remove()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.2rem;">&times;</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;background:rgba(255,255,255,0.02);border:1px solid var(--border-glass);border-radius:8px;padding:16px;margin-bottom:20px;min-height:200px;">
+        ${isHtml ? `
+          <div style="color:#94a3b8;font-size:0.8rem;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px;margin-bottom:12px;">
+            <strong style="color:white;">Subject:</strong> ${escapeHtml(template.subject || '')}
+          </div>
+          <iframe style="width:100%; border:none; background: white; border-radius: 4px; min-height: 350px;" srcdoc="${template.content.replace(/"/g, '&quot;')}"></iframe>
+        ` : `
+          <pre style="margin:0;color:#cbd5e1;font-family:monospace;white-space:pre-wrap;font-size:0.85rem;line-height:1.5;">${escapeHtml(template.content)}</pre>
+        `}
+      </div>
+      <div style="text-align:right;">
+        <button onclick="document.getElementById('modal-template-preview').remove()" class="btn btn-secondary">Close Preview</button>
+      </div>
+    </div>
+  `;
+  modal.onclick = () => modal.remove();
+  document.body.appendChild(modal);
+  if (window.lucide) lucide.createIcons();
+};
+
+window.editTemplate = function(id) {
+  const template = libraryTemplates.find(t => t.id === id);
+  if (!template) return;
+
+  document.getElementById('template-editor-title').innerHTML = '<i data-lucide="edit" class="text-cyan"></i> Edit Reusable Template';
+  document.getElementById('template-editor-id').value = template.id;
+  document.getElementById('template-editor-name').value = template.name;
+  document.getElementById('template-editor-type').value = template.type;
+  document.getElementById('template-editor-subject').value = template.subject || '';
+  document.getElementById('template-editor-content').value = template.content;
+
+  toggleTemplateEditorFields();
+  toggleTemplateEditorModal(true);
+  if (window.lucide) lucide.createIcons();
+};
+
+window.deleteTemplate = async function(id) {
+  if (!confirm('Are you sure you want to delete this template preset?')) return;
+  try {
+    const res = await fetch(`/api/crm/templates/${id}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      showToast('Template Deleted', 'Template successfully removed from library.', 'success');
+      loadTemplatesList();
+    } else {
+      showToast('Deletion Failed', 'Could not delete template.', 'danger');
+    }
+  } catch (err) {
+    showToast('Connection Error', err.message, 'danger');
+  }
+};
+
+window.toggleCampaignSaveAsTemplateName = function() {
+  const checked = document.getElementById('campaign-save-as-template')?.checked;
+  const nameGroup = document.getElementById('campaign-template-name-group');
+  if (nameGroup) {
+    nameGroup.style.display = checked ? 'flex' : 'none';
+  }
+};
+
+// Form submit handler for template editor
+document.getElementById('form-template-editor')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById('template-editor-id').value;
+  const name = document.getElementById('template-editor-name').value.trim();
+  const type = document.getElementById('template-editor-type').value;
+  const subject = document.getElementById('template-editor-subject').value.trim();
+  const content = document.getElementById('template-editor-content').value.trim();
+
+  const payload = { name, type, subject, content };
+
+  try {
+    if (id) {
+      await fetch(`/api/crm/templates/${id}`, { method: 'DELETE' });
+    }
+
+    const res = await fetch('/api/crm/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      showToast('Template Saved', `Successfully saved "${name}".`, 'success');
+      toggleTemplateEditorModal(false);
+      loadTemplatesList();
+    } else {
+      const err = await res.json();
+      showToast('Save Error', err.error || 'Failed to save template.', 'danger');
+    }
+  } catch (err) {
+    showToast('Connection Error', err.message, 'danger');
+  }
+});
+
+// Load Campaigns and refresh statistics
+window.loadCampaignsList = async function() {
+  console.log('[loadCampaignsList] Fetching campaigns list...');
+  try {
+    const res = await fetch('/api/crm/campaigns');
+    console.log('[loadCampaignsList] Fetch response status =', res.status);
+    if (!res.ok) throw new Error('Could not fetch campaigns list.');
+    const list = await res.json();
+    console.log('[loadCampaignsList] campaigns count =', list.length);
+
+    // Render Stats
+    document.getElementById('campaign-stat-total').textContent = list.length;
+    document.getElementById('campaign-stat-active').textContent = list.filter(c => c.status === 'running').length;
+    document.getElementById('campaign-stat-completed').textContent = list.filter(c => c.status === 'completed').length;
+
+    // Render Table
+    const tbody = document.getElementById('crm-campaigns-tbody');
+    if (!tbody) {
+      console.error('[loadCampaignsList] Error: crm-campaigns-tbody not found in DOM!');
+      return;
+    }
+    tbody.innerHTML = '';
+
+    if (list.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted" style="padding: 30px;">
+            No campaigns configured. Click "Create Campaign" to add your first template.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    list.forEach(c => {
+      const tr = document.createElement('tr');
+      
+      // Formatting channels nicely with badges
+      const chBadges = c.channels.split(',').map(ch => {
+        if (ch === 'email') return '<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); margin-right: 4px;">📧 Email</span>';
+        if (ch === 'whatsapp') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); margin-right: 4px;">💬 SMS</span>';
+        if (ch === 'call') return '<span class="badge" style="background: rgba(6,182,212,0.15); color: #22d3ee; border: 1px solid rgba(6,182,212,0.3); margin-right: 4px;">📞 Call</span>';
+        return `<span class="badge badge-secondary">${ch}</span>`;
+      }).join('');
+
+      // Status styling
+      let statusHtml = '';
+      if (c.status === 'draft') {
+        statusHtml = '<span class="badge" style="background: rgba(255,255,255,0.05); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1);">Draft</span>';
+      } else if (c.status === 'running') {
+        statusHtml = '<span class="badge" style="background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3);"><span class="pulse-indicator" style="background:#fbbf24; width:8px; height:8px; display:inline-block; border-radius:50%; margin-right:5px; animation: pulse 1.5s infinite;"></span>Running</span>';
+      } else if (c.status === 'completed') {
+        statusHtml = '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">Completed</span>';
+      }
+
+      // Format Audience name
+      let audName = 'All Contacts';
+      if (c.target_audience === 'lead') audName = 'Cold Leads';
+      if (c.target_audience === 'nurture') audName = 'Nurturing';
+      if (c.target_audience === 'customer') audName = 'Closed Won';
+
+      const dateStr = new Date(c.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      tr.innerHTML = `
+        <td style="font-weight: 600; color: white;">${c.name}</td>
+        <td>${chBadges}</td>
+        <td>${audName}</td>
+        <td>${statusHtml}</td>
+        <td>${dateStr}</td>
+        <td class="text-right">
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            ${c.status !== 'running' ? `<button class="btn btn-sm btn-primary" onclick="runCampaign(${c.id})"><i data-lucide="play" style="width:12px; height:12px; margin-right:4px;"></i> Run</button>` : ''}
+            <button class="btn btn-sm btn-secondary" onclick="viewCampaignLogs(${c.id})"><i data-lucide="scroll" style="width:12px; height:12px; margin-right:4px;"></i> Logs</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCampaignTemplate(${c.id})" style="padding: 4px 8px;"><i data-lucide="trash-2" style="width:12px; height:12px;"></i></button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.runCampaign = async function(id) {
+  if (!confirm('Are you sure you want to run this marketing campaign now? This will execute broadcasts to matching contacts.')) return;
+  try {
+    const res = await fetch(`/api/crm/campaigns/${id}/run`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to start campaign.');
+    showToast(data.message || 'Campaign execution started.', 'success');
+    loadCampaignsList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.viewCampaignLogs = async function(id) {
+  try {
+    const res = await fetch(`/api/crm/campaigns/${id}/logs`);
+    if (!res.ok) throw new Error('Failed to retrieve campaign logs.');
+    const logs = await res.json();
+
+    const tbody = document.getElementById('crm-campaign-logs-tbody');
+    tbody.innerHTML = '';
+
+    if (logs.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted" style="padding: 20px;">
+            No execution logs recorded yet for this campaign.
+          </td>
+        </tr>
+      `;
+    } else {
+      logs.forEach(l => {
+        const tr = document.createElement('tr');
+        
+        let chanBadge = '';
+        if (l.channel === 'email') chanBadge = '📧 Email';
+        if (l.channel === 'whatsapp') chanBadge = '💬 SMS';
+        if (l.channel === 'call') chanBadge = '📞 Call';
+
+        let statBadge = '';
+        if (l.status === 'sent') {
+          statBadge = '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">Sent</span>';
+        } else if (l.status === 'called') {
+          statBadge = '<span class="badge" style="background: rgba(6,182,212,0.15); color: #22d3ee; border: 1px solid rgba(6,182,212,0.3);">Called</span>';
+        } else {
+          statBadge = '<span class="badge badge-danger">Failed</span>';
+        }
+
+        const dateStr = new Date(l.processed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        tr.innerHTML = `
+          <td style="font-weight: 600; color: white;">${l.contact_name}</td>
+          <td>${l.contact_phone || 'None'}</td>
+          <td style="color: #cbd5e1;">${chanBadge}</td>
+          <td>${statBadge}</td>
+          <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted);" title="${l.details || ''}">${l.details || ''}</td>
+          <td>${dateStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    toggleCampaignLogsModal(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.deleteCampaignTemplate = async function(id) {
+  if (!confirm('Are you sure you want to delete this campaign template? All execution history logs will be preserved but the template will be deleted.')) return;
+  try {
+    const res = await fetch(`/api/crm/campaigns/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Could not delete campaign template.');
+    showToast('Campaign deleted.', 'success');
+    loadCampaignsList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+

@@ -13,7 +13,7 @@
   <!-- SheetJS Library for CSV/XLS/XLSX File Parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=1.0.4">
+  <link rel="stylesheet" href="style.css?v=1.0.5">
   <style>
     /* Animated Voice Visualizer Waveform */
     .wave-bar.animate {
@@ -1256,6 +1256,7 @@
               <div class="crm-tab active" data-subtab="contacts"><i data-lucide="contact"></i> Contacts Directory</div>
               <div class="crm-tab" data-subtab="deals"><i data-lucide="kanban"></i> Deals Pipeline</div>
               <div class="crm-tab" data-subtab="copilot"><i data-lucide="sparkles"></i> AI CRM Copilot</div>
+              <div class="crm-tab" data-subtab="campaigns"><i data-lucide="megaphone"></i> Campaigns Hub</div>
             </div>
 
             <!-- CRM Sub-Panes -->
@@ -1397,6 +1398,100 @@
                 </div>
               </div>
 
+              <!-- SUB-PANE: CAMPAIGNS HUB -->
+              <div class="crm-subpane" id="crm-subpane-campaigns">
+                <div class="glass" style="padding: 20px;">
+                  <div class="pane-section-header mb-4" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <h3>Marketing Campaigns Hub</h3>
+                      <p class="text-muted" style="font-size:0.8rem; margin:0;">Target customer lists via automated Outbound Calls, WhatsApp broadcasts, and Resend emails.</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-create-campaign-modal" onclick="toggleCreateCampaignModal(true)">
+                      <i data-lucide="megaphone"></i> Create Campaign
+                    </button>
+                  </div>
+
+                  <!-- Campaigns Navigation Sub-Tabs -->
+                  <div class="campaigns-nav-tabs" style="display: flex; gap: 20px; border-bottom: 1px solid var(--border-glass); margin-bottom: 25px; padding-bottom: 5px;">
+                    <div class="campaign-subtab active" onclick="switchCampaignsSubTab('list')" id="campaign-subtab-list" style="cursor: pointer; color: white; padding-bottom: 8px; font-weight: 600; font-size: 0.9rem; position: relative;">
+                      <i data-lucide="megaphone" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>Campaigns List
+                    </div>
+                    <div class="campaign-subtab" onclick="switchCampaignsSubTab('templates')" id="campaign-subtab-templates" style="cursor: pointer; color: var(--text-muted); padding-bottom: 8px; font-weight: 600; font-size: 0.9rem; position: relative;">
+                      <i data-lucide="folder-heart" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>Template Library
+                    </div>
+                  </div>
+
+                  <!-- Sub-View: Campaigns List & Stats -->
+                  <div id="campaign-subpane-list-container" style="display: flex; flex-direction: column;">
+                    <!-- Campaign Stats Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                      <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 15px; text-align: center;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Total Campaigns</span>
+                        <h2 id="campaign-stat-total" style="margin: 5px 0 0; color: white; font-size: 1.8rem; font-weight: 700;">0</h2>
+                      </div>
+                      <div style="background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 12px; padding: 15px; text-align: center;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; color: #06b6d4; font-weight: 600;">Running Campaigns</span>
+                        <h2 id="campaign-stat-active" style="margin: 5px 0 0; color: #06b6d4; font-size: 1.8rem; font-weight: 700;">0</h2>
+                      </div>
+                      <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 15px; text-align: center;">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; color: #10b981; font-weight: 600;">Completed Campaigns</span>
+                        <h2 id="campaign-stat-completed" style="margin: 5px 0 0; color: #10b981; font-size: 1.8rem; font-weight: 700;">0</h2>
+                      </div>
+                    </div>
+
+                    <!-- Campaigns Table -->
+                    <div class="appointments-table-wrapper">
+                      <table class="data-table">
+                        <thead>
+                          <tr>
+                            <th>Campaign Name</th>
+                            <th>Channels</th>
+                            <th>Target Audience</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th class="text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="crm-campaigns-tbody">
+                          <!-- Injected via app.js -->
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Sub-View: Template Library -->
+                  <div id="campaign-subpane-templates-container" style="display: none; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: 12px; padding: 16px;">
+                      <!-- Search and Type Filter -->
+                      <div style="display: flex; gap: 10px; flex: 1; min-width: 250px;">
+                        <input type="text" id="template-search-input" class="form-input" placeholder="Search templates..." oninput="filterLibraryTemplates()" style="max-width: 300px; height: 38px;">
+                        <select id="template-type-filter" class="form-input" onchange="filterLibraryTemplates()" style="max-width: 150px; height: 38px;">
+                          <option value="all">All Channels</option>
+                          <option value="email">Emails</option>
+                          <option value="call">Call Scripts</option>
+                        </select>
+                      </div>
+                      
+                      <!-- Action Buttons -->
+                      <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" onclick="openCreateTemplateModal()" style="height: 38px; display: flex; align-items: center; gap: 6px;">
+                          <i data-lucide="plus-circle" style="width: 15px; height: 15px;"></i> Create Preset
+                        </button>
+                        <button class="btn btn-primary" onclick="document.getElementById('template-bulk-upload').click()" style="height: 38px; display: flex; align-items: center; gap: 6px;">
+                          <i data-lucide="upload-cloud" style="width: 15px; height: 15px;"></i> Import 3rd Party File
+                        </button>
+                        <input type="file" id="template-bulk-upload" accept=".html,.txt,.md" style="display: none;" onchange="importTemplateFromFileDirect(event)">
+                      </div>
+                    </div>
+
+                    <!-- Templates Grid -->
+                    <div id="templates-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+                      <!-- Templates dynamically generated here -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -1464,78 +1559,71 @@
               <div class="stepper-item active" data-step="2">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
+                  <span class="stepper-title">Add Modules</span>
+                  <span class="stepper-subtitle">Activate voice and business addons</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="3">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
                   <span class="stepper-title">Business Profile</span>
                   <span class="stepper-subtitle">Company name, scheduling mode</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="3">
+              <div class="stepper-item" data-step="4">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Branding</span>
+                  <span class="stepper-subtitle">AI name, avatar & security</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="5">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Voice Provider</span>
+                  <span class="stepper-subtitle">Gateways & OpenAI API Key</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="6">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Phone Number</span>
                   <span class="stepper-subtitle">Assign inbound phone number</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="4">
+              <div class="stepper-item" data-step="7">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">AI Receptionist</span>
                   <span class="stepper-subtitle">Configure your AI agent</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="5">
+              <div class="stepper-item" data-step="8">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Business Hours</span>
                   <span class="stepper-subtitle">Set operating schedule</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="6">
+              <div class="stepper-item" data-step="9">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Knowledge Base</span>
+                  <span class="stepper-subtitle">Upload FAQs and documents</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="10">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Team Members</span>
                   <span class="stepper-subtitle">Invite staff and set roles</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="7">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Add Modules</span>
-                  <span class="stepper-subtitle">Activate voice and business addons</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="8">
+              <div class="stepper-item" data-step="11">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Go Live</span>
                   <span class="stepper-subtitle">Test and activate your AI</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="9">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">OpenAI API Key</span>
-                  <span class="stepper-subtitle">Configure project API key</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="10">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Security (2FA)</span>
-                  <span class="stepper-subtitle">Two-factor authentication</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="11">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Voice Provider</span>
-                  <span class="stepper-subtitle">Choose Retell AI or VAPI</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="12">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Knowledge Base</span>
-                  <span class="stepper-subtitle">Upload FAQs and documents</span>
                 </div>
               </div>
             </div>
@@ -1671,10 +1759,17 @@
                         <p>Configure Twilio numbers for inbound calls.</p>
                       </div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group mb-4">
                       <label for="settings-twilio-num">Add a phone number you want your customer to call</label>
                       <input type="text" id="settings-twilio-num" class="form-input" placeholder="e.g. +15551234567">
                       <small class="text-muted">Voice calls dialed to this number will load this receptionist.</small>
+                    </div>
+
+                    <!-- Global human backup number (shown only when departments routing is inactive) -->
+                    <div id="global-transfer-number-group" class="form-group mb-4" style="margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 20px;">
+                      <label for="settings-transfer-num" style="font-weight: 600; color: white;">Global Human Backup Phone Number (For Call Handoff)</label>
+                      <input type="text" id="settings-transfer-num" class="form-input" placeholder="e.g. +6587654321">
+                      <small class="text-muted">Calls will transfer to this number if department routing is inactive and human backup is requested.</small>
                     </div>
 
                     <div class="webhook-setup-guide mt-4 settings-advanced-only">
@@ -2077,27 +2172,6 @@
                       </div>
 
                     </div>
-
-                    <!-- Global human backup number (shown only when departments routing is inactive) -->
-                    <div id="global-transfer-number-group" class="form-group mb-4" style="margin-top: 20px; border-top: 1px solid var(--border-glass); padding-top: 20px;">
-                      <label for="settings-transfer-num" style="font-weight: 600; color: white;">Global Human Backup Phone Number (For Call Handoff)</label>
-                      <input type="text" id="settings-transfer-num" class="form-input" placeholder="e.g. +6587654321">
-                      <small class="text-muted">Calls will transfer to this number if department routing is inactive and human backup is requested.</small>
-                    </div>
-
-                    <!-- Google Calendar Sync (Free Integration) -->
-                    <div style="border-top: 1px solid var(--border-glass); padding-top: 20px; margin-top: 20px;">
-                      <h4 style="font-family: var(--font-display); font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: var(--color-primary);">Google Calendar Real-Time Sync (Free Integration)</h4>
-                      <div id="gcal-status-container" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: rgba(255, 255, 255, 0.05); border-radius: 12px; border: 1px solid var(--border-glass);">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                          <i data-lucide="calendar" style="color: #4285F4; width: 20px; height: 20px;"></i>
-                          <div>
-                            <div id="gcal-status-text" style="font-weight: 600; color: white; font-size: 0.85rem;">Disconnected</div>
-                          </div>
-                        </div>
-                        <button type="button" class="btn btn-secondary" id="btn-connect-gcal" style="padding: 6px 12px; font-size: 0.8rem;">Connect</button>
-                      </div>
-                    </div>
                   </div>
 
                   <!-- STEP 6: Team Members -->
@@ -2124,12 +2198,23 @@
                       <div class="settings-card-side glass" id="team-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
                         <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                           <h3 style="margin: 0; font-size: 0.95rem;">Workspace Team Roles</h3>
-                          <button type="button" class="btn btn-primary" id="btn-add-team-member" onclick="openAddMemberForm()" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
-                            <i data-lucide="user-plus" style="width: 12px; height: 12px;"></i> Add Member
+                          <button type="button" class="btn btn-primary" id="btn-invite-team-member" onclick="openInviteMemberForm()" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Invite Member
                           </button>
                         </div>
                         <div id="team-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
                           <!-- Dynamically populated team rows -->
+                        </div>
+                      </div>
+
+                      <!-- Pending Invitations card -->
+                      <div class="settings-card-side glass" id="invitations-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
+                        <div class="pane-section-header" style="margin-bottom: 15px;">
+                          <h3 style="margin: 0; font-size: 0.95rem;">Pending Invitations</h3>
+                        </div>
+                        <div id="invitations-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
+                          <!-- Dynamically populated invitation rows -->
+                          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No pending invitations.</div>
                         </div>
                       </div>
 
@@ -2669,9 +2754,76 @@
                   </div>
                 </div>
 
+                <!-- Google Calendar Integration -->
+                <div style="border-top: 1px solid var(--border-glass); padding-top: 15px; margin-bottom: 20px;">
+                  <h4 style="font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; color: var(--color-primary);">Google Calendar Sync</h4>
+                  <div id="staff-gcal-status-container" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; border: 1px solid var(--border-glass);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <i data-lucide="calendar" style="color: #4285F4; width: 20px; height: 20px;"></i>
+                      <div>
+                        <div id="staff-gcal-status-text" style="font-weight: 600; color: white; font-size: 0.85rem;">Disconnected</div>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <button type="button" class="btn btn-secondary btn-sm" id="btn-staff-connect-gcal" style="padding: 4px 14px; font-size: 0.75rem; height: 28px;">Connect</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Block Calendar Section -->
+                <div style="border-top: 1px solid var(--border-glass); padding-top: 15px; margin-bottom: 20px;">
+                  <h4 style="font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; color: var(--color-primary);">Block Calendar Time Slots</h4>
+                  
+                  <!-- Form to add a blocked slot -->
+                  <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-glass); padding: 12px; border-radius: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Row 1: Date and Times -->
+                    <div style="display: grid; grid-template-columns: 1.2fr 0.9fr 0.9fr; gap: 10px;">
+                      <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Date</label>
+                        <input type="date" id="staff-block-date" class="form-input" style="padding: 4px 8px; font-size: 0.8rem; height: 32px; background: rgba(0,0,0,0.4);">
+                      </div>
+                      <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Start</label>
+                        <input type="time" id="staff-block-start" class="form-input" style="padding: 4px 8px; font-size: 0.8rem; height: 32px; background: rgba(0,0,0,0.4);">
+                      </div>
+                      <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">End</label>
+                        <input type="time" id="staff-block-end" class="form-input" style="padding: 4px 8px; font-size: 0.8rem; height: 32px; background: rgba(0,0,0,0.4);">
+                      </div>
+                    </div>
+                    <!-- Row 2: Notes and Action Button -->
+                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: flex-end;">
+                      <div>
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Notes / Reason</label>
+                        <input type="text" id="staff-block-notes" class="form-input" placeholder="e.g. Offline block" style="padding: 4px 8px; font-size: 0.8rem; height: 32px; background: rgba(0,0,0,0.4);">
+                      </div>
+                      <button type="button" class="btn btn-primary" id="btn-staff-add-block" style="padding: 0 16px; font-size: 0.8rem; height: 32px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Block
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- List of currently blocked slots -->
+                  <div style="max-height: 150px; overflow-y: auto; background: rgba(0, 0, 0, 0.2); border-radius: 8px; border: 1px solid var(--border-glass);">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.8rem;">
+                      <thead>
+                        <tr style="border-bottom: 1px solid var(--border-glass); color: white; background: rgba(255,255,255,0.02);">
+                          <th style="padding: 6px 10px;">Date</th>
+                          <th style="padding: 6px 10px;">Time Range</th>
+                          <th style="padding: 6px 10px;">Notes</th>
+                          <th style="padding: 6px 10px; text-align: center;">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="staff-blocked-slots-tbody">
+                        <!-- Populated via Javascript -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
                 <div class="form-actions-right" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-glass); padding-top: 15px;">
                   <button type="button" class="btn btn-secondary" id="btn-cancel-staff-cal" style="padding: 8px 16px;">Cancel</button>
-                  <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">Save Calendar</button>
+                  <button type="submit" class="btn btn-primary" id="btn-save-staff-calendar" style="padding: 8px 16px;">Save Calendar</button>
                 </div>
               </form>
             </div>
@@ -3872,6 +4024,7 @@
             <input type="number" id="admin-limits-appointments" class="form-input limit-input" min="0" placeholder="Leave empty for plan default" style="flex: 1;">
             <span class="limit-unit">bookings</span>
           </div>
+        </div>
         <!-- Custom Overage Charge Rate -->
         <div class="limit-field-group">
           <div class="limit-field-header">
@@ -4214,7 +4367,233 @@
         </div>
         <button type="submit" class="btn btn-primary btn-block">Register &amp; Start Sandbox</button>
       </form>
+      
+      <!-- FORM: ACCEPT INVITATION -->
+      <div id="auth-invite-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(6,182,212,0.15); border: 1px solid rgba(6,182,212,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="user-plus" style="width: 26px; height: 26px; color: #06b6d4;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Accept Workspace Invitation</h4>
+          <p id="invite-welcome-text" style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">You have been invited to join a workspace.</p>
+        </div>
+        
+        <!-- Google Sign-In for Invite Acceptance -->
+        <div id="google-invite-signin-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or set password to accept</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+        </div>
 
+        <form id="form-saas-invite">
+          <div class="form-group">
+            <label for="invite-email">Email Address</label>
+            <input type="email" id="invite-email" class="form-input" disabled style="opacity: 0.7; background: rgba(255,255,255,0.05);">
+          </div>
+          <div class="form-group">
+            <label for="invite-name">Your Full Name</label>
+            <input type="text" id="invite-name" class="form-input" required placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label for="invite-password">Password</label>
+            <input type="password" id="invite-password" class="form-input" required placeholder="Minimum 8 characters" minlength="8">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Accept &amp; Join Workspace</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE MARKETING CAMPAIGN -->
+  <div class="modal-overlay" id="modal-create-campaign" onclick="if(event.target===this) toggleCreateCampaignModal(false)">
+    <div class="modal-card glass" style="max-width: 650px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);" onclick="event.stopPropagation()">
+      <div style="background: rgba(255,255,255,0.03); padding: 18px 24px; border-bottom: 1px solid var(--border-glass); display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="display: flex; align-items: center; gap: 8px;"><i data-lucide="megaphone" class="text-cyan"></i> Create Marketing Campaign</h3>
+        <button type="button" class="btn-close" onclick="toggleCreateCampaignModal(false)" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;">&times;</button>
+      </div>
+      <form id="form-create-campaign" style="padding: 24px 28px; display: flex; flex-direction: column; gap: 15px; max-height: 70vh; overflow-y: auto;">
+        
+        <div class="form-group">
+          <label for="campaign-name" style="font-weight: 600; color: white;">Campaign Name</label>
+          <input type="text" id="campaign-name" class="form-input" required placeholder="e.g. Spring Spa Promotion 2026">
+        </div>
+
+        <div class="form-group">
+          <label for="campaign-audience" style="font-weight: 600; color: white;">Target Audience (Filter by Lead Stage)</label>
+          <select id="campaign-audience" class="form-input">
+            <option value="all">All Contacts</option>
+            <option value="lead">Cold Leads Only</option>
+            <option value="nurture">Nurturing Contacts</option>
+            <option value="customer">Closed Won (Active Customers)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label style="font-weight: 600; color: white; display: block; margin-bottom: 8px;">Marketing Channels</label>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="campaign-chan-email" onchange="toggleCampaignChannelFields()">
+              <span style="font-size: 0.9rem; color: white;">Email Broadcast (Resend API)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="campaign-chan-sms" onchange="toggleCampaignChannelFields()">
+              <span style="font-size: 0.9rem; color: white;">WhatsApp / SMS Broadcast (Twilio API)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="campaign-chan-call" onchange="toggleCampaignChannelFields()">
+              <span style="font-size: 0.9rem; color: white;">Outbound AI Calls (OpenAI Realtime + Twilio)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Channel Specific Content blocks (toggled dynamically) -->
+        <div id="campaign-email-fields" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 15px; border-radius: 8px; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <h4 style="font-size: 0.9rem; color: var(--color-primary); margin: 0;">📧 Email Template</h4>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select id="campaign-email-template-select" class="form-input" style="padding: 2px 8px; font-size: 0.75rem; width: auto; height: 26px; background: rgba(0,0,0,0.4);" onchange="applyCampaignTemplateSelection('email')">
+                <option value="">-- Select Email Template Preset --</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('campaign-email-file-upload').click()" style="padding: 2px 8px; font-size: 0.75rem; height: 26px; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05);">
+                <i data-lucide="upload" style="width: 10px; height: 10px;"></i> Import HTML
+              </button>
+              <input type="file" id="campaign-email-file-upload" accept=".html" style="display: none;" onchange="loadCampaignFile(event, 'email')">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="campaign-email-subject">Email Subject</label>
+            <input type="text" id="campaign-email-subject" class="form-input" placeholder="e.g. Special offer for {{name}}!">
+          </div>
+          <div class="form-group">
+            <label for="campaign-email-body">Email Body (Use {{name}} for name, {{company_name}} for business name)</label>
+            <textarea id="campaign-email-body" class="form-input" rows="4" placeholder="Dear {{name}},&#10;&#10;We are offering 20% off all massage therapies this spring!&#10;&#10;Best,&#10;{{company_name}}"></textarea>
+          </div>
+        </div>
+
+        <div id="campaign-sms-fields" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 15px; border-radius: 8px; flex-direction: column; gap: 10px;">
+          <h4 style="font-size: 0.9rem; color: #10b981; margin: 0 0 5px;">💬 WhatsApp / SMS Template</h4>
+          <div class="form-group">
+            <label for="campaign-sms-body">Message Body (Use {{name}} and {{company_name}})</label>
+            <textarea id="campaign-sms-body" class="form-input" rows="3" placeholder="Hi {{name}}, we're launching our spring promo at {{company_name}}! Secure 20% off booking here: {{checkout_url}}"></textarea>
+          </div>
+        </div>
+
+        <div id="campaign-call-fields" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 15px; border-radius: 8px; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <h4 style="font-size: 0.9rem; color: #06b6d4; margin: 0;">📞 AI Outbound Call Script</h4>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select id="campaign-call-template-select" class="form-input" style="padding: 2px 8px; font-size: 0.75rem; width: auto; height: 26px; background: rgba(0,0,0,0.4);" onchange="applyCampaignTemplateSelection('call')">
+                <option value="">-- Select Call Script Preset --</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('campaign-call-file-upload').click()" style="padding: 2px 8px; font-size: 0.75rem; height: 26px; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05);">
+                <i data-lucide="upload" style="width: 10px; height: 10px;"></i> Import Script
+              </button>
+              <input type="file" id="campaign-call-file-upload" accept=".txt,.md" style="display: none;" onchange="loadCampaignFile(event, 'call')">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="campaign-call-prompt">AI Voice Objective (Tell the AI receptionist what to pitch or ask during the outbound call)</label>
+            <textarea id="campaign-call-prompt" class="form-input" rows="4" placeholder="Call the customer to offer a spring discount code: SPRING20. Offer to schedule an appointment right now if they are interested. Be polite and helpful."></textarea>
+          </div>
+        </div>
+
+        <!-- Option to save as reusable library template -->
+        <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 12px; border-radius: 8px; margin-top: 5px;">
+          <input type="checkbox" id="campaign-save-as-template" onchange="toggleCampaignSaveAsTemplateName()">
+          <label for="campaign-save-as-template" style="font-size: 0.85rem; color: white; cursor: pointer; user-select: none;">Save email / call configuration as reusable templates in my library</label>
+        </div>
+        <div id="campaign-template-name-group" style="display: none; flex-direction: column; gap: 5px;">
+          <label for="campaign-template-name" style="font-size: 0.85rem; font-weight: 600; color: white;">Save Reusable Template(s) As:</label>
+          <input type="text" id="campaign-template-name" class="form-input" placeholder="e.g. My Promo Template Layout">
+        </div>
+
+        <div style="border-top: 1px solid var(--border-glass); padding-top: 15px; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleCreateCampaignModal(false)">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-campaign">Save Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE/EDIT TEMPLATE -->
+  <div class="modal-overlay" id="modal-template-editor" onclick="if(event.target===this) toggleTemplateEditorModal(false)">
+    <div class="modal-card glass" style="max-width: 600px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);" onclick="event.stopPropagation()">
+      <div style="background: rgba(255,255,255,0.03); padding: 18px 24px; border-bottom: 1px solid var(--border-glass); display: flex; justify-content: space-between; align-items: center;">
+        <h3 id="template-editor-title" style="display: flex; align-items: center; gap: 8px;"><i data-lucide="folder-heart" class="text-cyan"></i> Create Custom Template</h3>
+        <button type="button" class="btn-close" onclick="toggleTemplateEditorModal(false)" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;">&times;</button>
+      </div>
+      <form id="form-template-editor" style="padding: 24px 28px; display: flex; flex-direction: column; gap: 15px; max-height: 70vh; overflow-y: auto;">
+        <input type="hidden" id="template-editor-id">
+        
+        <div class="form-group">
+          <label for="template-editor-name" style="font-weight: 600; color: white;">Template Name</label>
+          <input type="text" id="template-editor-name" class="form-input" required placeholder="e.g. Spring Discount Newsletter">
+        </div>
+
+        <div class="form-group">
+          <label for="template-editor-type" style="font-weight: 600; color: white;">Template Channel Type</label>
+          <select id="template-editor-type" class="form-input" onchange="toggleTemplateEditorFields()" required>
+            <option value="email">Email Broadcast</option>
+            <option value="call">Outbound Call Script</option>
+          </select>
+        </div>
+
+        <!-- Email Specific Subject -->
+        <div class="form-group" id="template-editor-email-subject-group">
+          <label for="template-editor-subject" style="font-weight: 600; color: white;">Email Subject</label>
+          <input type="text" id="template-editor-subject" class="form-input" placeholder="e.g. Hello {{name}}!">
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <label for="template-editor-content" id="template-editor-content-label" style="font-weight: 600; color: white; margin: 0;">Template Content</label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('template-editor-file-upload').click()" style="padding: 2px 8px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass);">
+              <i data-lucide="upload" style="width: 10px; height: 10px;"></i> Load File
+            </button>
+            <input type="file" id="template-editor-file-upload" accept=".html,.txt,.md" style="display: none;" onchange="loadEditorFile(event)">
+          </div>
+          <textarea id="template-editor-content" class="form-input" rows="8" required placeholder="Write HTML body (for Emails) or Markdown prompt script (for Calls) here..."></textarea>
+        </div>
+
+        <div style="border-top: 1px solid var(--border-glass); padding-top: 15px; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleTemplateEditorModal(false)">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CAMPAIGN LOGS VIEWER -->
+  <div class="modal-overlay" id="modal-campaign-logs" onclick="if(event.target===this) toggleCampaignLogsModal(false)">
+    <div class="modal-card glass" style="max-width: 800px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);" onclick="event.stopPropagation()">
+      <div style="background: rgba(255,255,255,0.03); padding: 18px 24px; border-bottom: 1px solid var(--border-glass); display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="display: flex; align-items: center; gap: 8px;"><i data-lucide="scroll" class="text-cyan"></i> Campaign Execution Logs</h3>
+        <button type="button" class="btn-close" onclick="toggleCampaignLogsModal(false)" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;">&times;</button>
+      </div>
+      <div style="padding: 24px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="appointments-table-wrapper" style="max-height: 400px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Contact Name</th>
+                <th>Contact Phone</th>
+                <th>Channel</th>
+                <th>Status</th>
+                <th>Log Message</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="crm-campaign-logs-tbody">
+              <!-- Logs injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="toggleCampaignLogsModal(false)">Close Logs</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4222,7 +4601,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <!-- Local Script Injection -->
-  <script src="app.js?v=1.0.7"></script>
+  <script src="app.js?v=1.1.2"></script>
   <script>
     // Initialize Google Sign-In buttons after GSI loads
     window.addEventListener('load', () => {
@@ -4232,8 +4611,10 @@
         google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: window.handleGoogleCredential });
         const loginBtn = document.getElementById('google-signin-btn');
         const registerBtn = document.getElementById('google-signup-btn');
+        const inviteBtn = document.getElementById('google-invite-signin-btn');
         if (loginBtn) google.accounts.id.renderButton(loginBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signin_with' });
         if (registerBtn) google.accounts.id.renderButton(registerBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
+        if (inviteBtn) google.accounts.id.renderButton(inviteBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
       }
       initGoogleButtons();
     });

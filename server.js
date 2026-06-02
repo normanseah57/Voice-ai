@@ -17,6 +17,7 @@ import QRCode from 'qrcode';
 import { OAuth2Client } from 'google-auth-library';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 import {
   initDb,
@@ -102,11 +103,13 @@ import {
 
   // Team & Calendar Imports
   getWorkspaceUsers,
+  getWorkspaceUserById,
   addWorkspaceUser,
   deleteWorkspaceUser,
   getUserCalendarSettings,
   updateUserCalendarSettings,
   connectUserGoogleCalendar,
+  connectUserGoogleCalendarTokens,
   disconnectUserGoogleCalendar,
 
   // Restaurant Tables Imports
@@ -155,7 +158,32 @@ import {
   getTotpUser,
 
   // Encryption helpers
-  maskApiKey
+  maskApiKey,
+
+  // Marketing Campaigns Hub
+  getCampaigns,
+  addCampaign,
+  deleteCampaign,
+  updateCampaignStatus,
+  getCampaignLogs,
+  addCampaignLog,
+  getCampaignTemplates,
+  addCampaignTemplate,
+  deleteCampaignTemplate,
+
+  // Blocked Slots
+  getBlockedSlots,
+  getBlockedSlotsForUser,
+  addBlockedSlot,
+  deleteBlockedSlot,
+
+  // Scoped Invitations
+  createInvitation,
+  getInvitationByToken,
+  deleteInvitation,
+  getPendingInvitations,
+  deleteInvitationByEmail,
+  acceptInvitationAndCreateUser
 } from './database.js';
 
 import Stripe from 'stripe';
@@ -671,22 +699,62 @@ app.post('/api/auth/login/2fa', async (req, res) => {
 
 // Google OAuth Sign-In
 app.post('/api/auth/google', async (req, res) => {
-  const { credential } = req.body;
+  const { credential, inviteToken } = req.body;
   if (!credential) return res.status(400).json({ error: 'Google credential required.' });
   try {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const { sub: googleId, email, name } = payload;
-    const tenant = await findOrCreateGoogleUser({ googleId, email, name });
+    
+    let tenant;
+    if (inviteToken) {
+      const invite = await getInvitationByToken(inviteToken);
+      if (!invite) {
+        return res.status(404).json({ error: 'Invitation not found or invalid.' });
+      }
+      if (new Date(invite.expires_at) < new Date()) {
+        return res.status(400).json({ error: 'Invitation has expired.' });
+      }
+
+      const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+      const createdUser = await acceptInvitationAndCreateUser(invite.tenant_id, {
+        name: name || invite.email.split('@')[0],
+        email: invite.email, // Bind to the invited email address
+        passwordHash,
+        role: invite.role,
+        googleId
+      });
+
+      await deleteInvitation(invite.tenant_id, invite.id);
+      broadcastToDashboard(invite.tenant_id, 'refresh_crm', {});
+
+      const fetchedTenant = await getTenantById(invite.tenant_id);
+      tenant = {
+        id: fetchedTenant.id,
+        userId: createdUser.id,
+        name: createdUser.name,
+        email: createdUser.email,
+        company_name: fetchedTenant.company_name,
+        subscription_tier: fetchedTenant.subscription_tier,
+        billing_cycle: fetchedTenant.billing_cycle || 'monthly',
+        subscription_status: fetchedTenant.subscription_status,
+        is_admin: fetchedTenant.is_admin,
+        role: createdUser.role,
+        totp_enabled: false
+      };
+    } else {
+      tenant = await findOrCreateGoogleUser({ googleId, email, name });
+    }
+
     if (tenant.subscription_status === 'suspended') {
       return res.status(403).json({ error: 'Account Suspended.' });
     }
     const token = issueJWT({ tenantId: tenant.id, userId: tenant.userId, is_admin: tenant.is_admin });
     const { totp_enabled, totp_secret, ...safeTenant } = tenant;
-    res.json({ success: true, token, tenant: safeTenant, isNew: !tenant.existing });
+    res.json({ success: true, token, tenant: safeTenant, isNew: inviteToken ? true : !tenant.existing });
   } catch (err) {
     console.error('[Google Auth Error]', err.message);
-    res.status(401).json({ error: 'Google Sign-In failed. Please try again.' });
+    res.status(401).json({ error: err.message || 'Google Sign-In failed. Please try again.' });
   }
 });
 
@@ -1617,6 +1685,148 @@ app.delete('/api/team/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Workspace Invitation Management
+app.get('/api/team/invitations', requireAuth, async (req, res) => {
+  try {
+    const list = await getPendingInvitations(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/team/invite', requireAuth, async (req, res) => {
+  const { email, role } = req.body;
+  if (!email || !role) {
+    return res.status(400).json({ error: 'Email and role are required.' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address format.' });
+  }
+
+  try {
+    const requestingUser = await getWorkspaceUserById(req.userId);
+    if (!requestingUser || requestingUser.role !== 'owner') {
+      return res.status(403).json({ error: 'Forbidden: Only workspace owners can invite new members.' });
+    }
+
+    const token = crypto.randomBytes(24).toString('hex');
+    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const invitation = await createInvitation(req.tenantId, { email, role, token, expires_at });
+
+    const host = process.env.NGROK_URL || `${req.protocol}://${req.get('host')}`;
+    const inviteLink = `${host}/?invite_token=${token}`;
+
+    console.log(`\n=============================================================`);
+    console.log(`[SIMULATED EMAIL INVITATION]`);
+    console.log(`To: ${email}`);
+    console.log(`Subject: Invite to join Voice AI Receptionist`);
+    console.log(`Body: Hello! You have been invited to join the workspace on Voice AI.`);
+    console.log(`Please click the link below to accept and setup your account:`);
+    console.log(`${inviteLink}`);
+    console.log(`=============================================================\n`);
+
+    res.json({ success: true, invitation, inviteLink });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/team/invitations/:id', requireAuth, async (req, res) => {
+  try {
+    const requestingUser = await getWorkspaceUserById(req.userId);
+    if (!requestingUser || requestingUser.role !== 'owner') {
+      return res.status(403).json({ error: 'Forbidden: Only workspace owners can revoke invitations.' });
+    }
+
+    const inviteId = parseInt(req.params.id);
+    await deleteInvitation(req.tenantId, inviteId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/team/invite/verify/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const invite = await getInvitationByToken(token);
+    if (!invite) {
+      return res.status(404).json({ valid: false, error: 'Invalid or non-existent invitation token.' });
+    }
+
+    if (new Date(invite.expires_at) < new Date()) {
+      return res.status(400).json({ valid: false, error: 'Invitation link has expired.' });
+    }
+
+    res.json({
+      valid: true,
+      email: invite.email,
+      role: invite.role,
+      company_name: invite.company_name
+    });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
+app.post('/api/team/invite/accept', async (req, res) => {
+  const { token, name, password } = req.body;
+  if (!token || !name || !password) {
+    return res.status(400).json({ error: 'Name and password are required to accept the invitation.' });
+  }
+
+  try {
+    const invite = await getInvitationByToken(token);
+    if (!invite) {
+      return res.status(404).json({ error: 'Invitation not found or invalid.' });
+    }
+
+    if (new Date(invite.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Invitation has expired.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await acceptInvitationAndCreateUser(invite.tenant_id, {
+      name,
+      email: invite.email,
+      passwordHash,
+      role: invite.role
+    });
+
+    await deleteInvitation(invite.tenant_id, invite.id);
+    broadcastToDashboard(invite.tenant_id, 'refresh_crm', {});
+
+    // Issue standard JWT session
+    const jwtToken = issueJWT({ tenantId: invite.tenant_id, userId: user.id });
+
+    // Fetch full tenant info for frontend session initialization
+    const tenant = await getTenantById(invite.tenant_id);
+
+    res.json({
+      success: true,
+      token: jwtToken,
+      tenant: {
+        id: tenant.id,
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        company_name: tenant.company_name,
+        subscription_tier: tenant.subscription_tier,
+        billing_cycle: tenant.billing_cycle || 'monthly',
+        subscription_status: tenant.subscription_status,
+        is_admin: tenant.is_admin,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.get('/api/user/profile', requireAuth, async (req, res) => {
   try {
     const profile = await getUserCalendarSettings(req.userId);
@@ -1634,6 +1844,48 @@ app.put('/api/team/:id/calendar', requireAuth, async (req, res) => {
     const updated = await updateUserCalendarSettings(req.tenantId, userId, { working_hours, break_periods, appointment_gap });
     broadcastToDashboard(req.tenantId, 'refresh_crm', {});
     res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// BLOCKED TIME SLOTS API ROUTES
+// =============================================================
+app.get('/api/blocked-slots/user/:userId', requireAuth, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const slots = await getBlockedSlotsForUser(req.tenantId, userId);
+    res.json(slots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/blocked-slots', requireAuth, async (req, res) => {
+  const { userId, resource_name, date, start_time, end_time, notes } = req.body;
+  try {
+    const slot = await addBlockedSlot(req.tenantId, {
+      userId: userId ? parseInt(userId) : null,
+      resource_name,
+      date,
+      start_time,
+      end_time,
+      notes
+    });
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(slot);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/blocked-slots/:id', requireAuth, async (req, res) => {
+  try {
+    const slotId = parseInt(req.params.id);
+    const result = await deleteBlockedSlot(req.tenantId, slotId);
+    broadcastToDashboard(req.tenantId, 'refresh_crm', {});
+    res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -1797,6 +2049,162 @@ app.put('/api/hotel/rooms/:id', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Google Calendar Live Integration OAuth Routes
+app.get('/api/team/:id/gcal/oauth', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return res.status(400).send(`
+      <html>
+        <head>
+          <title>Configuration Required</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center; }
+            .card { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 12px; display: inline-block; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+            h2 { color: #f43f5e; margin-top: 0; }
+            code { background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; color: #38bdf8; font-family: monospace; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>Google Calendar Integration Disabled</h2>
+            <p>The platform owner has not configured the Google OAuth credentials in their environment variables yet.</p>
+            <p>Please define <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> in the server's <code>.env</code> file to enable live calendar sync.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  // Determine host dynamically (ngrok tunnel or protocol host)
+  const host = process.env.NGROK_URL || `${req.protocol}://${req.get('host')}`;
+  const redirectUri = `${host}/api/gcal/callback`;
+  
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
+    `client_id=${encodeURIComponent(clientId)}&` + 
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` + 
+    `response_type=code&` + 
+    `scope=${encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email')}&` + 
+    `access_type=offline&` + 
+    `prompt=consent&` + 
+    `state=${userId}`;
+
+  res.redirect(googleAuthUrl);
+});
+
+app.get('/api/gcal/callback', async (req, res) => {
+  const { code, state: userIdStr } = req.query;
+  const userId = parseInt(userIdStr);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!code || !userId) {
+    return res.status(400).send('Invalid callback request parameters.');
+  }
+
+  try {
+    const host = process.env.NGROK_URL || `${req.protocol}://${req.get('host')}`;
+    const redirectUri = `${host}/api/gcal/callback`;
+
+    // 1. Exchange OAuth code for Google API tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      })
+    });
+
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text();
+      console.error('[Google Token Exchange Error]', errText);
+      throw new Error(`Failed to exchange Google OAuth code: ${errText}`);
+    }
+
+    const tokens = await tokenRes.json();
+    const accessToken = tokens.access_token;
+    const refreshToken = tokens.refresh_token;
+    const expiresIn = tokens.expires_in || 3600;
+    const expiry = Date.now() + (expiresIn * 1000);
+
+    // 2. Fetch authenticated user's email address
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    let email = 'Google Calendar Account';
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      if (userData.email) email = userData.email;
+    }
+
+    // 3. Fallback refresh_token retrieval
+    let storedRefreshToken = refreshToken;
+    if (!storedRefreshToken) {
+      const dbUser = await getWorkspaceUserById(userId);
+      if (dbUser) storedRefreshToken = dbUser.google_refresh_token;
+    }
+
+    // 4. Update tenant_user table in the database
+    await connectUserGoogleCalendarTokens(userId, email, accessToken, storedRefreshToken, expiry);
+
+    // 5. Success screen and automatic message dispatcher
+    res.send(`
+      <html>
+        <head>
+          <title>Connection Successful</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center; }
+            .card { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 12px; display: inline-block; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+            h2 { color: #10b981; margin-top: 0; }
+            .close-btn { background: #10b981; color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 6px; cursor: pointer; margin-top: 20px; text-decoration: none; display: inline-block; }
+          </style>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'gcal_connected', userId: ${userId} }, '*');
+            }
+            setTimeout(() => { window.close(); }, 3000);
+          </script>
+        </head>
+        <body>
+          <div class="card">
+            <h2>Google Calendar Connected!</h2>
+            <p>Your calendar (<code>${email}</code>) has been successfully synchronized with VoiceDesk.</p>
+            <p>This window will close automatically in 3 seconds...</p>
+            <button class="close-btn" onclick="window.close()">Close Window</button>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('Google Callback Error:', err);
+    res.status(500).send(`
+      <html>
+        <head>
+          <title>Connection Failed</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center; }
+            .card { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 12px; display: inline-block; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); }
+            h2 { color: #f43f5e; margin-top: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>Connection Failed</h2>
+            <p>${err.message}</p>
+          </div>
+        </body>
+      </html>
+    `);
   }
 });
 
@@ -2144,6 +2552,217 @@ app.put('/api/crm/deals/:id/stage', requireAuth, async (req, res) => {
     const updated = await updateDealStage(req.tenantId, req.params.id, req.body.stage);
     broadcastToDashboard(req.tenantId, 'refresh_crm', {});
     res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// MARKETING CAMPAIGNS HUB ENDPOINTS
+// =============================================================
+
+async function executeCampaignAsync(tenantId, campaign, targets) {
+  const channels = campaign.channels.split(',');
+  const settings = await getSettings(tenantId);
+  const companyName = settings.company_name || 'Our Company';
+
+  for (const contact of targets) {
+    // 1. Process Email Broadcast
+    if (channels.includes('email') && contact.email && resendClient) {
+      try {
+        const emailSubject = campaign.email_subject.replace(/\{\{name\}\}/g, contact.name).replace(/\{\{company_name\}\}/g, companyName);
+        const emailBody = campaign.email_body.replace(/\{\{name\}\}/g, contact.name).replace(/\{\{company_name\}\}/g, companyName);
+        
+        await resendClient.emails.send({
+          from: RESEND_FROM,
+          to: [contact.email],
+          subject: emailSubject,
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333; background: #f8fafc;">${emailBody.replace(/\n/g, '<br>')}</div>`
+        });
+        await addCampaignLog(tenantId, campaign.id, contact.id, 'email', 'sent', `Email sent successfully to ${contact.email}`);
+      } catch (err) {
+        await addCampaignLog(tenantId, campaign.id, contact.id, 'email', 'failed', err.message);
+      }
+    } else if (channels.includes('email') && !contact.email) {
+      await addCampaignLog(tenantId, campaign.id, contact.id, 'email', 'failed', 'No email address on file.');
+    }
+
+    // 2. Process SMS/WhatsApp Broadcast
+    if (channels.includes('whatsapp') && contact.phone) {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const isMock = !accountSid || !accountSid.startsWith('AC');
+      const smsBody = campaign.sms_body.replace(/\{\{name\}\}/g, contact.name).replace(/\{\{company_name\}\}/g, companyName);
+
+      if (isMock) {
+        console.log(`[Campaign SMS - Simulated] To=${contact.phone}, Body="${smsBody}"`);
+        await addCampaignLog(tenantId, campaign.id, contact.id, 'whatsapp', 'sent', `[Simulated] SMS broadcasted: "${smsBody}"`);
+      } else {
+        try {
+          const client = getSignalWireClient();
+          const fromNum = process.env.TWILIO_PHONE_NUMBER || '+15203538181';
+          await client.messages.create({
+            from: fromNum,
+            to: contact.phone,
+            body: smsBody
+          });
+          await addCampaignLog(tenantId, campaign.id, contact.id, 'whatsapp', 'sent', `SMS broadcasted to ${contact.phone}`);
+        } catch (err) {
+          await addCampaignLog(tenantId, campaign.id, contact.id, 'whatsapp', 'failed', err.message);
+        }
+      }
+    }
+
+    // 3. Process Outbound Call Broadcast
+    if (channels.includes('call') && contact.phone) {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const isMock = !accountSid || !accountSid.startsWith('AC');
+      const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER;
+      const ngrokUrl = process.env.NGROK_URL;
+
+      if (isMock) {
+        console.log(`[Campaign Outbound Call - Simulated] To=${contact.phone}, Prompt="${campaign.call_prompt}"`);
+        await addCampaignLog(tenantId, campaign.id, contact.id, 'call', 'called', `[Simulated] Outbound call placed to ${contact.phone}`);
+      } else if (fromNumber && ngrokUrl) {
+        try {
+          const client = getSignalWireClient();
+          const webhookUrl = `${ngrokUrl}/outbound-call-twiml?phoneNumber=${encodeURIComponent(contact.phone)}&tenantId=${tenantId}&campaignPrompt=${encodeURIComponent(campaign.call_prompt)}`;
+          await client.calls.create({
+            url: webhookUrl,
+            to: contact.phone,
+            from: fromNumber
+          });
+          await addCampaignLog(tenantId, campaign.id, contact.id, 'call', 'called', `Outbound call initiated to ${contact.phone}`);
+        } catch (err) {
+          await addCampaignLog(tenantId, campaign.id, contact.id, 'call', 'failed', err.message);
+        }
+      } else {
+        await addCampaignLog(tenantId, campaign.id, contact.id, 'call', 'failed', 'Missing telephony phone or public URL configuration on host.');
+      }
+    }
+
+    // Small delay between contacts to avoid triggering rate limit protections
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  // Update status to completed
+  await updateCampaignStatus(tenantId, campaign.id, 'completed');
+  broadcastToDashboard(tenantId, 'refresh_campaigns', {});
+}
+
+app.get('/api/crm/campaigns', requireAuth, async (req, res) => {
+  try {
+    const list = await getCampaigns(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/crm/campaigns', requireAuth, async (req, res) => {
+  const { name, target_audience, channels, email_subject, email_body, sms_body, call_prompt } = req.body;
+  if (!name || !target_audience || !channels) {
+    return res.status(400).json({ error: 'Name, target audience, and channels are required.' });
+  }
+  try {
+    const record = await addCampaign(req.tenantId, { name, target_audience, channels, email_subject, email_body, sms_body, call_prompt });
+    broadcastToDashboard(req.tenantId, 'refresh_campaigns', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/crm/campaigns/:id/run', requireAuth, async (req, res) => {
+  const campaignId = parseInt(req.params.id);
+  try {
+    const campaignsList = await getCampaigns(req.tenantId);
+    const campaign = campaignsList.find(c => c.id === campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    if (campaign.status === 'running') {
+      return res.status(400).json({ error: 'Campaign is already running.' });
+    }
+
+    // Set status to running
+    await updateCampaignStatus(req.tenantId, campaignId, 'running');
+    broadcastToDashboard(req.tenantId, 'refresh_campaigns', {});
+
+    // Get matching contacts based on target_audience
+    const contacts = await getContacts(req.tenantId);
+    let targets = [];
+    if (campaign.target_audience === 'all') {
+      targets = contacts;
+    } else {
+      targets = contacts.filter(c => c.lead_stage === campaign.target_audience);
+    }
+
+    // Execute run asynchronously
+    executeCampaignAsync(req.tenantId, campaign, targets).catch(err => {
+      console.error(`Error during Campaign ${campaignId} run:`, err);
+    });
+
+    res.json({ success: true, message: `Campaign execution started for ${targets.length} contact(s).` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/crm/campaigns/:id/logs', requireAuth, async (req, res) => {
+  const campaignId = parseInt(req.params.id);
+  try {
+    const logs = await getCampaignLogs(req.tenantId, campaignId);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/crm/campaigns/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    await deleteCampaign(req.tenantId, id);
+    broadcastToDashboard(req.tenantId, 'refresh_campaigns', {});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
+// MARKETING CAMPAIGNS TEMPLATE LIBRARY ENDPOINTS
+// =============================================================
+
+app.get('/api/crm/templates', requireAuth, async (req, res) => {
+  try {
+    const list = await getCampaignTemplates(req.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/crm/templates', requireAuth, async (req, res) => {
+  const { name, type, subject, content } = req.body;
+  if (!name || !type || !content) {
+    return res.status(400).json({ error: 'Name, type, and content are required.' });
+  }
+  try {
+    const record = await addCampaignTemplate(req.tenantId, { name, type, subject, content });
+    broadcastToDashboard(req.tenantId, 'refresh_templates', {});
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/crm/templates/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    await deleteCampaignTemplate(req.tenantId, id);
+    broadcastToDashboard(req.tenantId, 'refresh_templates', {});
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2770,6 +3389,7 @@ app.post('/incoming-call', async (req, res) => {
 app.post('/outbound-call-twiml', async (req, res) => {
   const phoneNumber = req.query.phoneNumber || 'unknown';
   const tenantId = parseInt(req.query.tenantId);
+  const campaignPrompt = req.query.campaignPrompt || '';
   const domain = req.headers.host;
   
   console.log(`Outbound call webhook triggered for Tenant ${tenantId} calling customer: ${phoneNumber}`);
@@ -2804,6 +3424,7 @@ app.post('/outbound-call-twiml', async (req, res) => {
           <Parameter name="direction" value="outbound" />
           <Parameter name="contactName" value="${contactName}" />
           <Parameter name="leadStage" value="${leadStage}" />
+          <Parameter name="campaignPrompt" value="${encodeURIComponent(campaignPrompt)}" />
         </Stream>
       </Connect>
     </Response>
@@ -3018,6 +3639,7 @@ mediaStreamWss.on('connection', (ws) => {
   let direction = '';
   let contactName = '';
   let leadStage = '';
+  let campaignPrompt = '';
   let openaiWs = null;
   let currentTurnText = '';
   let startTime = Date.now();
@@ -3037,6 +3659,7 @@ mediaStreamWss.on('connection', (ws) => {
         direction = data.start.customParameters?.direction || 'inbound';
         contactName = data.start.customParameters?.contactName || '';
         leadStage = data.start.customParameters?.leadStage || '';
+        campaignPrompt = data.start.customParameters?.campaignPrompt ? decodeURIComponent(data.start.customParameters.campaignPrompt) : '';
         
         if (isNaN(tenantId)) {
           console.error('Call stream aborted: Invalid or missing Tenant ID.');
@@ -3180,6 +3803,10 @@ mediaStreamWss.on('connection', (ws) => {
 
           if (settings.crawled_content) {
             systemInstructions += `\n\nADDITIONAL BUSINESS, PRODUCTS, AND SERVICES INFORMATION (CRAWLED FROM ${settings.website_url || 'tenant website'}):\n${settings.crawled_content}`;
+          }
+
+          if (campaignPrompt) {
+            systemInstructions += `\n\nMARKETING CAMPAIGN GOAL / OUTBOUND PROMPT:\n- You are placing an outbound call to this customer as part of a marketing campaign.\n- Your campaign objective is: ${campaignPrompt}\n- Strictly guide the conversation to achieve this objective and invite them to take action (e.g., book a service, verify information, or confirm an offer).`;
           }
           const agentName = settings.agent_name || 'Aura';
           const companyName = settings.company_name || 'Aura Wellness Spa';

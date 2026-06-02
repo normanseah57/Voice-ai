@@ -253,6 +253,16 @@ export const initDb = async () => {
     try { await run(sql); } catch (e) { /* already exists */ }
   }
 
+  // Google Calendar OAuth integration columns on tenant_users
+  const gcalCols = [
+    "ALTER TABLE tenant_users ADD COLUMN google_access_token TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN google_refresh_token TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN google_token_expiry INTEGER DEFAULT 0"
+  ];
+  for (const sql of gcalCols) {
+    try { await run(sql); } catch (e) { /* already exists */ }
+  }
+
   // Password reset tokens table
   await run(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -794,6 +804,186 @@ export const initDb = async () => {
       FOREIGN KEY(contact_id) REFERENCES accounting_contacts(id) ON DELETE CASCADE
     )
   `);
+
+  // 20. Campaigns Table (For multi-channel marketing campaigns)
+  await run(`
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      target_audience TEXT NOT NULL DEFAULT 'all', -- 'all', 'lead', 'nurture', 'customer'
+      channels TEXT NOT NULL, -- comma-separated list, e.g. 'call,whatsapp,email'
+      status TEXT NOT NULL DEFAULT 'draft', -- 'draft', 'scheduled', 'running', 'completed'
+      email_subject TEXT,
+      email_body TEXT,
+      sms_body TEXT,
+      call_prompt TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 21. Campaign Logs Table (For tracking executions)
+  await run(`
+    CREATE TABLE IF NOT EXISTS campaign_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      campaign_id INTEGER NOT NULL,
+      contact_id INTEGER NOT NULL,
+      channel TEXT NOT NULL, -- 'call', 'whatsapp', 'email'
+      status TEXT NOT NULL, -- 'sent', 'called', 'failed'
+      details TEXT,
+      processed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+      FOREIGN KEY(contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 22. Campaign Templates Table (For reusable email and call templates)
+  await run(`
+    CREATE TABLE IF NOT EXISTS campaign_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER, -- NULL indicates system-wide preset
+      name TEXT NOT NULL,
+      type TEXT NOT NULL, -- 'email', 'call', 'sms'
+      subject TEXT,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 23. Blocked Slots Table (For manually blocking specific date/time calendar slots)
+  await run(`
+    CREATE TABLE IF NOT EXISTS blocked_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      user_id INTEGER, -- references tenant_users(id), optional
+      resource_name TEXT NOT NULL,
+      date TEXT NOT NULL, -- YYYY-MM-DD
+      start_time TEXT NOT NULL, -- HH:MM
+      end_time TEXT NOT NULL, -- HH:MM
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES tenant_users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 24. Invitations Table (For team member onboarding)
+  await run(`
+    CREATE TABLE IF NOT EXISTS invitations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      token TEXT UNIQUE NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Seed Default System Templates
+  try {
+    const templatesCount = await get('SELECT COUNT(*) as count FROM campaign_templates WHERE tenant_id IS NULL');
+    if (templatesCount.count === 0) {
+      const systemPresets = [
+        {
+          name: 'Mailchimp Modern Newsletter',
+          type: 'email',
+          subject: 'Weekly Highlights & Exclusive Offers from {{company_name}} 🌸',
+          content: `<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f7f6; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto; border: 1px solid #e1e8e6;">
+  <div style="text-align: center; margin-bottom: 20px;">
+    <h1 style="color: #06b6d4; font-size: 24px; font-weight: bold; margin: 0;">{{company_name}}</h1>
+    <p style="color: #6b7280; font-size: 14px; margin: 5px 0 0;">Your weekly guide to wellness and growth</p>
+  </div>
+  <div style="background-color: #ffffff; padding: 25px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+    <h2 style="color: #111827; font-size: 18px; margin-top: 0;">Hello {{name}},</h2>
+    <p style="color: #374151; line-height: 1.6; font-size: 15px;">We hope your week is going beautifully! Here at <strong>{{company_name}}</strong>, we are dedicated to helping you recharge and feel your absolute best.</p>
+    <p style="color: #374151; line-height: 1.6; font-size: 15px;">To celebrate the changing season, we are offering an exclusive <strong>20% discount</strong> on all our premium services for our subscribers. Simply use the promo code below or mention this email when booking.</p>
+    <div style="background-color: #ecfeff; border: 1px dashed #06b6d4; border-radius: 6px; padding: 15px; text-align: center; margin: 20px 0;">
+      <span style="font-size: 12px; color: #0891b2; font-weight: bold; display: block; text-transform: uppercase; letter-spacing: 1px;">Your Promo Code</span>
+      <strong style="font-size: 22px; color: #0891b2; letter-spacing: 2px;">WELLNESS20</strong>
+    </div>
+    <div style="text-align: center; margin-top: 25px;">
+      <a href="{{checkout_url}}" style="background-color: #06b6d4; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 15px; display: inline-block;">Book Appointment Now</a>
+    </div>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+    <p>You received this email because you are a client of {{company_name}}.</p>
+    <p>&copy; 2026 {{company_name}}. All rights reserved.</p>
+  </div>
+</div>`
+        },
+        {
+          name: 'HubSpot Cold Sales Pitch',
+          type: 'email',
+          subject: 'Quick question regarding your operations, {{name}}',
+          content: `Hi {{name}},
+
+I hope this email finds you well.
+
+I’ve been following your work at {{company_name}} and wanted to reach out. Many companies in your industry struggle with managing lead overflow and booking customers outside of standard hours.
+
+We recently launched a digital AI receptionist service that integrates with calendars to answer calls, reply to WhatsApp requests, and book appointments automatically. It operates 24/7 with zero overhead.
+
+Would you be open to a quick 5-minute outbound introductory call from our AI assistant to see how it works? 
+
+If so, you can schedule a demo here: {{checkout_url}}
+
+Best regards,
+Sales Director
+{{company_name}}`
+        },
+        {
+          name: 'Twilio AI Sales Prospecting Script',
+          type: 'call',
+          subject: '',
+          content: `# Objectives
+1. Greet the lead, stating you are calling from {{company_name}} to share a limited-time opportunity.
+2. Ask if they have 2 minutes to talk about our digital receptionist integrations.
+3. Objections:
+   - "How much is it?" -> "Plans start at just twenty-nine dollars a month."
+   - "I'm busy." -> "No problem! I can email you the details or book a short callback."
+4. If interested, confirm their details and offer to book them for a live platform onboarding demo.`
+        },
+        {
+          name: 'Aura Booking Confirmation Prompt',
+          type: 'call',
+          subject: '',
+          content: `# Objectives
+1. Greet {{name}} and state that you are calling on behalf of {{company_name}}.
+2. Inform them you are calling to confirm their upcoming appointment booking.
+3. Read the date, time, and booked therapist/service clearly to them.
+4. Ask if they need to make any changes or rescheduling adjustments.
+5. If they confirm all details are correct, thank them warmly and tell them we look forward to seeing them soon.`
+        },
+        {
+          name: 'Customer Loyalty NPS Survey Script',
+          type: 'call',
+          subject: '',
+          content: `# Objectives
+1. Call {{name}} to thank them for their recent experience with {{company_name}}.
+2. Ask if they would be willing to answer 2 quick survey questions.
+3. Question 1: "On a scale of 1 to 5, how satisfied were you with our service?" (Capture and repeat their answer).
+4. Question 2: "Is there anything we could have done to make your experience even better?"
+5. Thank them for their valuable feedback and log their comments.`
+        }
+      ];
+
+      for (const t of systemPresets) {
+        await run(`
+          INSERT INTO campaign_templates (tenant_id, name, type, subject, content)
+          VALUES (NULL, ?, ?, ?, ?)
+        `, [t.name, t.type, t.subject, t.content]);
+      }
+      console.log('Seeded default system campaign templates.');
+    }
+  } catch (err) {
+    console.error('Failed to seed system templates:', err);
+  }
 
   // Seed Accounting Chart of Accounts
   try {
@@ -1372,10 +1562,276 @@ export const findTenantByTwilioNumber = async (twilioNumber) => {
 };
 
 // ==========================================
+// SCOPED INVITATIONS
+// ==========================================
+export const getPendingInvitations = async (tenantId) => {
+  return await all('SELECT * FROM invitations WHERE tenant_id = ? ORDER BY created_at DESC', [tenantId]);
+};
+
+export const createInvitation = async (tenantId, { email, role, token, expires_at }) => {
+  const existingUser = await get('SELECT id FROM tenant_users WHERE email = ?', [email]);
+  if (existingUser) {
+    throw new Error('User email is already registered in the system.');
+  }
+
+  // Clear any existing pending invite for this email address to avoid duplicates
+  await run('DELETE FROM invitations WHERE email = ?', [email]);
+
+  const result = await run(`
+    INSERT INTO invitations (tenant_id, email, role, token, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+  `, [tenantId, email, role, token, expires_at]);
+
+  return { id: result.id, tenant_id: tenantId, email, role, token, expires_at };
+};
+
+export const getInvitationByToken = async (token) => {
+  return await get(`
+    SELECT i.*, t.company_name 
+    FROM invitations i 
+    JOIN tenants t ON t.id = i.tenant_id 
+    WHERE i.token = ?
+  `, [token]);
+};
+
+export const deleteInvitation = async (tenantId, invitationId) => {
+  return await run('DELETE FROM invitations WHERE tenant_id = ? AND id = ?', [tenantId, invitationId]);
+};
+
+export const deleteInvitationByEmail = async (email) => {
+  return await run('DELETE FROM invitations WHERE email = ?', [email]);
+};
+
+export const acceptInvitationAndCreateUser = async (tenantId, { name, email, passwordHash, role, googleId = null }) => {
+  const tenant = await get('SELECT subscription_tier FROM tenants WHERE id = ?', [tenantId]);
+  if (!tenant) throw new Error('Tenant workspace not found.');
+  
+  const tier = tenant.subscription_tier || 'free';
+  const limits = {
+    free: 1,
+    starter: 1,
+    professional: 10,
+    enterprise: 99999
+  };
+  
+  const currentUsers = await get('SELECT COUNT(*) as count FROM tenant_users WHERE tenant_id = ?', [tenantId]);
+  const currentCount = currentUsers ? currentUsers.count : 0;
+  
+  if (currentCount >= limits[tier]) {
+    throw new Error(`SaaS Limit Exceeded: This workspace has reached the maximum number of users (${limits[tier]} user${limits[tier] > 1 ? 's' : ''}) allowed on the ${tier.toUpperCase()} Tier.`);
+  }
+
+  const existingTenant = await get('SELECT id FROM tenants WHERE email = ?', [email]);
+  const existingUser = await get('SELECT id FROM tenant_users WHERE email = ?', [email]);
+  if (existingTenant || existingUser) {
+    throw new Error('Email address already registered.');
+  }
+
+  const defaultWorkingHours = JSON.stringify({
+    monday: { active: true, start: '09:00', end: '17:00' },
+    tuesday: { active: true, start: '09:00', end: '17:00' },
+    wednesday: { active: true, start: '09:00', end: '17:00' },
+    thursday: { active: true, start: '09:00', end: '17:00' },
+    friday: { active: true, start: '09:00', end: '17:00' },
+    saturday: { active: false, start: '10:00', end: '14:00' },
+    sunday: { active: false, start: '10:00', end: '14:00' }
+  });
+  const defaultBreakPeriods = JSON.stringify([
+    { name: 'Lunch', start: '12:00', end: '13:00' }
+  ]);
+
+  const result = await run(`
+    INSERT INTO tenant_users (tenant_id, name, email, password_hash, role, working_hours, break_periods, appointment_gap, password_is_hashed, google_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 15, 1, ?)
+  `, [tenantId, name, email, passwordHash, role, defaultWorkingHours, defaultBreakPeriods, googleId]);
+
+  await logTenantActivity(tenantId, 'settings_update', `Workspace invitation accepted: ${name} (${email}) joined as ${role.toUpperCase()}`);
+  return { id: result.id, tenant_id: tenantId, name, email, role };
+};
+
+// ==========================================
+// ==========================================
+// SCOPED BLOCKED SLOTS
+// ==========================================
+export const getBlockedSlots = async (tenantId) => {
+  return await all('SELECT * FROM blocked_slots WHERE tenant_id = ? ORDER BY date ASC, start_time ASC', [tenantId]);
+};
+
+export const getBlockedSlotsForUser = async (tenantId, userId) => {
+  return await all('SELECT * FROM blocked_slots WHERE tenant_id = ? AND user_id = ? ORDER BY date ASC, start_time ASC', [tenantId, userId]);
+};
+
+export const addBlockedSlot = async (tenantId, { userId, resource_name, date, start_time, end_time, notes = '' }) => {
+  if (!resource_name || !date || !start_time || !end_time) {
+    throw new Error('Resource name, date, start_time, and end_time are required.');
+  }
+  if (start_time >= end_time) {
+    throw new Error('End time must be after the start time.');
+  }
+  
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  if (date < todayStr) {
+    throw new Error('Blocked date cannot be in the past.');
+  }
+  const result = await run(`
+    INSERT INTO blocked_slots (tenant_id, user_id, resource_name, date, start_time, end_time, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [tenantId, userId || null, resource_name, date, start_time, end_time, notes]);
+  
+  await logTenantActivity(tenantId, 'settings_update', `Blocked calendar slot for ${resource_name} on ${date} from ${start_time} to ${end_time}`);
+  return { id: result.id, tenant_id: tenantId, user_id: userId, resource_name, date, start_time, end_time, notes };
+};
+
+export const deleteBlockedSlot = async (tenantId, slotId) => {
+  const slot = await get('SELECT * FROM blocked_slots WHERE tenant_id = ? AND id = ?', [tenantId, slotId]);
+  if (!slot) throw new Error('Blocked slot not found');
+
+  await run('DELETE FROM blocked_slots WHERE tenant_id = ? AND id = ?', [tenantId, slotId]);
+  await logTenantActivity(tenantId, 'settings_update', `Unblocked calendar slot for ${slot.resource_name} on ${slot.date} from ${slot.start_time} to ${slot.end_time}`);
+  return { id: slotId };
+};
+
+// ==========================================
 // SCOPED APPOINTMENTS
 // ==========================================
 export const getAppointments = async (tenant_id) => {
   return await all('SELECT * FROM appointments WHERE tenant_id = ? ORDER BY date ASC, time ASC', [tenant_id]);
+};
+
+export const refreshUserGoogleAccessToken = async (userId) => {
+  const user = await get('SELECT google_access_token, google_refresh_token, google_token_expiry FROM tenant_users WHERE id = ?', [userId]);
+  if (!user || !user.google_refresh_token) {
+    return null;
+  }
+
+  // If token is still valid for the next 60 seconds, return it
+  if (user.google_access_token && user.google_token_expiry > Date.now() + 60000) {
+    return user.google_access_token;
+  }
+
+  // Token is expired or expiring soon, let's refresh it
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      console.warn('[Google OAuth] Client credentials not found in env. Cannot refresh token.');
+      return null;
+    }
+
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: user.google_refresh_token,
+        client_id: clientId,
+        client_secret: clientSecret
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Google OAuth Token Refresh Error]', errText);
+      return null;
+    }
+
+    const tokens = await res.json();
+    const newAccessToken = tokens.access_token;
+    const expiresIn = tokens.expires_in || 3600;
+    const newExpiry = Date.now() + (expiresIn * 1000);
+
+    await run(`
+      UPDATE tenant_users 
+      SET google_access_token = ?, google_token_expiry = ? 
+      WHERE id = ?
+    `, [newAccessToken, newExpiry, userId]);
+
+    return newAccessToken;
+  } catch (err) {
+    console.error('[Google OAuth Token Refresh Failed]', err);
+    return null;
+  }
+};
+
+export const createGoogleCalendarEvent = async (userId, appointment) => {
+  try {
+    const user = await get('SELECT google_calendar_email, google_calendar_connected FROM tenant_users WHERE id = ?', [userId]);
+    if (!user || user.google_calendar_connected !== 1) {
+      return false;
+    }
+
+    const accessToken = await refreshUserGoogleAccessToken(userId);
+    if (!accessToken) {
+      console.warn(`[Google Calendar Sync] No valid OAuth token found for user ID ${userId}. Skipping sync.`);
+      return false;
+    }
+
+    // Convert date + time to ISO string for Google Calendar
+    const startDateTime = new Date(`${appointment.date}T${appointment.time}:00`);
+    
+    // Calculate end time (default to 60 minutes or check service duration)
+    let durationMinutes = 60;
+    const serviceCosts = {
+      'Swedish Massage': 60,
+      'Deep Tissue Massage': 60,
+      'Facial Treatment': 45,
+      'Aromatherapy': 75
+    };
+    if (serviceCosts[appointment.service]) {
+      durationMinutes = serviceCosts[appointment.service];
+    }
+    const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60 * 1000);
+
+    const event = {
+      summary: `${appointment.service} - ${appointment.customer_name}`,
+      description: `Appointment booked with VoiceDesk AI Receptionist.\nCustomer Phone: ${appointment.customer_phone}\nNotes: ${appointment.notes || ''}`,
+      start: {
+        dateTime: startDateTime.toISOString(),
+        timeZone: 'UTC'
+      },
+      end: {
+        dateTime: endDateTime.toISOString(),
+        timeZone: 'UTC'
+      },
+      reminders: {
+        useDefault: true
+      }
+    };
+
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Google Calendar API Insert Error]', errText);
+      return false;
+    }
+
+    const createdEvent = await res.json();
+    console.log(`[Google Calendar API] Successfully created event ${createdEvent.id} on Google Calendar.`);
+    
+    // Log to file
+    const fs = await import('fs');
+    const logPath = path.resolve(__dirname, 'google_calendar_syncs.log');
+    const logEntry = `[${new Date().toISOString()}] Sync success: Appointment ID ${appointment.id} (${appointment.service} with User ID ${userId} on ${appointment.date} at ${appointment.time}) synced to Google Calendar (${createdEvent.htmlLink || 'primary'}).\n`;
+    fs.appendFileSync(logPath, logEntry);
+
+    return true;
+  } catch (err) {
+    console.error('[Google Calendar Sync Failed]', err);
+    return false;
+  }
 };
 
 export const addAppointment = async (tenant_id, { customer_name, customer_phone, date, time, service, notes = '', resource_name = 'General', table_number = null, party_size = 1, checkout_date = null, room_number = null }) => {
@@ -1529,17 +1985,22 @@ export const addAppointment = async (tenant_id, { customer_name, customer_phone,
   try {
     const user = await get('SELECT * FROM tenant_users WHERE tenant_id = ? AND LOWER(name) = ?', [tenant_id, assignedResource.toLowerCase()]);
     if (user && user.google_calendar_connected === 1) {
-      const fs = await import('fs');
-      const logPath = path.resolve(__dirname, 'google_calendar_syncs.log');
-      const logEntry = `[${new Date().toISOString()}] Sync success: Appointment ID ${result.id} (${service} with ${user.name} on ${date} at ${time}) synced to Google Calendar (${user.google_calendar_email}).\n`;
-      fs.appendFileSync(logPath, logEntry);
-      gcalSynced = true;
-      googleEmail = user.google_calendar_email;
-      console.log(`[Google Calendar Sync] Synced appointment ${result.id} to ${user.google_calendar_email}`);
-      await logTenantActivity(tenant_id, 'settings_update', `[Google Calendar Sync] Synced appointment for ${customer_name} to ${user.name}'s Google Calendar (${user.google_calendar_email})`);
+      gcalSynced = await createGoogleCalendarEvent(user.id, {
+        id: result.id,
+        customer_name,
+        customer_phone,
+        date,
+        time,
+        service,
+        notes
+      });
+      if (gcalSynced) {
+        googleEmail = user.google_calendar_email;
+        await logTenantActivity(tenant_id, 'settings_update', `[Google Calendar Sync] Synced appointment for ${customer_name} to ${user.name}'s Google Calendar (${user.google_calendar_email})`);
+      }
     }
   } catch (err) {
-    console.error('Google Calendar Sync simulation failed:', err);
+    console.error('Google Calendar Sync failed:', err);
   }
 
   return { 
@@ -1651,6 +2112,23 @@ export const checkAvailability = async (tenant_id, date, time, resource_name = '
         return {
           available: false,
           message: `${name} has a scheduled appointment at ${appt.time} which falls within our required ${gap}-minute gap buffer.`
+        };
+      }
+    }
+
+    // Check blocked slots conflict
+    const blockedSlots = await all(`
+      SELECT start_time, end_time, notes FROM blocked_slots 
+      WHERE tenant_id = ? AND date = ? AND LOWER(resource_name) = ?
+    `, [tenant_id, date, name.toLowerCase()]);
+
+    for (const slot of blockedSlots) {
+      const slotStart = timeToMinutes(slot.start_time);
+      const slotEnd = timeToMinutes(slot.end_time);
+      if (reqMin >= slotStart && reqMin < slotEnd) {
+        return {
+          available: false,
+          message: `${name} has blocked this time slot from ${slot.start_time} to ${slot.end_time} (${slot.notes || 'Unavailable'}).`
         };
       }
     }
@@ -2287,6 +2765,10 @@ export const deleteWorkspaceUser = async (tenantId, userId) => {
   return { id: userId };
 };
 
+export const getWorkspaceUserById = async (userId) => {
+  return await get('SELECT * FROM tenant_users WHERE id = ?', [userId]);
+};
+
 export const getUserCalendarSettings = async (userId) => {
   const r = await get(`
     SELECT working_hours, break_periods, appointment_gap, name, email, role, google_calendar_email, google_calendar_connected 
@@ -2358,10 +2840,28 @@ export const connectUserGoogleCalendar = async (userId, email) => {
   return user;
 };
 
+export const connectUserGoogleCalendarTokens = async (userId, email, accessToken, refreshToken, tokenExpiry) => {
+  await run(`
+    UPDATE tenant_users 
+    SET google_calendar_email = ?, 
+        google_calendar_connected = 1,
+        google_access_token = ?,
+        google_refresh_token = ?,
+        google_token_expiry = ?
+    WHERE id = ?
+  `, [email, accessToken, refreshToken, tokenExpiry, userId]);
+  const user = await getUserCalendarSettings(userId);
+  return user;
+};
+
 export const disconnectUserGoogleCalendar = async (userId) => {
   await run(`
     UPDATE tenant_users 
-    SET google_calendar_email = NULL, google_calendar_connected = 0
+    SET google_calendar_email = NULL, 
+        google_calendar_connected = 0,
+        google_access_token = NULL,
+        google_refresh_token = NULL,
+        google_token_expiry = 0
     WHERE id = ?
   `, [userId]);
   const user = await getUserCalendarSettings(userId);
@@ -2967,5 +3467,63 @@ export const getAllPaymentsWithTenant = async () => {
   `);
 };
 
+// =============================================================
+// MARKETING CAMPAIGNS HUB OPERATIONS
+// =============================================================
 
+export const getCampaigns = async (tenant_id) => {
+  return await all('SELECT * FROM campaigns WHERE tenant_id = ? ORDER BY created_at DESC', [tenant_id]);
+};
 
+export const addCampaign = async (tenant_id, { name, target_audience, channels, email_subject, email_body, sms_body, call_prompt }) => {
+  const result = await run(`
+    INSERT INTO campaigns (tenant_id, name, target_audience, channels, email_subject, email_body, sms_body, call_prompt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [tenant_id, name, target_audience, channels, email_subject || '', email_body || '', sms_body || '', call_prompt || '']);
+  return { id: result.id, tenant_id, name, target_audience, channels, status: 'draft', email_subject, email_body, sms_body, call_prompt };
+};
+
+export const deleteCampaign = async (tenant_id, id) => {
+  await run('DELETE FROM campaigns WHERE tenant_id = ? AND id = ?', [tenant_id, id]);
+  return { id };
+};
+
+export const updateCampaignStatus = async (tenant_id, id, status) => {
+  await run('UPDATE campaigns SET status = ? WHERE tenant_id = ? AND id = ?', [status, tenant_id, id]);
+  return { id, status };
+};
+
+export const getCampaignLogs = async (tenant_id, campaign_id) => {
+  return await all(`
+    SELECT l.*, c.name as contact_name, c.phone as contact_phone, c.email as contact_email 
+    FROM campaign_logs l
+    JOIN contacts c ON l.contact_id = c.id
+    WHERE l.tenant_id = ? AND l.campaign_id = ?
+    ORDER BY l.processed_at DESC
+  `, [tenant_id, campaign_id]);
+};
+
+export const addCampaignLog = async (tenant_id, campaign_id, contact_id, channel, status, details) => {
+  const result = await run(`
+    INSERT INTO campaign_logs (tenant_id, campaign_id, contact_id, channel, status, details)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [tenant_id, campaign_id, contact_id, channel, status, details || '']);
+  return { id: result.id, tenant_id, campaign_id, contact_id, channel, status, details };
+};
+
+export const getCampaignTemplates = async (tenant_id) => {
+  return await all('SELECT * FROM campaign_templates WHERE tenant_id = ? OR tenant_id IS NULL ORDER BY created_at DESC', [tenant_id]);
+};
+
+export const addCampaignTemplate = async (tenant_id, { name, type, subject, content }) => {
+  const result = await run(`
+    INSERT INTO campaign_templates (tenant_id, name, type, subject, content)
+    VALUES (?, ?, ?, ?, ?)
+  `, [tenant_id, name, type, subject || '', content]);
+  return { id: result.id, tenant_id, name, type, subject, content };
+};
+
+export const deleteCampaignTemplate = async (tenant_id, id) => {
+  await run('DELETE FROM campaign_templates WHERE tenant_id = ? AND id = ?', [tenant_id, id]);
+  return { id };
+};
