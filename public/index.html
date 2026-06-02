@@ -87,12 +87,7 @@
   <div id="landing-page-container" class="landing-container">
     <header class="landing-header">
       <div class="landing-brand" style="display: flex; align-items: center; gap: 10px;">
-        <div class="logo-wrapper" style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--border-radius-md); background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass);">
-          <svg viewBox="0 0 32 32" style="width: 26px; height: 26px; fill: none; display: block;">
-            <circle cx="16" cy="16" r="6" fill="#ffffff" />
-            <ellipse cx="16" cy="16" rx="12" ry="4" stroke="#22c55e" stroke-width="2.5" transform="rotate(-30 16 16)" />
-          </svg>
-        </div>
+        <img src="assets/company_logo.png" alt="Company Logo" style="width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(34,197,94,0.35));">
         <h2 style="font-family: var(--font-display); font-weight: 800; font-size: 1.5rem; letter-spacing: -0.5px; text-transform: uppercase; margin: 0;">
           <span style="color: #ffffff; background: none; -webkit-text-fill-color: initial;">Voice</span><span style="color: #22c55e; background: none; -webkit-text-fill-color: initial;">Desk</span>
         </h2>
@@ -532,7 +527,13 @@
           
           <div class="billing-toggle-container" id="billing-cycle-toggle">
             <button type="button" class="billing-toggle-btn active" id="toggle-monthly" onclick="setBillingCycle('monthly')">Monthly</button>
-            <button type="button" class="billing-toggle-btn" id="toggle-yearly" onclick="setBillingCycle('annual')">Yearly <span class="discount-badge">Save 20%</span></button>
+            <button type="button" class="billing-toggle-btn" id="toggle-yearly" onclick="setBillingCycle('annual')" style="display:flex;align-items:center;gap:6px;">
+              <span>⚡</span> Pay Annually <span class="discount-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-weight:800;">Save 20%</span>
+            </button>
+          </div>
+          <!-- Annual savings callout strip -->
+          <div id="annual-savings-callout" style="display:none;margin-top:12px;padding:10px 20px;border-radius:10px;background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(245,158,11,0.08));border:1px solid rgba(251,191,36,0.3);font-size:0.82rem;color:#fbbf24;font-weight:600;letter-spacing:0.01em;text-align:center;">
+            🎉 You save <strong>$238/yr</strong> on Starter &nbsp;|&nbsp; <strong>$2,388/yr</strong> on Professional — paid as one annual invoice
           </div>
         </div>
         
@@ -606,7 +607,7 @@
         <!-- Brand Block -->
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 32px; height: 32px; border-radius: var(--border-radius-sm); background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; font-size: 1rem; box-shadow: 0 0 15px rgba(6, 182, 212, 0.3); flex-shrink: 0;">✨</div>
+            <img src="assets/company_logo.png" alt="Company Logo" style="width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(34,197,94,0.35));">
             <span style="font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: white;">VoiceDesk</span>
           </div>
           <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">Next-generation 24/7 AI Voice receptionists and visual Kanban sales pipelines for local businesses.</p>
@@ -819,12 +820,7 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; margin-bottom: 40px;">
-        <div class="logo-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--border-radius-md); background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); flex-shrink: 0;">
-          <svg viewBox="0 0 32 32" style="width: 22px; height: 22px; fill: none; display: block;">
-            <circle cx="16" cy="16" r="6" fill="#ffffff" />
-            <ellipse cx="16" cy="16" rx="12" ry="4" stroke="#22c55e" stroke-width="2.5" transform="rotate(-30 16 16)" />
-          </svg>
-        </div>
+        <img src="assets/company_logo.png" alt="Company Logo" style="width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 0 6px rgba(34,197,94,0.35));">
         <h2 style="font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; letter-spacing: -0.5px; text-transform: uppercase; margin: 0; line-height: 1;">
           <span style="color: #ffffff; background: none; -webkit-text-fill-color: initial;">Voice</span><span style="color: #22c55e; background: none; -webkit-text-fill-color: initial;">Desk</span>
         </h2>
@@ -913,6 +909,12 @@
             <span class="text-muted" style="font-size: 0.85rem; margin-right: 12px;" id="header-company-name">My Workspace</span>
             <span class="lead-stage-pill subscriber" id="header-tier-badge">Sandbox</span>
           </div>
+          <!-- Global Search Button -->
+          <button id="btn-global-search" title="Global Search (Ctrl+K)" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); border-radius: 10px; padding: 7px 12px; cursor: pointer; color: var(--text-muted); font-size: 0.85rem; transition: all 0.2s ease; min-width: 155px; white-space: nowrap; flex-shrink: 0;">
+            <i data-lucide="search" style="width: 15px; height: 15px; flex-shrink: 0;"></i>
+            <span style="flex: 1; text-align: left;">Search everything…</span>
+            <kbd style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-family: monospace; color: rgba(255,255,255,0.35);">Ctrl K</kbd>
+          </button>
           <button class="btn btn-primary" id="btn-outbound-call-modal">
             <i data-lucide="phone-outgoing"></i>
             <span>Start Outbound Call</span>
@@ -1182,6 +1184,7 @@
                     <!-- Injected dynamically -->
                   </tbody>
                 </table>
+                <div id="appointments-pagination" style="padding: 4px 0;"></div>
                 <div class="empty-state-placeholder" id="appointments-empty-state" style="display: none;">
                   <i data-lucide="calendar-days"></i>
                   <p>No appointments booked in the system.</p>
@@ -1293,6 +1296,7 @@
                         <!-- Injected via app.js -->
                       </tbody>
                     </table>
+                    <div id="contacts-pagination" style="padding: 4px 0;"></div>
                   </div>
                 </div>
               </div>
@@ -1512,6 +1516,7 @@
             <div class="history-list" id="call-logs-container">
               <!-- Injected dynamically -->
             </div>
+            <div id="call-logs-pagination" style="padding: 4px 8px;"></div>
             
             <div class="empty-state-placeholder" id="history-empty-state" style="display: none;">
               <i data-lucide="phone-missed"></i>
@@ -3735,134 +3740,384 @@
 
         <!-- PANE: SUPER ADMIN CONSOLE -->
         <section class="pane" id="pane-admin">
-          <!-- Metrics Grid -->
-          <div class="metrics-grid">
-            <div class="metric-card glass">
-              <div class="metric-header">
-                <span class="metric-title">Total Registered Tenants</span>
-                <div class="metric-icon blue"><i data-lucide="users"></i></div>
-              </div>
-              <div class="metric-value" id="admin-metric-tenants">0</div>
-              <div class="metric-footer text-muted">SaaS client accounts</div>
+          <!-- Super Admin Subtabs Navigation -->
+          <div class="campaigns-nav-tabs" style="display: flex; gap: 20px; border-bottom: 1px solid var(--border-glass); margin-bottom: 25px; padding-bottom: 5px;">
+            <div class="campaign-subtab active" onclick="switchAdminSubtab('overview')" id="admin-subtab-overview" style="cursor: pointer; color: white; padding-bottom: 8px; font-weight: 600; font-size: 0.9rem; position: relative;">
+              <i data-lucide="users" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>Tenants & Settings
             </div>
-            
-            <div class="metric-card glass">
-              <div class="metric-header">
-                <span class="metric-title">Total Call Duration (Mins)</span>
-                <div class="metric-icon purple"><i data-lucide="phone"></i></div>
-              </div>
-              <div class="metric-value" id="admin-metric-minutes">0.0</div>
-              <div class="metric-footer text-muted">Aggregated usage</div>
+            <div class="campaign-subtab" onclick="switchAdminSubtab('finance')" id="admin-subtab-finance" style="cursor: pointer; color: var(--text-muted); padding-bottom: 8px; font-weight: 600; font-size: 0.9rem; position: relative;">
+              <i data-lucide="line-chart" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>Financial Ledger
             </div>
-            
-            <div class="metric-card glass">
-              <div class="metric-header">
-                <span class="metric-title">SaaS Monthly Revenue (MRR)</span>
-                <div class="metric-icon green"><i data-lucide="dollar-sign"></i></div>
-              </div>
-              <div class="metric-value" id="admin-metric-mrr">$0.00</div>
-              <div class="metric-footer text-green">✨ Active recurring subscriptions</div>
-            </div>
-
-            <div class="metric-card glass">
-              <div class="metric-header">
-                <span class="metric-title">Active Call Streams</span>
-                <div class="metric-icon blue" style="background-color: rgba(245,158,11,0.15); color: #fbbf24;"><i data-lucide="activity"></i></div>
-              </div>
-              <div class="metric-value" id="admin-metric-active-streams">0</div>
-              <div class="metric-footer text-muted">Live connected sessions</div>
+            <div class="campaign-subtab" onclick="switchAdminSubtab('purchase-history')" id="admin-subtab-purchase-history" style="cursor: pointer; color: var(--text-muted); padding-bottom: 8px; font-weight: 600; font-size: 0.9rem; position: relative;">
+              <i data-lucide="receipt" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>Purchase History
             </div>
           </div>
 
-          <!-- Tenants Registry & Activity Feed Grid -->
-          <div class="admin-panels-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; width: 100%; margin-top: 24px;">
-            <!-- Tenants registry list -->
-            <div class="section-card glass" style="width: 100%; margin-top: 0;">
-              <div class="pane-section-header">
-                <h3>Tenants Management Registry</h3>
-                <p class="text-muted" style="font-size: 0.85rem;">Modify user plans, verify call logs volume, and activate/suspend workspaces</p>
+          <!-- Sub-View: Overview & Management -->
+          <div id="admin-subpane-overview-container" style="display: block; width: 100%;">
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Total Registered Tenants</span>
+                  <div class="metric-icon blue"><i data-lucide="users"></i></div>
+                </div>
+                <div class="metric-value" id="admin-metric-tenants">0</div>
+                <div class="metric-footer text-muted">SaaS client accounts</div>
               </div>
               
-              <div class="appointments-table-wrapper mt-4">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Workspace</th>
-                      <th>Email</th>
-                      <th>Sub Tier</th>
-                      <th>Billing Cycle</th>
-                      <th>Status</th>
-                      <th>Call Usage</th>
-                      <th>Database Volume</th>
-                      <th>Usage Limits</th>
-                      <th class="text-right" style="width: 280px;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="admin-tenants-tbody">
-                    <!-- Loaded dynamically via app.js -->
-                  </tbody>
-                </table>
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Total Call Duration (Mins)</span>
+                  <div class="metric-icon purple"><i data-lucide="phone"></i></div>
+                </div>
+                <div class="metric-value" id="admin-metric-minutes">0.0</div>
+                <div class="metric-footer text-muted">Aggregated usage</div>
+              </div>
+              
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">SaaS Monthly Revenue (MRR)</span>
+                  <div class="metric-icon green"><i data-lucide="dollar-sign"></i></div>
+                </div>
+                <div class="metric-value" id="admin-metric-mrr">$0.00</div>
+                <div class="metric-footer text-green">✨ Active recurring subscriptions</div>
+              </div>
+
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Active Call Streams</span>
+                  <div class="metric-icon blue" style="background-color: rgba(245,158,11,0.15); color: #fbbf24;"><i data-lucide="activity"></i></div>
+                </div>
+                <div class="metric-value" id="admin-metric-active-streams">0</div>
+                <div class="metric-footer text-muted">Live connected sessions</div>
               </div>
             </div>
 
-            <!-- Platform Activities Log -->
-            <div class="section-card glass" style="margin-top: 0; display: flex; flex-direction: column; max-height: 600px;">
-              <div class="pane-section-header" style="border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 16px;">
-                <h3>Recent System Activities</h3>
-                <p class="text-muted" style="font-size: 0.85rem;">Audit log of actions across all workspaces</p>
-              </div>
-              
-              <div class="activity-feed-container" id="admin-activities-feed" style="overflow-y: auto; flex: 1; padding-right: 4px; max-height: 480px;">
-                <!-- Loaded dynamically via app.js -->
-                <p class="text-center text-muted py-4">No activities logged yet.</p>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Global SaaS Configuration -->
-          <div class="section-card glass" style="margin-top: 24px; width: 100%;">
-            <div class="pane-section-header">
-              <h3>Global SaaS Configuration</h3>
-              <p class="text-muted" style="font-size: 0.85rem;">Manage default system-wide variables and pricing rates</p>
-            </div>
-            <div style="display: flex; gap: 20px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
-              <div class="form-group" style="margin: 0; flex: 1; min-width: 250px; max-width: 350px;">
-                <label style="font-size: 0.8rem; margin-bottom: 6px; display: block; color: var(--text-muted);">Global Overage Rate ($/minute)</label>
-                <div style="display: flex; align-items: center; position: relative;">
-                  <span style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.9rem;">$</span>
-                  <input type="number" id="global-overage-rate-input" class="form-input" step="0.01" min="0.00" value="0.35" style="padding-left: 24px; width: 100%;">
+            <!-- Tenants Registry & Activity Feed Grid -->
+            <div class="admin-panels-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; width: 100%; margin-top: 24px;">
+              <!-- Tenants registry list -->
+              <div class="section-card glass" style="width: 100%; margin-top: 0;">
+                <div class="pane-section-header">
+                  <h3>Tenants Management Registry</h3>
+                  <p class="text-muted" style="font-size: 0.85rem;">Modify user plans, verify call logs volume, and activate/suspend workspaces</p>
+                </div>
+                
+                <div class="appointments-table-wrapper mt-4">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Workspace</th>
+                        <th>Email</th>
+                        <th>Sub Tier</th>
+                        <th>Billing Cycle</th>
+                        <th>Status</th>
+                        <th>Call Usage</th>
+                        <th>Database Volume</th>
+                        <th>Usage Limits</th>
+                        <th class="text-right" style="width: 280px;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="admin-tenants-tbody">
+                      <!-- Loaded dynamically via app.js -->
+                    </tbody>
+                  </table>
+                  <div id="admin-tenants-pagination" style="padding: 4px 0;"></div>
                 </div>
               </div>
-              <button class="btn btn-primary" onclick="saveGlobalSettings()">
-                <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save Global Settings
-              </button>
+
+              <!-- Platform Activities Log -->
+              <div class="section-card glass" style="margin-top: 0; display: flex; flex-direction: column; max-height: 600px;">
+                <div class="pane-section-header" style="border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 16px;">
+                  <h3>Recent System Activities</h3>
+                  <p class="text-muted" style="font-size: 0.85rem;">Audit log of actions across all workspaces</p>
+                </div>
+                
+                <div class="activity-feed-container" id="admin-activities-feed" style="overflow-y: auto; flex: 1; padding-right: 4px; max-height: 480px;">
+                  <!-- Loaded dynamically via app.js -->
+                  <p class="text-center text-muted py-4">No activities logged yet.</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Global SaaS Configuration -->
+            <div class="section-card glass" style="margin-top: 24px; width: 100%;">
+              <div class="pane-section-header">
+                <h3>Global SaaS Configuration</h3>
+                <p class="text-muted" style="font-size: 0.85rem;">Manage default system-wide variables and pricing rates</p>
+              </div>
+              <div style="display: flex; gap: 20px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
+                <div class="form-group" style="margin: 0; flex: 1; min-width: 250px; max-width: 350px;">
+                  <label style="font-size: 0.8rem; margin-bottom: 6px; display: block; color: var(--text-muted);">Global Overage Rate ($/minute)</label>
+                  <div style="display: flex; align-items: center; position: relative;">
+                    <span style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.9rem;">$</span>
+                    <input type="number" id="global-overage-rate-input" class="form-input" step="0.01" min="0.00" value="0.35" style="padding-left: 24px; width: 100%;">
+                  </div>
+                </div>
+                <button class="btn btn-primary" onclick="saveGlobalSettings()">
+                  <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save Global Settings
+                </button>
+              </div>
+            </div>
+
+            <!-- Platform Owner Profile -->
+            <div class="section-card glass" style="margin-top: 24px; width: 100%;">
+              <div class="pane-section-header">
+                <h3>Platform Owner Profile</h3>
+                <p class="text-muted" style="font-size: 0.85rem;">Update your Super Admin login credentials</p>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Full Name</label>
+                  <input type="text" id="admin-profile-name" class="form-input" placeholder="Super Admin">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Email Address</label>
+                  <input type="email" id="admin-profile-email" class="form-input" placeholder="admin@yourdomain.com">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">New Password <span style="font-weight:400; opacity:0.6;">(leave blank to keep current)</span></label>
+                  <input type="password" id="admin-profile-password" class="form-input" placeholder="••••••••">
+                </div>
+                <button class="btn btn-primary" onclick="saveAdminProfile()" style="white-space: nowrap; display: flex; align-items: center; gap: 8px; height: 42px;">
+                  <i data-lucide="save" style="width: 15px; height: 15px;"></i> Save Profile
+                </button>
+              </div>
+            </div>
+          </div> <!-- #admin-subpane-overview-container -->
+
+          <!-- Sub-View: Financial Ledger -->
+          <div id="admin-subpane-finance-container" style="display: none; flex-direction: column; gap: 24px;">
+            <!-- Financial KPI Metrics Grid -->
+            <div class="metrics-grid" style="margin-top: 15px;">
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Estimated MRR</span>
+                  <div class="metric-icon blue"><i data-lucide="calendar"></i></div>
+                </div>
+                <div class="metric-value" id="admin-finance-mrr">$0.00</div>
+                <div class="metric-footer text-muted">Monthly Recurring Revenue</div>
+              </div>
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Total Platform Revenue</span>
+                  <div class="metric-icon green"><i data-lucide="trending-up"></i></div>
+                </div>
+                <div class="metric-value" id="admin-finance-revenue">$0.00</div>
+                <div class="metric-footer text-green">All-time billing events logged</div>
+              </div>
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Total Operational Cost</span>
+                  <div class="metric-icon purple" style="background-color: rgba(239, 68, 68, 0.15); color: #ef4444;"><i data-lucide="trending-down"></i></div>
+                </div>
+                <div class="metric-value" id="admin-finance-costs">$0.00</div>
+                <div class="metric-footer text-red">OpenAI, Twilio & Hosting costs</div>
+              </div>
+              <div class="metric-card glass">
+                <div class="metric-header">
+                  <span class="metric-title">Gross Profit Margin</span>
+                  <div class="metric-icon green" id="admin-finance-margin-icon" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981;"><i data-lucide="shield-check"></i></div>
+                </div>
+                <div class="metric-value" id="admin-finance-margin">$0.00</div>
+                <div class="metric-footer text-muted" id="admin-finance-margin-percent">0.0% Profit Margin</div>
+              </div>
+            </div>
+
+            <!-- Financial Grids: Unit Economics and Ledger -->
+            <div class="admin-panels-grid" style="display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; width: 100%;">
+              <!-- Unit Economics table -->
+              <div class="section-card glass" style="width: 100%; margin-top: 0;">
+                <div class="pane-section-header">
+                  <h3>Tenant Unit Economics</h3>
+                  <p class="text-muted" style="font-size: 0.85rem;">Inspect profitability per workspace (Revenue vs. API usage costs)</p>
+                </div>
+                
+                <div class="appointments-table-wrapper mt-4">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Tenant</th>
+                        <th>Sub Tier</th>
+                        <th>Revenue Paid</th>
+                        <th>Cost Consumed</th>
+                        <th>Gross Margin</th>
+                        <th>Margin %</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="admin-finance-economics-tbody">
+                      <!-- Loaded dynamically via app.js -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Billing Ledger Events Log -->
+              <div class="section-card glass" style="margin-top: 0; display: flex; flex-direction: column;">
+                <div class="pane-section-header" style="border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 16px;">
+                  <h3>Platform Billing Log</h3>
+                  <p class="text-muted" style="font-size: 0.85rem;">Audit log of all payments, renewals, and upgrades</p>
+                </div>
+                
+                <div class="appointments-table-wrapper" style="overflow-y: auto; max-height: 480px;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Tenant</th>
+                        <th>Amount</th>
+                        <th>Type</th>
+                      </tr>
+                    </thead>
+                    <tbody id="admin-finance-ledger-tbody">
+                      <!-- Loaded dynamically via app.js -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Platform Owner Profile -->
-          <div class="section-card glass" style="margin-top: 24px; width: 100%;">
-            <div class="pane-section-header">
-              <h3>Platform Owner Profile</h3>
-              <p class="text-muted" style="font-size: 0.85rem;">Update your Super Admin login credentials</p>
+          <!-- Sub-View: Purchase History by Tenant -->
+          <div id="admin-subpane-purchase-history-container" style="display: none; flex-direction: column; gap: 24px;">
+
+            <!-- Tenant Selector Card -->
+            <div class="section-card glass" style="margin-top: 0; padding: 20px 24px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <h3 style="margin: 0 0 4px; font-size: 1.05rem;">Tenant Purchase History</h3>
+                  <p class="text-muted" style="margin: 0; font-size: 0.83rem;">Select a workspace to view all subscription upgrades and overage purchases</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <div style="position: relative;">
+                    <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-muted); pointer-events: none;"></i>
+                    <select id="ph-tenant-select" class="form-input" onchange="loadTenantPurchaseHistory()" style="padding-left: 32px; min-width: 240px; height: 38px; font-size: 0.85rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass);">
+                      <option value="">— Select a Tenant —</option>
+                    </select>
+                  </div>
+                  <button class="btn btn-ghost" onclick="loadTenantPurchaseHistory()" style="height: 38px; padding: 0 14px; font-size: 0.83rem; display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Refresh
+                  </button>
+                  <button class="btn btn-ghost" onclick="exportPurchaseHistoryCSV()" id="ph-export-btn" style="height: 38px; padding: 0 14px; font-size: 0.83rem; display: flex; align-items: center; gap: 6px; display: none;">
+                    <i data-lucide="download" style="width: 14px; height: 14px;"></i> Export CSV
+                  </button>
+                </div>
+              </div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap;">
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Full Name</label>
-                <input type="text" id="admin-profile-name" class="form-input" placeholder="Super Admin">
+
+            <!-- Tenant Summary Stats (hidden until tenant selected) -->
+            <div id="ph-summary-cards" style="display: none;">
+              <div class="metrics-grid" style="margin-top: 0;">
+                <div class="metric-card glass">
+                  <div class="metric-header">
+                    <span class="metric-title">Total Spent</span>
+                    <div class="metric-icon green"><i data-lucide="dollar-sign"></i></div>
+                  </div>
+                  <div class="metric-value" id="ph-stat-total">$0.00</div>
+                  <div class="metric-footer text-muted">All-time purchases</div>
+                </div>
+                <div class="metric-card glass">
+                  <div class="metric-header">
+                    <span class="metric-title">Plan Upgrades</span>
+                    <div class="metric-icon blue"><i data-lucide="trending-up"></i></div>
+                  </div>
+                  <div class="metric-value" id="ph-stat-upgrades">0</div>
+                  <div class="metric-footer text-muted">Subscription changes</div>
+                </div>
+                <div class="metric-card glass">
+                  <div class="metric-header">
+                    <span class="metric-title">Overage Purchases</span>
+                    <div class="metric-icon purple"><i data-lucide="zap"></i></div>
+                  </div>
+                  <div class="metric-value" id="ph-stat-overages">0</div>
+                  <div class="metric-footer text-muted">Top-up transactions</div>
+                </div>
+                <div class="metric-card glass">
+                  <div class="metric-header">
+                    <span class="metric-title">Last Purchase</span>
+                    <div class="metric-icon blue" style="background-color: rgba(251,191,36,0.15); color: #fbbf24;"><i data-lucide="clock"></i></div>
+                  </div>
+                  <div class="metric-value" id="ph-stat-last" style="font-size: 1.1rem;">—</div>
+                  <div class="metric-footer text-muted">Most recent transaction</div>
+                </div>
               </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Email Address</label>
-                <input type="email" id="admin-profile-email" class="form-input" placeholder="admin@yourdomain.com">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">New Password <span style="font-weight:400; opacity:0.6;">(leave blank to keep current)</span></label>
-                <input type="password" id="admin-profile-password" class="form-input" placeholder="••••••••">
-              </div>
-              <button class="btn btn-primary" onclick="saveAdminProfile()" style="white-space: nowrap; display: flex; align-items: center; gap: 8px; height: 42px;">
-                <i data-lucide="save" style="width: 15px; height: 15px;"></i> Save Profile
-              </button>
             </div>
-          </div>
+
+            <!-- Tenant Info Banner (shown when tenant selected) -->
+            <div id="ph-tenant-banner" style="display: none;" class="section-card glass" style="margin-top: 0; padding: 16px 24px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 0;">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  <div style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i data-lucide="building-2" style="width: 20px; height: 20px; color: white;"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 1rem; color: white;" id="ph-banner-company">Company Name</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);" id="ph-banner-meta">Starter Plan · Active</div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                  <div style="text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Email</div>
+                    <div style="font-size: 0.85rem; color: white; font-weight: 500;" id="ph-banner-email">—</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Current Plan</div>
+                    <div style="font-size: 0.85rem; font-weight: 600;" id="ph-banner-tier">—</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Usage Mins</div>
+                    <div style="font-size: 0.85rem; color: white; font-weight: 500;" id="ph-banner-mins">—</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Transactions Table -->
+            <div class="section-card glass" style="margin-top: 0;">
+              <div class="pane-section-header" style="border-bottom: 1px solid var(--border-glass); padding-bottom: 12px; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <h3 style="margin: 0 0 3px;">Transaction History</h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.83rem;" id="ph-table-subtitle">Select a tenant above to view their transactions</p>
+                  </div>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <select id="ph-type-filter" class="form-input" onchange="filterPurchaseHistoryTable()" style="height: 32px; font-size: 0.8rem; padding: 4px 10px; background: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border-glass); border-radius: 8px; min-width: 150px;">
+                      <option value="">All Types</option>
+                      <option value="overage_purchase">Overage Purchase</option>
+                      <option value="subscription_upgrade">Subscription Upgrade</option>
+                      <option value="subscription_renewal">Subscription Renewal</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="appointments-table-wrapper" style="overflow-y: auto; max-height: 500px; margin-top: 0;">
+                <table class="data-table" id="ph-transactions-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 160px;">Date &amp; Time</th>
+                      <th>Transaction Type</th>
+                      <th>Description</th>
+                      <th style="text-align: right;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ph-transactions-tbody">
+                    <tr>
+                      <td colspan="4" class="text-center text-muted" style="padding: 40px 20px;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.5;">
+                          <i data-lucide="receipt" style="width: 32px; height: 32px;"></i>
+                          <span>Select a tenant above to view their purchase history</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div id="ph-transactions-pagination" style="padding: 4px 0;"></div>
+              </div>
+            </div>
+
+          </div> <!-- #admin-subpane-purchase-history-container -->
+
         </section>
 
         <!-- PANE: MOBILE SIMULATOR -->
@@ -4601,7 +4856,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <!-- Local Script Injection -->
-  <script src="app.js?v=1.1.2"></script>
+  <script src="app.js?v=1.1.3"></script>
   <script>
     // Initialize Google Sign-In buttons after GSI loads
     window.addEventListener('load', () => {
@@ -4625,5 +4880,36 @@
       document.getElementById('auth-forgot-step').style.display = 'block';
     };
   </script>
+
+  <!-- ===== GLOBAL SEARCH COMMAND PALETTE MODAL ===== -->
+  <div id="global-search-modal" class="gs-modal-backdrop">
+    <div class="gs-modal-box">
+      <!-- Search Input Row -->
+      <div class="gs-input-row">
+        <i data-lucide="search" class="gs-input-icon"></i>
+        <input
+          id="global-search-input"
+          type="text"
+          class="gs-input"
+          placeholder="Search contacts, appointments, calls, invoices…"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button id="global-search-close" class="gs-close-btn" title="Close (Esc)">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <!-- Results Container -->
+      <div id="global-search-results" class="gs-results"></div>
+      <!-- Footer hint -->
+      <div class="gs-footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        <span><kbd>↵</kbd> Open</span>
+        <span><kbd>Esc</kbd> Close</span>
+        <span style="margin-left: auto; opacity: 0.4; font-size: 0.75rem;">Ctrl+K to open</span>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

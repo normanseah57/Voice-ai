@@ -22,8 +22,19 @@ const headerTier = document.getElementById('m-header-tier');
 const navItems = document.querySelectorAll('.nav-item');
 const screens = document.querySelectorAll('.mobile-screen');
 
-// 1. Initial State Check
+// 1. Initial State Check — also handles QR deep-link auto-login via ?token= URL param
 document.addEventListener('DOMContentLoaded', () => {
+  // If the page was opened via the tenant-unique QR code, grab the token from the URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlToken = urlParams.get('token');
+  if (urlToken) {
+    token = urlToken;
+    localStorage.setItem('saas_token', token);
+    // Clean the token from the URL bar without reloading the page
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
   if (token) {
     initAuthenticatedSession();
   } else {

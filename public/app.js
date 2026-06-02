@@ -16,9 +16,80 @@ let currentWizardStep = 2;
 let allAppointments = [];
 let allContacts = [];
 let allDeals = [];
+let allCallLogs = [];
+let allServices = [];
 let currentCrmSubtab = 'contacts';
+
 let workspaceTeamList = [];
 let loggedInUserProfile = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGINATION UTILITY
+// Usage: paginate({ items, page, pageSize, containerId, paginationId, renderFn })
+//   containerId  — the element whose innerHTML receives rendered rows/cards
+//   paginationId — the element that gets the pagination bar
+//   renderFn(slice) — returns HTML string for the current page slice
+// ─────────────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 15;
+const _paginationState = {}; // keyed by paginationId
+
+window.paginate = function({ items, page, pageSize = PAGE_SIZE, containerId, paginationId, renderFn }) {
+  const container   = document.getElementById(containerId);
+  const pagBar      = document.getElementById(paginationId);
+  if (!container || !pagBar) return;
+
+  const totalPages  = Math.max(1, Math.ceil(items.length / pageSize));
+  page = Math.max(1, Math.min(page, totalPages));
+  _paginationState[paginationId] = { items, page, pageSize, containerId, paginationId, renderFn };
+
+  const start = (page - 1) * pageSize;
+  const slice = items.slice(start, start + pageSize);
+  container.innerHTML = renderFn(slice);
+
+  // Build pagination bar
+  const btnStyle = (active) =>
+    `style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 8px;border-radius:6px;border:1px solid var(--border-glass);background:${active ? 'var(--color-primary)' : 'rgba(255,255,255,0.04)'};color:${active ? '#000' : 'var(--text-muted)'};font-size:0.8rem;font-weight:${active ? '700' : '400'};cursor:${active ? 'default' : 'pointer'};transition:all 0.15s;"`;
+
+  let html = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px;">`;
+  html += `<span style="font-size:0.78rem;color:var(--text-muted);margin-right:4px;">${items.length} record${items.length !== 1 ? 's' : ''}</span>`;
+
+  // Prev
+  if (page > 1) {
+    html += `<button ${btnStyle(false)} onclick="window._gotoPage('${paginationId}',${page - 1})">‹</button>`;
+  }
+
+  // Page numbers — show at most 7 buttons around current page
+  const range = (lo, hi) => Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  let pages = [];
+  if (totalPages <= 7) {
+    pages = range(1, totalPages);
+  } else {
+    pages = [...new Set([1, ...range(Math.max(2, page - 2), Math.min(totalPages - 1, page + 2)), totalPages])];
+  }
+  let prev = null;
+  pages.forEach(p => {
+    if (prev !== null && p - prev > 1) html += `<span style="color:var(--text-muted);padding:0 2px;">…</span>`;
+    html += `<button ${btnStyle(p === page)} ${p === page ? 'disabled' : `onclick="window._gotoPage('${paginationId}',${p})"`}>${p}</button>`;
+    prev = p;
+  });
+
+  // Next
+  if (page < totalPages) {
+    html += `<button ${btnStyle(false)} onclick="window._gotoPage('${paginationId}',${page + 1})">›</button>`;
+  }
+
+  html += `</div>`;
+  pagBar.innerHTML = html;
+
+  if (window.lucide) window.lucide.createIcons();
+  if (typeof initIcons === 'function') initIcons();
+};
+
+window._gotoPage = function(paginationId, page) {
+  const s = _paginationState[paginationId];
+  if (!s) return;
+  window.paginate({ ...s, page });
+};
 
 // Global Fetch Interceptor for SaaS Scoped API Calls
 const originalFetch = window.fetch;
@@ -1186,9 +1257,11 @@ async function fetchAppointments() {
   }
 }
 
-function renderAppointmentsTable(list) {
+function renderAppointmentsTable(list, page) {
   if (list.length === 0) {
     appointmentsTbody.innerHTML = '';
+    const pagBar = document.getElementById('appointments-pagination');
+    if (pagBar) pagBar.innerHTML = '';
     appointmentsEmptyState.style.display = 'flex';
     return;
   }
@@ -1196,7 +1269,12 @@ function renderAppointmentsTable(list) {
   appointmentsEmptyState.style.display = 'none';
   const isHotel = systemConfig.system_mode === 'hotel';
 
-  appointmentsTbody.innerHTML = list.map(appt => `
+  window.paginate({
+    items: list,
+    page: page || 1,
+    containerId: 'appointments-tbody',
+    paginationId: 'appointments-pagination',
+    renderFn: slice => slice.map(appt => `
     <tr>
       <td>
         <div style="font-weight: 600;">${escapeHtml(appt.customer_name)}</div>
@@ -1229,9 +1307,8 @@ function renderAppointmentsTable(list) {
         </button>
       </td>
     </tr>
-  `).join('');
-  
-  initIcons();
+  `).join('')
+  });
 }
 
 formManualAppointment.addEventListener('submit', async (e) => {
@@ -1321,13 +1398,20 @@ async function fetchContacts() {
       <option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.phone)})</option>
     `).join('');
 
-    const tbody = document.getElementById('crm-contacts-tbody');
     if (allContacts.length === 0) {
+      const tbody = document.getElementById('crm-contacts-tbody');
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No contacts found in CRM.</td></tr>';
+      const pagBar = document.getElementById('contacts-pagination');
+      if (pagBar) pagBar.innerHTML = '';
       return;
     }
 
-    tbody.innerHTML = allContacts.map(c => `
+    window.paginate({
+      items: allContacts,
+      page: 1,
+      containerId: 'crm-contacts-tbody',
+      paginationId: 'contacts-pagination',
+      renderFn: slice => slice.map(c => `
       <tr>
         <td style="font-weight: 600;">${escapeHtml(c.name)}</td>
         <td>${escapeHtml(c.company_name || '—')}</td>
@@ -1344,9 +1428,8 @@ async function fetchContacts() {
           </button>
         </td>
       </tr>
-    `).join('');
-
-    initIcons();
+    `).join('')
+    });
   } catch (err) {
     console.error('Failed to fetch CRM contacts:', err);
   }
@@ -1641,16 +1724,15 @@ async function fetchCallLogs() {
     }
     
     historyEmptyState.style.display = 'none';
-    callLogsContainer.innerHTML = logs.map(log => {
+    allCallLogs = logs;
+
+    const _buildCallCard = log => {
       let transcripts = [];
       try { transcripts = JSON.parse(log.transcript || '[]'); } catch (e) {}
-
       const hasHandoff = transcripts.some(bubble => bubble.speaker === 'human_agent');
-
       const durationMinutes = Math.floor(log.duration / 60);
       const durationSeconds = log.duration % 60;
       const durationDisplay = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
-
       return `
         <div class="history-card" id="call-card-${log.call_sid}">
           <div class="history-card-header" onclick="toggleCallCardExpand('${log.call_sid}')">
@@ -1659,7 +1741,7 @@ async function fetchCallLogs() {
                 <i data-lucide="${log.direction === 'inbound' ? 'phone-incoming' : 'phone-outgoing'}"></i>
               </div>
               <div class="history-card-info">
-                <h4 style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;" 
+                <h4 style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;"
                     onclick="event.stopPropagation(); callBackNumber('${log.phone_number}', '${escapeHtml(log.summary ? log.summary.split(' ').slice(0,3).join(' ') : '')}');"
                     title="Click to call this number">
                   ${formatPhoneNumber(log.phone_number)}
@@ -1675,13 +1757,11 @@ async function fetchCallLogs() {
               <i data-lucide="chevron-down" class="expand-chevron"></i>
             </div>
           </div>
-          
           <div class="history-card-body">
             <div class="summary-box">
               <h5>AI Conversation Summary</h5>
               <p class="call-summary-text">${escapeHtml(log.summary || 'Summary is generating or was not created.')}</p>
             </div>
-            
             <div class="history-transcript-section">
               <h5>Call Transcription</h5>
               <div class="history-transcript-feed">
@@ -1689,22 +1769,22 @@ async function fetchCallLogs() {
                   let roleName = 'AI Assistant';
                   if (bubble.speaker === 'user') roleName = 'Customer';
                   else if (bubble.speaker === 'human_agent') roleName = 'Human Representative';
-                  
-                  return `
-                    <div class="speech-bubble ${bubble.speaker}" style="max-width: 90%; margin-bottom: 8px;">
-                      <span class="speaker-tag" style="font-size: 0.65rem;">${roleName}</span>
-                      <span>${escapeHtml(bubble.text)}</span>
-                    </div>
-                  `;
+                  return `<div class="speech-bubble ${bubble.speaker}" style="max-width: 90%; margin-bottom: 8px;"><span class="speaker-tag" style="font-size: 0.65rem;">${roleName}</span><span>${escapeHtml(bubble.text)}</span></div>`;
                 }).join('') : '<p class="text-muted text-center py-4">No audio transcripts recorded.</p>'}
               </div>
             </div>
           </div>
         </div>
       `;
-    }).join('');
-    
-    initIcons();
+    };
+
+    window.paginate({
+      items: logs,
+      page: 1,
+      containerId: 'call-logs-container',
+      paginationId: 'call-logs-pagination',
+      renderFn: slice => slice.map(_buildCallCard).join('')
+    });
   } catch (err) {
     console.error('Error fetching call logs:', err);
   }
@@ -3430,53 +3510,102 @@ window.selectUpgradeTier = function(tier) {
 
 window.setBillingCycle = function(cycle) {
   selectedBillingCycle = cycle;
-  
+
   // Toggle active class on landing buttons
   const btnMonthly = document.getElementById('toggle-monthly');
-  const btnYearly = document.getElementById('toggle-yearly');
+  const btnYearly  = document.getElementById('toggle-yearly');
   if (btnMonthly && btnYearly) {
     if (cycle === 'monthly') {
       btnMonthly.classList.add('active');
       btnYearly.classList.remove('active');
+      // Remove annual emphasis ring
+      btnYearly.style.boxShadow = '';
+      btnYearly.style.border    = '';
     } else {
       btnMonthly.classList.remove('active');
       btnYearly.classList.add('active');
+      // Gold emphasis ring on annual
+      btnYearly.style.boxShadow = '0 0 0 2px #fbbf24, 0 0 18px rgba(251,191,36,0.35)';
+      btnYearly.style.border    = '1px solid #fbbf24';
     }
   }
-  
+
   // Update landing page price displays
   const starterPrice = document.getElementById('landing-price-starter');
-  const proPrice = document.getElementById('landing-price-professional');
-  
+  const proPrice     = document.getElementById('landing-price-professional');
+
   if (starterPrice) {
-    starterPrice.innerHTML = cycle === 'annual' ? '$79<span>/mo</span>' : '$99<span>/mo</span>';
+    if (cycle === 'annual') {
+      starterPrice.innerHTML =
+        '$79<span>/mo</span>' +
+        '<div style="font-size:0.8rem;color:#94a3b8;font-weight:500;margin-top:2px;letter-spacing:0;">' +
+        'Billed annually · <span style="color:#10b981;font-weight:700;">$948/yr total</span></div>';
+    } else {
+      starterPrice.innerHTML = '$99<span>/mo</span>';
+    }
   }
   if (proPrice) {
-    proPrice.innerHTML = cycle === 'annual' ? '$799<span>/mo</span>' : '$999<span>/mo</span>';
+    if (cycle === 'annual') {
+      proPrice.innerHTML =
+        '$799<span>/mo</span>' +
+        '<div style="font-size:0.8rem;color:#94a3b8;font-weight:500;margin-top:2px;letter-spacing:0;">' +
+        'Billed annually · <span style="color:#10b981;font-weight:700;">$9,588/yr total</span></div>';
+    } else {
+      proPrice.innerHTML = '$999<span>/mo</span>';
+    }
   }
-  
+
+  // Show / hide the annual savings callout strip
+  const callout = document.getElementById('annual-savings-callout');
+  if (callout) callout.style.display = cycle === 'annual' ? 'block' : 'none';
+
   // Sync the dashboard toggle state
   setDashboardBillingCycleState(cycle);
 };
 
 window.setDashboardBillingCycle = function(cycle) {
   setDashboardBillingCycleState(cycle);
-  
+
   // Keep the landing cycle toggle synced
   const btnMonthly = document.getElementById('toggle-monthly');
-  const btnYearly = document.getElementById('toggle-yearly');
+  const btnYearly  = document.getElementById('toggle-yearly');
   if (btnMonthly && btnYearly) {
     if (cycle === 'monthly') {
       btnMonthly.classList.add('active');
       btnYearly.classList.remove('active');
+      btnYearly.style.boxShadow = '';
+      btnYearly.style.border    = '';
     } else {
       btnMonthly.classList.remove('active');
       btnYearly.classList.add('active');
+      btnYearly.style.boxShadow = '0 0 0 2px #fbbf24, 0 0 18px rgba(251,191,36,0.35)';
+      btnYearly.style.border    = '1px solid #fbbf24';
     }
     const starterPrice = document.getElementById('landing-price-starter');
-    const proPrice = document.getElementById('landing-price-professional');
-    if (starterPrice) starterPrice.innerHTML = cycle === 'annual' ? '$79<span>/mo</span>' : '$99<span>/mo</span>';
-    if (proPrice) proPrice.innerHTML = cycle === 'annual' ? '$799<span>/mo</span>' : '$999<span>/mo</span>';
+    const proPrice     = document.getElementById('landing-price-professional');
+    if (starterPrice) {
+      if (cycle === 'annual') {
+        starterPrice.innerHTML =
+          '$79<span>/mo</span>' +
+          '<div style="font-size:0.8rem;color:#94a3b8;font-weight:500;margin-top:2px;letter-spacing:0;">' +
+          'Billed annually · <span style="color:#10b981;font-weight:700;">$948/yr total</span></div>';
+      } else {
+        starterPrice.innerHTML = '$99<span>/mo</span>';
+      }
+    }
+    if (proPrice) {
+      if (cycle === 'annual') {
+        proPrice.innerHTML =
+          '$799<span>/mo</span>' +
+          '<div style="font-size:0.8rem;color:#94a3b8;font-weight:500;margin-top:2px;letter-spacing:0;">' +
+          'Billed annually · <span style="color:#10b981;font-weight:700;">$9,588/yr total</span></div>';
+      } else {
+        proPrice.innerHTML = '$999<span>/mo</span>';
+      }
+    }
+    // Show / hide the annual savings callout strip
+    const callout = document.getElementById('annual-savings-callout');
+    if (callout) callout.style.display = cycle === 'annual' ? 'block' : 'none';
   }
 };
 
@@ -3499,10 +3628,18 @@ function setDashboardBillingCycleState(cycle) {
   const dbProPrice = document.getElementById('db-price-professional');
   
   if (dbStarterPrice) {
-    dbStarterPrice.textContent = cycle === 'annual' ? '$79/mo' : '$99/mo';
+    if (cycle === 'annual') {
+      dbStarterPrice.innerHTML = '$79/mo<div style="font-size:0.72rem;color:#10b981;font-weight:600;margin-top:2px;">$948/yr total</div>';
+    } else {
+      dbStarterPrice.innerHTML = '$99/mo';
+    }
   }
   if (dbProPrice) {
-    dbProPrice.textContent = cycle === 'annual' ? '$799/mo' : '$999/mo';
+    if (cycle === 'annual') {
+      dbProPrice.innerHTML = '$799/mo<div style="font-size:0.72rem;color:#10b981;font-weight:600;margin-top:2px;">$9,588/yr total</div>';
+    } else {
+      dbProPrice.innerHTML = '$999/mo';
+    }
   }
 }
 
@@ -3958,10 +4095,12 @@ async function fetchAdminDashboard() {
       
       if (tenants.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 20px;">No SaaS tenants registered.</td></tr>';
+        const pagBar = document.getElementById('admin-tenants-pagination');
+        if (pagBar) pagBar.innerHTML = '';
       } else {
         window.adminTenantsList = tenants;
         populateAdminTenantFilters();
-        tbody.innerHTML = tenants.map(t => {
+        const _buildTenantRow = t => {
 
       const dateStr = formatDate(t.created_at);
       const isSelf = currentTenant && parseInt(currentTenant.id) === t.id;
@@ -4064,7 +4203,15 @@ async function fetchAdminDashboard() {
           </td>
         </tr>
       `;
-    }).join('');
+        };
+
+        window.paginate({
+          items: tenants,
+          page: 1,
+          containerId: 'admin-tenants-tbody',
+          paginationId: 'admin-tenants-pagination',
+          renderFn: slice => slice.map(_buildTenantRow).join('')
+        });
 
         // Fetch and render Platform Activities
         try {
@@ -4151,35 +4298,378 @@ window.activeAdminTab = 'overview';
 window.activeAdminAccountingTab = 'invoices';
 
 window.switchAdminSubtab = function(tabName) {
-  window.activeAdminTab = tabName;
-  
-  // Update sub-tab buttons active state
-  document.querySelectorAll('.admin-subtab-btn').forEach(btn => {
-    btn.classList.remove('active');
+  const tabOverview = document.getElementById('admin-subtab-overview');
+  const tabFinance  = document.getElementById('admin-subtab-finance');
+  const tabPH       = document.getElementById('admin-subtab-purchase-history');
+  const paneOverview = document.getElementById('admin-subpane-overview-container');
+  const paneFinance  = document.getElementById('admin-subpane-finance-container');
+  const panePH       = document.getElementById('admin-subpane-purchase-history-container');
+
+  // Hide all sub-panes and deactivate all tabs
+  [paneOverview, paneFinance, panePH].forEach(p => { if (p) p.style.display = 'none'; });
+  [tabOverview, tabFinance, tabPH].forEach(t => {
+    if (t) { t.classList.remove('active'); t.style.color = 'var(--text-muted)'; }
   });
-  const activeBtn = document.getElementById(`admin-subtab-${tabName}-btn`);
-  if (activeBtn) activeBtn.classList.add('active');
-  
-  // Hide all sub-panes, show active one
-  document.querySelectorAll('.admin-sub-pane').forEach(pane => {
-    pane.style.display = 'none';
-  });
-  const activePane = document.getElementById(`sub-pane-admin-${tabName}`);
-  if (activePane) activePane.style.display = 'block';
-  
-  // Load respective sub-tab data
+
   if (tabName === 'overview') {
-    fetchAdminDashboard();
-  } else if (tabName === 'crm') {
-    fetchAdminCRM();
-  } else if (tabName === 'appointments') {
-    fetchAdminAppointments();
-  } else if (tabName === 'calls') {
-    fetchAdminCalls();
-  } else if (tabName === 'billing') {
-    fetchAdminBilling();
-  } else if (tabName === 'accounting') {
-    fetchAdminAccounting();
+    if (tabOverview) { tabOverview.classList.add('active'); tabOverview.style.color = 'white'; }
+    if (paneOverview) paneOverview.style.display = 'block';
+  } else if (tabName === 'finance') {
+    if (tabFinance) { tabFinance.classList.add('active'); tabFinance.style.color = 'white'; }
+    if (paneFinance) paneFinance.style.display = 'flex';
+    window.loadAdminFinanceData();
+  } else if (tabName === 'purchase-history') {
+    if (tabPH) { tabPH.classList.add('active'); tabPH.style.color = 'white'; }
+    if (panePH) panePH.style.display = 'flex';
+    populatePurchaseHistoryTenantSelect();
+  }
+};
+
+// =============================================================
+// PURCHASE HISTORY (SUPER ADMIN) — PER-TENANT DRILL-DOWN
+// =============================================================
+
+// Cache of the raw events for the currently loaded tenant
+window._phCurrentEvents = [];
+window._phCurrentTenantId = null;
+
+// Populate the tenant selector dropdown from the cached tenant list
+function populatePurchaseHistoryTenantSelect() {
+  const sel = document.getElementById('ph-tenant-select');
+  if (!sel) return;
+  const tenants = window.adminTenantsList || [];
+  if (tenants.length === 0) {
+    // Lazy-load tenant list if not cached yet
+    fetch('/api/admin/tenants', { headers: { 'Authorization': `Bearer ${localStorage.getItem('saas_token')}` } })
+      .then(r => r.json()).then(list => {
+        window.adminTenantsList = list;
+        _fillPHTenantSelect(sel, list);
+      }).catch(console.error);
+  } else {
+    _fillPHTenantSelect(sel, tenants);
+  }
+}
+
+function _fillPHTenantSelect(sel, tenants) {
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Select a Tenant —</option>' +
+    tenants.map(t => `<option value="${t.id}">${escapeHtml(t.company_name || t.name || 'Workspace ' + t.id)}</option>`).join('');
+  if (current) sel.value = current;
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// Load and render purchase history for the selected tenant
+window.loadTenantPurchaseHistory = async function() {
+  const sel = document.getElementById('ph-tenant-select');
+  const tenantId = sel?.value;
+  if (!tenantId) {
+    // Reset the view
+    window._phCurrentEvents = [];
+    window._phCurrentTenantId = null;
+    _renderPHTable([], null);
+    document.getElementById('ph-summary-cards').style.display = 'none';
+    document.getElementById('ph-tenant-banner').style.display = 'none';
+    document.getElementById('ph-export-btn').style.display = 'none';
+    document.getElementById('ph-table-subtitle').textContent = 'Select a tenant above to view their transactions';
+    return;
+  }
+
+  const tbody = document.getElementById('ph-transactions-tbody');
+  if (tbody) tbody.innerHTML = `
+    <tr><td colspan="4" class="text-center text-muted" style="padding: 30px;">
+      <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+        <i data-lucide="loader-2" style="width:18px;height:18px;animation:spin 1s linear infinite;"></i> Loading transactions...
+      </div>
+    </td></tr>`;
+
+  try {
+    const token = localStorage.getItem('saas_token');
+    const res = await fetch(`/api/admin/billing-ledger/${tenantId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Failed to load tenant purchase history');
+    const data = await res.json();
+
+    window._phCurrentEvents   = data.events || [];
+    window._phCurrentTenantId = tenantId;
+
+    // Populate tenant banner
+    const banner = document.getElementById('ph-tenant-banner');
+    if (data.tenant && banner) {
+      document.getElementById('ph-banner-company').textContent = data.tenant.company_name;
+      document.getElementById('ph-banner-email').textContent   = data.tenant.email || '—';
+
+      const tierColors = { free: '#94a3b8', starter: '#60a5fa', professional: '#a78bfa', enterprise: '#fbbf24' };
+      const tierEl = document.getElementById('ph-banner-tier');
+      tierEl.textContent = (data.tenant.subscription_tier || 'free').charAt(0).toUpperCase() +
+                           (data.tenant.subscription_tier || 'free').slice(1);
+      tierEl.style.color = tierColors[data.tenant.subscription_tier] || '#94a3b8';
+
+      document.getElementById('ph-banner-mins').textContent =
+        `${(data.tenant.usage_minutes || 0).toFixed(1)} used`;
+      document.getElementById('ph-banner-meta').textContent =
+        `${(data.tenant.subscription_tier || 'free').charAt(0).toUpperCase() + (data.tenant.subscription_tier || 'free').slice(1)} Plan · ` +
+        `${(data.tenant.subscription_status || 'active').charAt(0).toUpperCase() + (data.tenant.subscription_status || 'active').slice(1)}`;
+
+      banner.style.display = 'block';
+    }
+
+    // Update subtitle and export button
+    document.getElementById('ph-table-subtitle').textContent =
+      `${data.events.length} transaction${data.events.length !== 1 ? 's' : ''} found for ${data.tenant?.company_name || 'this tenant'}`;
+    document.getElementById('ph-export-btn').style.display = data.events.length > 0 ? 'flex' : 'none';
+
+    // Render summary stat cards
+    _renderPHSummaryStats(data.events);
+
+    // Render the table (respecting any existing type filter)
+    filterPurchaseHistoryTable();
+
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    console.error('[PurchaseHistory]', err);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding:20px;">Error loading transactions: ${escapeHtml(err.message)}</td></tr>`;
+  }
+};
+
+function _renderPHSummaryStats(events) {
+  const total    = events.reduce((s, e) => s + (e.amount || 0), 0);
+  const upgrades = events.filter(e => e.type === 'subscription_upgrade' || e.type === 'subscription_renewal').length;
+  const overages = events.filter(e => e.type === 'overage_purchase').length;
+  const last     = events.length > 0 ? new Date(events[0].created_at) : null;
+
+  document.getElementById('ph-stat-total').textContent =
+    `$${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  document.getElementById('ph-stat-upgrades').textContent = upgrades;
+  document.getElementById('ph-stat-overages').textContent = overages;
+  document.getElementById('ph-stat-last').textContent = last
+    ? last.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '—';
+
+  document.getElementById('ph-summary-cards').style.display = 'block';
+}
+
+// Filter the table by the type dropdown — operates on cached events
+window.filterPurchaseHistoryTable = function() {
+  const typeFilter = document.getElementById('ph-type-filter')?.value || '';
+  const events = window._phCurrentEvents || [];
+  const filtered = typeFilter ? events.filter(e => e.type === typeFilter) : events;
+  _renderPHTable(filtered, typeFilter);
+};
+
+function _renderPHTable(events, typeFilter) {
+  const tbody = document.getElementById('ph-transactions-tbody');
+  if (!tbody) return;
+
+  if (events.length === 0 && !window._phCurrentTenantId) {
+    tbody.innerHTML = `
+      <tr><td colspan="4" class="text-center text-muted" style="padding: 40px 20px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;opacity:0.5;">
+          <i data-lucide="receipt" style="width:32px;height:32px;"></i>
+          <span>Select a tenant above to view their purchase history</span>
+        </div>
+      </td></tr>`;
+    if (window.lucide) window.lucide.createIcons();
+    return;
+  }
+
+  if (events.length === 0) {
+    const msg = typeFilter ? 'No transactions match the selected filter.' : 'No purchase transactions recorded for this tenant yet.';
+    tbody.innerHTML = `
+      <tr><td colspan="4" class="text-center text-muted" style="padding: 32px 20px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0.6;">
+          <i data-lucide="inbox" style="width:28px;height:28px;"></i>
+          <span>${msg}</span>
+        </div>
+      </td></tr>`;
+    if (window.lucide) window.lucide.createIcons();
+    return;
+  }
+
+  // Type badge helpers
+  const typeMeta = {
+    overage_purchase:      { label: 'Overage Purchase',    icon: 'zap',         color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+    subscription_upgrade:  { label: 'Plan Upgrade',        icon: 'trending-up', color: '#34d399', bg: 'rgba(52,211,153,0.12)'  },
+    subscription_renewal:  { label: 'Subscription Renewal',icon: 'refresh-cw',  color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
+    subscription_downgrade:{ label: 'Plan Downgrade',      icon: 'trending-down',color: '#fbbf24', bg: 'rgba(251,191,36,0.12)'  },
+  };
+
+  const _buildPHRow = evt => {
+    const dateObj = new Date(evt.created_at);
+    const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const meta    = typeMeta[evt.type] || { label: (evt.type || 'Transaction').replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase()), icon: 'credit-card', color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
+    return `
+      <tr style="transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+        <td style="white-space: nowrap;">
+          <div style="font-size: 0.85rem; color: white; font-weight: 500;">${dateStr}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${timeStr}</div>
+        </td>
+        <td>
+          <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; background: ${meta.bg}; color: ${meta.color}; font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
+            <i data-lucide="${meta.icon}" style="width:12px;height:12px;"></i>
+            ${meta.label}
+          </div>
+        </td>
+        <td style="color: var(--text-muted); font-size: 0.85rem; max-width: 300px;">${escapeHtml(evt.description || '—')}</td>
+        <td style="text-align: right; font-weight: 700; color: #10b981; font-size: 0.95rem; white-space: nowrap;">+$${(evt.amount || 0).toFixed(2)}</td>
+      </tr>`;
+  };
+
+  window.paginate({
+    items: events,
+    page: 1,
+    containerId: 'ph-transactions-tbody',
+    paginationId: 'ph-transactions-pagination',
+    renderFn: slice => slice.map(_buildPHRow).join('')
+  });
+}
+
+// CSV export for the currently displayed events
+window.exportPurchaseHistoryCSV = function() {
+  const events = window._phCurrentEvents || [];
+  if (events.length === 0) { showToast('Nothing to export', 'No transactions found.', 'info'); return; }
+
+  const typeFilter = document.getElementById('ph-type-filter')?.value || '';
+  const rows = typeFilter ? events.filter(e => e.type === typeFilter) : events;
+
+  const header = ['Date', 'Time', 'Type', 'Description', 'Amount (USD)'];
+  const lines  = rows.map(e => {
+    const d = new Date(e.created_at);
+    return [
+      `"${d.toLocaleDateString('en-US')}"	`,
+      `"${d.toLocaleTimeString('en-US')}"	`,
+      `"${(e.type||'').replace(/_/g,' ')}"	`,
+      `"${(e.description||'').replace(/"/g,'""')}"	`,
+      e.amount?.toFixed(2) || '0.00'
+    ].join(',');
+  });
+
+  const csv  = [header.join(','), ...lines].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const tenantName = document.getElementById('ph-banner-company')?.textContent || 'tenant';
+  a.href     = url;
+  a.download = `purchase-history-${tenantName.replace(/\s+/g,'-').toLowerCase()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Exported', `${rows.length} transactions exported to CSV.`, 'success');
+};
+
+
+window.loadAdminFinanceData = async function() {
+  try {
+    const token = localStorage.getItem('saas_token');
+    const response = await fetch('/api/admin/financial-stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to fetch financial stats');
+    const data = await response.json();
+
+    // Render Metrics
+    document.getElementById('admin-finance-mrr').textContent = `$${data.estimatedMrr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    document.getElementById('admin-finance-revenue').textContent = `$${data.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    document.getElementById('admin-finance-costs').textContent = `$${data.totalCosts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    document.getElementById('admin-finance-margin').textContent = `$${data.grossMargin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    
+    const marginPercentText = document.getElementById('admin-finance-margin-percent');
+    marginPercentText.textContent = `${data.grossMarginPercent.toFixed(1)}% Profit Margin`;
+    
+    // Style the margin card dynamically
+    const marginIcon = document.getElementById('admin-finance-margin-icon');
+    if (data.grossMargin >= 0) {
+      marginPercentText.className = 'metric-footer text-green';
+      marginIcon.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+      marginIcon.style.color = '#10b981';
+    } else {
+      marginPercentText.className = 'metric-footer text-red';
+      marginIcon.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+      marginIcon.style.color = '#ef4444';
+    }
+
+    // Render Tenant Unit Economics Table
+    const economicsTbody = document.getElementById('admin-finance-economics-tbody');
+    economicsTbody.innerHTML = '';
+    
+    if (data.unitEconomics && data.unitEconomics.length > 0) {
+      data.unitEconomics.forEach(ue => {
+        const tr = document.createElement('tr');
+        
+        let statusBadge = '';
+        if (ue.alert) {
+          statusBadge = `<span class="badge badge-warning" style="background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25);">⚠️ Alert</span>`;
+        } else if (ue.revenue > 0) {
+          statusBadge = `<span class="badge badge-success" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25);">Profitable</span>`;
+        } else {
+          statusBadge = `<span class="badge badge-secondary" style="background-color: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.25);">Neutral</span>`;
+        }
+
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight: 600; color: white;">${ue.company_name}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">${ue.owner_name}</div>
+          </td>
+          <td><span class="badge">${ue.tier.toUpperCase()}</span></td>
+          <td>$${ue.revenue.toFixed(2)}</td>
+          <td>$${ue.cost.toFixed(2)}</td>
+          <td style="color: ${ue.margin >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+            $${ue.margin.toFixed(2)}
+          </td>
+          <td style="color: ${ue.margin_percent >= 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+            ${ue.margin_percent.toFixed(1)}%
+          </td>
+          <td>${statusBadge}</td>
+        `;
+        economicsTbody.appendChild(tr);
+      });
+    } else {
+      economicsTbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No tenant metrics available.</td></tr>`;
+    }
+
+    // Render Billing Ledger Table
+    const ledgerTbody = document.getElementById('admin-finance-ledger-tbody');
+    ledgerTbody.innerHTML = '';
+    
+    const ledgerResponse = await fetch('/api/admin/billing-ledger', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (ledgerResponse.ok) {
+      const ledgerEvents = await ledgerResponse.json();
+      if (ledgerEvents && ledgerEvents.length > 0) {
+        ledgerEvents.forEach(evt => {
+          const tr = document.createElement('tr');
+          const dateStr = new Date(evt.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          
+          tr.innerHTML = `
+            <td style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${dateStr}</td>
+            <td>
+              <div style="font-weight: 500; color: white;">${evt.tenant_company}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${evt.tenant_owner}</div>
+            </td>
+            <td style="font-weight: 600; color: #10b981;">+$${evt.amount.toFixed(2)}</td>
+            <td>
+              <div style="font-size: 0.8rem; font-weight: 500; color: #60a5fa;">${evt.type.toUpperCase().replace('_', ' ')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.2;">${evt.description || ''}</div>
+            </td>
+          `;
+          ledgerTbody.appendChild(tr);
+        });
+      } else {
+        ledgerTbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No billing events logged yet.</td></tr>`;
+      }
+    }
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    console.error('Error fetching admin finance stats:', err);
+    showToast('Failed to load financial stats: ' + err.message, 'error');
   }
 };
 
@@ -5326,21 +5816,24 @@ function initMobileSimulator() {
     };
   }
 
-  // Fetch local network IP to construct dynamically-bound local Wi-Fi testing link and QR code
+  // Fetch local network IP to construct a tenant-unique deep-link QR code
+  // The token param lets the mobile app auto-authenticate without a manual login
+  const tokenParam = saasToken ? `?token=${encodeURIComponent(saasToken)}` : '';
+
   fetch('/api/network-ip')
     .then(res => res.json())
     .then(data => {
       const host = data.ip;
       const port = window.location.port || '80';
       const protocol = window.location.protocol;
-      const localUrl = `${protocol}//${host}:${port}/mobile/`;
-      
+      const localUrl = `${protocol}//${host}:${port}/mobile/${tokenParam}`;
+
       const directLink = document.getElementById('m-direct-link');
       if (directLink) {
         directLink.textContent = localUrl;
         directLink.href = localUrl;
       }
-      
+
       const qrImg = document.getElementById('m-qr-code-img');
       if (qrImg) {
         qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(localUrl)}`;
@@ -5348,8 +5841,8 @@ function initMobileSimulator() {
     })
     .catch(err => {
       console.error('Failed to resolve network IP:', err);
-      // Fallback
-      const fallbackUrl = `${window.location.origin}/mobile/`;
+      // Fallback to origin-based URL, still with tenant token
+      const fallbackUrl = `${window.location.origin}/mobile/${tokenParam}`;
       const directLink = document.getElementById('m-direct-link');
       if (directLink) {
         directLink.textContent = fallbackUrl;
@@ -9062,6 +9555,7 @@ async function fetchServicesCatalog() {
     const res = await fetch('/api/services');
     if (!res.ok) throw new Error('Failed to fetch services.');
     servicesList = await res.json();
+    allServices = servicesList;
     renderServicesTable();
   } catch (err) {
     console.error(err);
@@ -10464,4 +10958,345 @@ window.deleteCampaignTemplate = async function(id) {
     showToast(err.message, 'error');
   }
 };
+
+// =============================================================
+// GLOBAL SEARCH — COMMAND PALETTE (Ctrl+K / Search Icon)
+// =============================================================
+
+function initGlobalSearch() {
+  const modal        = document.getElementById('global-search-modal');
+  const inputEl      = document.getElementById('global-search-input');
+  const resultsEl    = document.getElementById('global-search-results');
+  const closeBtn     = document.getElementById('global-search-close');
+  const openBtn      = document.getElementById('btn-global-search');
+  let activeIndex    = -1;
+  let currentResults = [];
+  let debounceTimer  = null;
+
+  if (!modal || !inputEl || !resultsEl) return;
+
+  // --- Open / Close ---
+  function openSearch() {
+    modal.classList.add('active');
+    inputEl.value = '';
+    resultsEl.innerHTML = '';
+    showDefaultSuggestions();
+    setTimeout(() => inputEl.focus(), 50);
+  }
+
+  function closeSearch() {
+    modal.classList.remove('active');
+    activeIndex = -1;
+    currentResults = [];
+  }
+
+  if (openBtn)  openBtn.addEventListener('click', openSearch);
+  if (closeBtn) closeBtn.addEventListener('click', closeSearch);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeSearch(); });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      modal.classList.contains('active') ? closeSearch() : openSearch();
+    }
+    if (e.key === 'Escape' && modal.classList.contains('active')) closeSearch();
+  });
+
+  // --- Search Execution ---
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(runSearch, 120);
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    const items = resultsEl.querySelectorAll('.gs-result-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, items.length - 1);
+      highlightItem(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      highlightItem(items);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && currentResults[activeIndex]) {
+        navigateToResult(currentResults[activeIndex]);
+        closeSearch();
+      }
+    }
+  });
+
+  function highlightItem(items) {
+    items.forEach((el, i) => {
+      el.classList.toggle('gs-active', i === activeIndex);
+      if (i === activeIndex) el.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  // --- Default Suggestions ---
+  function showDefaultSuggestions() {
+    const shortcuts = [
+      { icon: '📅', label: 'Appointments', sub: 'View all bookings',          action: () => switchTab('appointments') },
+      { icon: '👥', label: 'CRM Contacts', sub: 'View all contacts',          action: () => switchTab('crm') },
+      { icon: '📞', label: 'Call History', sub: 'Browse recent calls',        action: () => switchTab('history') },
+      { icon: '🧾', label: 'Accounting',   sub: 'Invoices, bills & payments', action: () => switchTab('accounting') },
+      { icon: '⚙️', label: 'Settings',     sub: 'Agent & workspace settings', action: () => switchTab('settings') },
+      { icon: '💳', label: 'Billing',      sub: 'Plan & usage overview',      action: () => switchTab('billing') },
+    ];
+    resultsEl.innerHTML = `
+      <div class="gs-section-label">Quick Navigation</div>
+      ${shortcuts.map((s, i) => `
+        <div class="gs-result-item gs-nav" data-idx="${i}" onclick="(${s.action.toString()})(); document.getElementById('global-search-modal').classList.remove('active')">
+          <span class="gs-icon">${s.icon}</span>
+          <div class="gs-text">
+            <span class="gs-name">${s.label}</span>
+            <span class="gs-sub">${s.sub}</span>
+          </div>
+          <span class="gs-type-badge gs-badge-nav">Page</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // --- Main Search ---
+  function runSearch() {
+    const q = inputEl.value.trim().toLowerCase();
+    if (!q) { showDefaultSuggestions(); return; }
+
+    currentResults = [];
+    activeIndex = -1;
+
+    // Appointments
+    (allAppointments || []).forEach(a => {
+      if (
+        (a.customer_name || '').toLowerCase().includes(q) ||
+        (a.customer_phone || '').includes(q) ||
+        (a.service || '').toLowerCase().includes(q) ||
+        (a.notes || '').toLowerCase().includes(q) ||
+        (a.resource_name || '').toLowerCase().includes(q)
+      ) {
+        currentResults.push({
+          icon: '📅', type: 'Appointment', typeBadge: 'gs-badge-appt',
+          name: a.customer_name,
+          sub: `${a.service} · ${formatDate ? formatDate(a.date) : a.date} ${a.time || ''}`,
+          tab: 'appointments', highlight: q
+        });
+      }
+    });
+
+    // Contacts
+    (allContacts || []).forEach(c => {
+      if (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.company_name || '').toLowerCase().includes(q) ||
+        (c.lead_stage || '').toLowerCase().includes(q)
+      ) {
+        currentResults.push({
+          icon: '👤', type: 'Contact', typeBadge: 'gs-badge-contact',
+          name: c.name,
+          sub: `${c.phone}${c.company_name ? ' · ' + c.company_name : ''} · ${c.lead_stage}`,
+          tab: 'crm', highlight: q
+        });
+      }
+    });
+
+    // Deals
+    (allDeals || []).forEach(d => {
+      if (
+        (d.name || '').toLowerCase().includes(q) ||
+        (d.contact_name || '').toLowerCase().includes(q) ||
+        (d.stage || '').toLowerCase().includes(q) ||
+        String(d.amount || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '💼', type: 'Deal', typeBadge: 'gs-badge-deal',
+          name: d.name,
+          sub: `${d.contact_name} · $${(d.amount || 0).toFixed(2)} · ${d.stage}`,
+          tab: 'crm', subTab: 'deals', highlight: q
+        });
+      }
+    });
+
+    // Call History
+    (allCallLogs || []).forEach(l => {
+      if (
+        (l.phone_number || '').includes(q) ||
+        (l.summary || '').toLowerCase().includes(q) ||
+        (l.status || '').toLowerCase().includes(q) ||
+        (l.direction || '').toLowerCase().includes(q)
+      ) {
+        currentResults.push({
+          icon: '📞', type: 'Call', typeBadge: 'gs-badge-call',
+          name: l.phone_number,
+          sub: `${l.direction} · ${l.status} · ${l.summary ? l.summary.slice(0, 60) + '…' : 'No summary'}`,
+          tab: 'history', highlight: q
+        });
+      }
+    });
+
+    // Services
+    (allServices || []).forEach(s => {
+      if (
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.description || '').toLowerCase().includes(q) ||
+        String(s.price || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '🛎️', type: 'Service', typeBadge: 'gs-badge-service',
+          name: s.name,
+          sub: `$${parseFloat(s.price || 0).toFixed(2)} · ${s.duration} mins`,
+          tab: 'settings', highlight: q
+        });
+      }
+    });
+
+    // Accounting — Invoices
+    (accountingInvoices || []).forEach(inv => {
+      if (
+        (inv.invoice_number || '').toLowerCase().includes(q) ||
+        (inv.customer_name || '').toLowerCase().includes(q) ||
+        String(inv.total || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '🧾', type: 'Invoice', typeBadge: 'gs-badge-acct',
+          name: `Invoice #${inv.invoice_number}`,
+          sub: `${inv.customer_name} · $${parseFloat(inv.total || 0).toFixed(2)} · ${inv.status}`,
+          tab: 'accounting', highlight: q
+        });
+      }
+    });
+
+    // Accounting — Bills
+    (accountingBills || []).forEach(b => {
+      if (
+        (b.bill_number || '').toLowerCase().includes(q) ||
+        (b.supplier_name || '').toLowerCase().includes(q) ||
+        String(b.total || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '📄', type: 'Bill', typeBadge: 'gs-badge-acct',
+          name: `Bill #${b.bill_number}`,
+          sub: `${b.supplier_name} · $${parseFloat(b.total || 0).toFixed(2)} · ${b.status}`,
+          tab: 'accounting', highlight: q
+        });
+      }
+    });
+
+    // Accounting — Payments
+    (accountingPayments || []).forEach(p => {
+      if (
+        (p.invoice_number || '').toLowerCase().includes(q) ||
+        (p.contact_name || '').toLowerCase().includes(q) ||
+        (p.method || '').toLowerCase().includes(q) ||
+        String(p.amount || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '💰', type: 'Payment', typeBadge: 'gs-badge-acct',
+          name: `Payment · ${p.contact_name || p.invoice_number || '—'}`,
+          sub: `$${parseFloat(p.amount || 0).toFixed(2)} · ${p.method} · ${p.date}`,
+          tab: 'accounting', highlight: q
+        });
+      }
+    });
+
+    // Accounting — Expenses
+    (accountingExpenses || []).forEach(ex => {
+      if (
+        (ex.category || '').toLowerCase().includes(q) ||
+        (ex.description || '').toLowerCase().includes(q) ||
+        String(ex.amount || '').includes(q)
+      ) {
+        currentResults.push({
+          icon: '🏷️', type: 'Expense', typeBadge: 'gs-badge-acct',
+          name: ex.category,
+          sub: `$${parseFloat(ex.amount || 0).toFixed(2)} · ${ex.date}${ex.description ? ' · ' + ex.description.slice(0, 40) : ''}`,
+          tab: 'accounting', highlight: q
+        });
+      }
+    });
+
+    renderResults(q);
+  }
+
+  function highlight(text, q) {
+    if (!q || !text) return escapeHtml(text || '');
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escapeHtml(text).replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="gs-mark">$1</mark>');
+  }
+
+  function renderResults(q) {
+    if (currentResults.length === 0) {
+      resultsEl.innerHTML = `
+        <div class="gs-empty">
+          <span style="font-size: 2rem;">🔍</span>
+          <p>No results for <strong>"${escapeHtml(q)}"</strong></p>
+          <p class="gs-empty-sub">Try searching contacts, appointments, calls or services</p>
+        </div>`;
+      return;
+    }
+
+    // Group by type
+    const groups = {};
+    currentResults.forEach((r, i) => {
+      r._idx = i;
+      if (!groups[r.type]) groups[r.type] = [];
+      groups[r.type].push(r);
+    });
+
+    let html = '';
+    Object.entries(groups).forEach(([type, items]) => {
+      html += `<div class="gs-section-label">${type}s <span class="gs-count">${items.length}</span></div>`;
+      items.slice(0, 8).forEach(r => {
+        html += `
+          <div class="gs-result-item" data-idx="${r._idx}"
+               onclick="window._gsNavigate(${r._idx})">
+            <span class="gs-icon">${r.icon}</span>
+            <div class="gs-text">
+              <span class="gs-name">${highlight(r.name, q)}</span>
+              <span class="gs-sub">${highlight(r.sub, q)}</span>
+            </div>
+            <span class="gs-type-badge ${r.typeBadge}">${r.type}</span>
+          </div>`;
+      });
+      if (items.length > 8) {
+        html += `<div class="gs-more">+${items.length - 8} more ${type.toLowerCase()}s — refine your search</div>`;
+      }
+    });
+
+    resultsEl.innerHTML = html;
+  }
+
+  function navigateToResult(r) {
+    if (!r) return;
+    // Navigate to tab
+    const tabLink = document.querySelector(`[data-tab="${r.tab}"]`);
+    if (tabLink) tabLink.click();
+    // Handle sub-tabs
+    if (r.subTab === 'deals') {
+      setTimeout(() => {
+        const dealsTab = document.querySelector('[data-crm-subtab="deals"]');
+        if (dealsTab) dealsTab.click();
+      }, 150);
+    }
+  }
+
+  window._gsNavigate = (idx) => {
+    navigateToResult(currentResults[idx]);
+    closeSearch();
+  };
+  // Re-run lucide icons for search modal
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initGlobalSearch);
+} else {
+  initGlobalSearch();
+}
+
 

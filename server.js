@@ -183,7 +183,12 @@ import {
   deleteInvitation,
   getPendingInvitations,
   deleteInvitationByEmail,
-  acceptInvitationAndCreateUser
+  acceptInvitationAndCreateUser,
+
+  // Platform billing analytics
+  getPlatformBillingEvents,
+  getCallCostTotals,
+  getTenantCallCostTotals
 } from './database.js';
 
 import Stripe from 'stripe';
@@ -1044,6 +1049,128 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
       totalMinutes,
       estimatedMrr,
       activeCalls
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/financial-stats', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const tenants = await getAllTenantsWithUsage();
+    let estimatedMrr = 0;
+    const tierCounts = { starter: 0, professional: 0, enterprise: 0, free: 0 };
+    
+    tenants.forEach(t => {
+      const tier = t.subscription_tier || 'free';
+      if (tierCounts[tier] !== undefined) {
+        tierCounts[tier]++;
+      }
+      if (tier === 'starter') {
+        estimatedMrr += (t.billing_cycle === 'annual') ? 79 : 99;
+      } else if (tier === 'professional') {
+        estimatedMrr += (t.billing_cycle === 'annual') ? 799 : 999;
+      } else if (tier === 'enterprise') {
+        estimatedMrr += (t.billing_cycle === 'annual') ? 2000 : 2500;
+      }
+    });
+
+    const billingEvents = await getPlatformBillingEvents();
+    let totalRevenue = 0;
+    billingEvents.forEach(e => {
+      totalRevenue += e.amount || 0;
+    });
+
+    const callCosts = await getCallCostTotals();
+    const totalOpenai = callCosts.total_openai || 0;
+    const totalTwilio = callCosts.total_twilio || 0;
+    const totalCosts = totalOpenai + totalTwilio + 150.0; // $150 baseline for simulated hosting server costs
+
+    const grossMargin = totalRevenue - totalCosts;
+    const grossMarginPercent = totalRevenue > 0 ? (grossMargin / totalRevenue) * 100 : 0;
+
+    const unitEconomics = [];
+    for (const t of tenants) {
+      const tBilling = billingEvents.filter(e => e.tenant_id === t.id);
+      let tRevenue = tBilling.reduce((sum, e) => sum + e.amount, 0);
+      
+      let monthlySub = 0;
+      if (t.subscription_tier === 'starter') {
+        monthlySub = (t.billing_cycle === 'annual') ? 79 : 99;
+      } else if (t.subscription_tier === 'professional') {
+        monthlySub = (t.billing_cycle === 'annual') ? 799 : 999;
+      } else if (t.subscription_tier === 'enterprise') {
+        monthlySub = (t.billing_cycle === 'annual') ? 2000 : 2500;
+      }
+      tRevenue += monthlySub;
+
+      const tCalls = await getTenantCallCostTotals(t.id);
+      const tCost = (tCalls.total_openai || 0) + (tCalls.total_twilio || 0);
+
+      const tMargin = tRevenue - tCost;
+      const tMarginPercent = tRevenue > 0 ? (tMargin / tRevenue) * 100 : 0;
+
+      unitEconomics.push({
+        id: t.id,
+        company_name: t.company_name,
+        owner_name: t.name,
+        tier: t.subscription_tier,
+        revenue: tRevenue,
+        cost: tCost,
+        margin: tMargin,
+        margin_percent: tMarginPercent,
+        alert: tCost > tRevenue && tRevenue > 0
+      });
+    }
+
+    res.json({
+      estimatedMrr,
+      totalRevenue,
+      totalCosts,
+      grossMargin,
+      grossMarginPercent,
+      tierCounts,
+      unitEconomics
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/billing-ledger', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const list = await getPlatformBillingEvents();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Per-tenant purchase history drill-down for Super Admin
+app.get('/api/admin/billing-ledger/:tenantId', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = parseInt(req.params.tenantId);
+  if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant ID.' });
+  try {
+    const allEvents = await getPlatformBillingEvents();
+    const tenantEvents = allEvents.filter(e => e.tenant_id === tenantId);
+
+    // Also fetch the tenant's current profile / usage for the summary banner
+    const tenant = await getTenantById(tenantId);
+    const usage  = tenant ? await getTenantUsage(tenantId) : null;
+
+    res.json({
+      events: tenantEvents,
+      tenant: tenant ? {
+        id: tenant.id,
+        name: tenant.name,
+        email: tenant.email,
+        company_name: tenant.company_name || tenant.name,
+        subscription_tier: usage?.tier || tenant.subscription_tier || 'free',
+        subscription_status: tenant.subscription_status || 'active',
+        billing_cycle: usage?.billing_cycle || 'monthly',
+        usage_minutes: usage?.usage_minutes || 0,
+        prepaid_overage_minutes: usage?.prepaid_overage_minutes || 0,
+      } : null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

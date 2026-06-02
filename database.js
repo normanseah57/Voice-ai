@@ -431,6 +431,8 @@ export const initDb = async () => {
       phone_number TEXT NOT NULL,
       status TEXT NOT NULL,
       duration INTEGER DEFAULT 0,
+      openai_cost REAL DEFAULT 0.0,
+      twilio_cost REAL DEFAULT 0.0,
       summary TEXT,
       transcript TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -884,6 +886,31 @@ export const initDb = async () => {
       FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     )
   `);
+
+  // 25. Platform Billing Events Table (For Superadmin Financial Analytics)
+  await run(`
+    CREATE TABLE IF NOT EXISTS platform_billing_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Gracefully alter existing calls table to add new cost tracking columns if they don't exist
+  try {
+    await run('ALTER TABLE calls ADD COLUMN openai_cost REAL DEFAULT 0.0');
+  } catch (e) {
+    // Ignore error if column already exists
+  }
+  try {
+    await run('ALTER TABLE calls ADD COLUMN twilio_cost REAL DEFAULT 0.0');
+  } catch (e) {
+    // Ignore error if column already exists
+  }
 
   // Seed Default System Templates
   try {
@@ -1382,6 +1409,20 @@ export const updateTenantSubscription = async (tenant_id, tier, billing_cycle = 
     'UPDATE tenants SET subscription_tier = ?, billing_cycle = ?, subscription_status = \'active\', next_payment_due = ? WHERE id = ?',
     [tier, cycle, nextPaymentDue, tenant_id]
   );
+
+  // Log billing event
+  let amount = 0.0;
+  if (tier === 'starter') {
+    amount = cycle === 'annual' ? (79 * 12) + 1000 : 99 + 1000;
+  } else if (tier === 'professional') {
+    amount = cycle === 'annual' ? (799 * 12) + 5000 : 999 + 5000;
+  } else if (tier === 'enterprise') {
+    amount = cycle === 'annual' ? 24000 : 2500;
+  }
+  if (amount > 0) {
+    await logPlatformBillingEvent(tenant_id, amount, 'subscription_upgrade', `Upgraded to ${tier.toUpperCase()} plan (${cycle.toUpperCase()})`);
+  }
+
   await logTenantActivity(tenant_id, 'billing_upgrade', `Upgraded subscription plan to ${tier.toUpperCase()} (${cycle.toUpperCase()})`);
   return getTenantUsage(tenant_id);
 };
@@ -2383,6 +2424,9 @@ export const addCallLog = async (tenant_id, { call_sid, direction, phone_number,
 };
 
 export const updateCallStatus = async (call_sid, status, duration = 0) => {
+  let openai_cost = 0.0;
+  let twilio_cost = 0.0;
+
   // Add duration to tenant's usage limits on call complete
   if (status === 'completed') {
     try {
@@ -2392,13 +2436,17 @@ export const updateCallStatus = async (call_sid, status, duration = 0) => {
         const minutes = duration / 60;
         await run('UPDATE tenants SET usage_minutes = usage_minutes + ? WHERE id = ?', [minutes, call.tenant_id]);
         
-        await logTenantActivity(call.tenant_id, 'call_completed', `${call.direction.toUpperCase()} call session completed. Duration: ${duration} seconds (${minutes.toFixed(1)} mins)`);
+        // Compute estimated costs
+        openai_cost = minutes * 0.15;
+        twilio_cost = minutes * 0.015;
+
+        await logTenantActivity(call.tenant_id, 'call_completed', `${call.direction.toUpperCase()} call session completed. Duration: ${duration} seconds (${minutes.toFixed(1)} mins). Cost Est: $${(openai_cost + twilio_cost).toFixed(4)}`);
       }
     } catch (err) {
       console.error('Failed to increment SaaS minutes usage:', err);
     }
   }
-  return await run('UPDATE calls SET status = ?, duration = ? WHERE call_sid = ?', [status, duration, call_sid]);
+  return await run('UPDATE calls SET status = ?, duration = ?, openai_cost = ?, twilio_cost = ? WHERE call_sid = ?', [status, duration, openai_cost, twilio_cost, call_sid]);
 };
 
 export const updateCallSummary = async (call_sid, summary) => {
@@ -2917,6 +2965,10 @@ export const buyOverageMinutes = async (tenant_id, blocksCount = 1) => {
         overage_reminder_sent = 0
     WHERE id = ?
   `, [minutesToAdd, tenant_id]);
+
+  // Log billing event
+  await logPlatformBillingEvent(tenant_id, cost, 'overage_purchase', `Purchased ${minutesToAdd} prepaid overage minutes (${blocks} blocks)`);
+
   await logTenantActivity(tenant_id, 'billing_upgrade', `Purchased ${minutesToAdd} prepaid overage minutes (${blocks} blocks) for $${cost.toFixed(2)}`);
   return getTenantUsage(tenant_id);
 };
@@ -3527,3 +3579,52 @@ export const deleteCampaignTemplate = async (tenant_id, id) => {
   await run('DELETE FROM campaign_templates WHERE tenant_id = ? AND id = ?', [tenant_id, id]);
   return { id };
 };
+
+// =============================================================
+// PLATFORM FINANCIAL LEDGER OPERATIONS (SUPERADMIN)
+// =============================================================
+
+export const logPlatformBillingEvent = async (tenantId, amount, type, description) => {
+  const result = await run(`
+    INSERT INTO platform_billing_events (tenant_id, amount, type, description)
+    VALUES (?, ?, ?, ?)
+  `, [tenantId, amount, type, description]);
+  return { id: result.id, tenant_id: tenantId, amount, type, description };
+};
+
+export const getPlatformBillingEvents = async () => {
+  return await all(`
+    SELECT e.*, t.company_name as tenant_company, t.name as tenant_owner
+    FROM platform_billing_events e
+    JOIN tenants t ON e.tenant_id = t.id
+    ORDER BY e.created_at DESC
+  `);
+};
+
+/**
+ * Get total OpenAI + Twilio call costs across all tenants.
+ * Returns { total_openai, total_twilio }
+ */
+export const getCallCostTotals = async () => {
+  const row = await get(`
+    SELECT COALESCE(SUM(openai_cost), 0) as total_openai,
+           COALESCE(SUM(twilio_cost), 0) as total_twilio
+    FROM calls
+  `);
+  return { total_openai: row?.total_openai || 0, total_twilio: row?.total_twilio || 0 };
+};
+
+/**
+ * Get total OpenAI + Twilio call costs for a specific tenant.
+ * Returns { total_openai, total_twilio }
+ */
+export const getTenantCallCostTotals = async (tenant_id) => {
+  const row = await get(`
+    SELECT COALESCE(SUM(openai_cost), 0) as total_openai,
+           COALESCE(SUM(twilio_cost), 0) as total_twilio
+    FROM calls
+    WHERE tenant_id = ?
+  `, [tenant_id]);
+  return { total_openai: row?.total_openai || 0, total_twilio: row?.total_twilio || 0 };
+};
+
