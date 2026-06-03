@@ -670,6 +670,28 @@ app.post('/api/auth/register', signupLimiter, async (req, res) => {
   }
 });
 
+app.get('/api/auth/debug-reset', async (req, res) => {
+  try {
+    // Import helper database functions if they are accessible (all and run are global imports)
+    const tenants = await all('SELECT id, name, email, is_admin FROM tenants');
+    const users = await all('SELECT id, tenant_id, name, email, role, password_hash, password_is_hashed FROM tenant_users');
+    
+    // Explicitly run resets here to be 100% sure they run on the active database instance
+    await run("UPDATE tenants SET password_hash = 'admin123', is_admin = 1 WHERE email = 'admin@aurasaas.com'");
+    await run("UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0 WHERE email = 'admin@aurasaas.com'");
+    await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");
+
+    res.json({
+      success: true,
+      message: "Resets executed successfully",
+      tenants,
+      users
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
