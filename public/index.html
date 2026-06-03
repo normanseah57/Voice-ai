@@ -1624,41 +1624,6 @@
                   <span class="stepper-subtitle">Test and activate your AI</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="9">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">OpenAI API Key</span>
-                  <span class="stepper-subtitle">Configure OpenAI project key</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="10">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Security (2FA)</span>
-                  <span class="stepper-subtitle">Configure account 2FA protection</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="11">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Voice Provider</span>
-                  <span class="stepper-subtitle">Select underlying voice gateway</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="12">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Knowledge Base</span>
-                  <span class="stepper-subtitle">Upload FAQs and training data</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="13">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">SignalWire Credentials</span>
-                  <span class="stepper-subtitle">Configure SignalWire credentials</span>
-                </div>
-              </div>
             </div>
 
             <!-- Right Wizard Content Panel (Forms wrapped inside form-settings-ai) -->
@@ -2301,110 +2266,7 @@
                     </div>
                   </div>
 
-                  <!-- STEP 9: OpenAI API Key -->
-                  <div class="wizard-step-pane" data-step="9">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="key"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 8: OpenAI API Key</h3>
-                        <p>Configure your OpenAI Project API key.</p>
-                      </div>
-                    </div>
 
-                    <!-- OpenAI Project API Key Card -->
-                    <div class="glass" style="margin-top: 20px; margin-bottom: 24px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(6,182,212,0.3);">
-                      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                          <div style="width: 36px; height: 36px; background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                            <i data-lucide="key" style="width: 18px; height: 18px; color: #06b6d4;"></i>
-                          </div>
-                          <div>
-                            <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">OpenAI Project API Key</h3>
-                            <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Use your own OpenAI project key — you control the budget &amp; usage</p>
-                          </div>
-                        </div>
-                        <span id="openai-key-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Using Platform Default</span>
-                      </div>
-
-                      <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
-                        <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
-                          Create a <strong style="color: white;">Project</strong> in your <a href="https://platform.openai.com/settings/organization/projects" target="_blank" style="color: #06b6d4;">OpenAI dashboard</a>, generate a project API key, and paste it here.
-                          Your calls will be billed directly to that project — giving you full cost visibility per tenant in one master account.
-                        </p>
-                      </div>
-
-                      <div id="openai-key-display" style="display: none; background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-family: monospace; font-size: 0.85rem; color: #06b6d4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                        <span id="openai-key-masked-text">—</span>
-                        <button type="button" onclick="window.clearOpenAIKey()" style="background: none; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; cursor: pointer;">Remove Key</button>
-                      </div>
-
-                      <div style="display: flex; gap: 8px; align-items: flex-end;">
-                        <div style="flex: 1;">
-                          <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 6px;">New API Key</label>
-                          <input type="password" id="settings-openai-key" class="form-input" placeholder="sk-proj-..." autocomplete="off"
-                            style="font-family: monospace; letter-spacing: 1px;">
-                        </div>
-                        <button type="button" onclick="window.saveOpenAIKey()" class="btn btn-primary" style="padding: 10px 16px; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                          <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save Key
-                        </button>
-                      </div>
-                      <p class="text-muted" style="font-size: 0.75rem; margin-top: 8px;">Key is encrypted at rest and never sent back to your browser.</p>
-                    </div>
-                  </div>
-
-                  <!-- STEP 10: Security (2FA) -->
-                  <div class="wizard-step-pane" data-step="10">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="shield"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 9: Security (2FA)</h3>
-                        <p>Configure account security and 2FA.</p>
-                      </div>
-                    </div>
-
-                    <!-- Security Card -->
-                    <div class="glass" style="margin-top: 28px; border-radius: 12px; padding: 24px; border-top: 2px solid rgba(139,92,246,0.3);">
-                      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                          <div style="width: 36px; height: 36px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                            <i data-lucide="shield" style="width: 18px; height: 18px; color: #8b5cf6;"></i>
-                          </div>
-                          <div>
-                            <h3 style="margin: 0; font-size: 1rem; font-weight: 600; color: white;">Security</h3>
-                            <p class="text-muted" style="font-size: 0.78rem; margin: 0;">Two-factor authentication &amp; account protection</p>
-                          </div>
-                        </div>
-                        <span id="2fa-status-badge" style="padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Loading...</span>
-                      </div>
-
-                      <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                        <p style="font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0;">
-                          <strong style="color: white;">Two-Factor Authentication (2FA)</strong> adds an extra layer of security to your account.
-                          When enabled, you'll need to provide a 6-digit code from your authenticator app every time you sign in.
-                        </p>
-                      </div>
-
-                      <!-- Enable Button -->
-                      <button type="button" id="2fa-enable-btn" class="btn btn-primary" onclick="window.setup2FA()" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 8px 16px;">
-                        <i data-lucide="shield-check" style="width: 15px; height: 15px;"></i> Enable Two-Factor Auth
-                      </button>
-
-                      <!-- Disable Area (shown when 2FA is on) -->
-                      <div id="2fa-disable-area" style="display: none;">
-                        <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 10px;">Enter your current authenticator code to disable 2FA:</p>
-                        <div style="display: flex; gap: 8px; align-items: center; max-width: 320px;">
-                          <input type="text" id="2fa-disable-code" class="form-input" placeholder="6-digit code" maxlength="6" style="font-size: 0.9rem; text-align: center; letter-spacing: 4px; padding: 8px 12px;">
-                          <button type="button" class="btn btn-ghost" onclick="window.disable2FA()" style="white-space: nowrap; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; font-size: 0.82rem; padding: 8px 12px;">
-                            Disable 2FA
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
                   <!-- STEP 11: Voice Provider -->
                   <div class="wizard-step-pane" data-step="11">
@@ -2494,36 +2356,7 @@
                     </div>
                   </div>
 
-                  <!-- STEP 13: SignalWire Credentials -->
-                  <div class="wizard-step-pane" data-step="13">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="key-round"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 12: SignalWire Credentials</h3>
-                        <p>Configure project keys for SignalWire integration.</p>
-                      </div>
-                    </div>
 
-                    <div class="form-group mb-4">
-                      <label for="settings-signalwire-project-id">SignalWire Project ID</label>
-                      <input type="text" id="settings-signalwire-project-id" class="form-input" placeholder="e.g. 5d5a23bc-11a2-45e3-99b3-...">
-                      <small class="text-muted">Enter your SignalWire Space Project ID.</small>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-signalwire-api-token">SignalWire API Token</label>
-                      <input type="password" id="settings-signalwire-api-token" class="form-input" placeholder="PT... or api token">
-                      <small class="text-muted">Generate a project API token in the SignalWire dashboard.</small>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-signalwire-space-url">SignalWire Space URL</label>
-                      <input type="text" id="settings-signalwire-space-url" class="form-input" placeholder="e.g. space-name.signalwire.com">
-                      <small class="text-muted">Your space domain URL (excluding http/https).</small>
-                    </div>
-                  </div>
 
                 </div>
 
@@ -3942,6 +3775,66 @@
                 </div>
                 <div id="platform-openai-key-display" style="display: none; margin-top: 10px; font-size: 0.82rem; color: #10b981;">
                   ✓ Active key: <span id="platform-openai-key-masked" style="font-family: monospace; letter-spacing: 2px;"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Platform Credentials -->
+            <div class="section-card glass" style="margin-top: 24px; width: 100%;">
+              <div class="pane-section-header">
+                <h3>Platform Credentials</h3>
+                <p class="text-muted" style="font-size: 0.85rem;">Configure platform-wide integrations — these apply to all tenants and are only accessible by Super Admin</p>
+              </div>
+
+              <!-- SignalWire Credentials -->
+              <div style="margin-top: 16px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 10px; border-left: 3px solid rgba(6,182,212,0.5);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                  <i data-lucide="phone-call" style="width: 16px; height: 16px; color: #06b6d4;"></i>
+                  <span style="font-size: 0.9rem; font-weight: 600; color: white;">SignalWire Credentials</span>
+                  <span id="admin-signalwire-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Not Configured</span>
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0 0 14px;">Used by all tenants for voice call routing. Get your credentials from the <a href="https://signalwire.com" target="_blank" style="color: #06b6d4;">SignalWire dashboard</a>.</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Project ID</label>
+                    <input type="text" id="admin-signalwire-project-id" class="form-input" placeholder="5d5a23bc-11a2-45e3-...">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">API Token</label>
+                    <input type="password" id="admin-signalwire-api-token" class="form-input" placeholder="PT...">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block;">Space URL</label>
+                    <input type="text" id="admin-signalwire-space-url" class="form-input" placeholder="space-name.signalwire.com">
+                  </div>
+                  <button class="btn btn-primary" onclick="saveAdminSignalWireCredentials()" style="white-space: nowrap; padding: 10px 16px;">
+                    <i data-lucide="save" style="width: 15px; height: 15px;"></i> Save
+                  </button>
+                </div>
+              </div>
+
+              <!-- Security / 2FA -->
+              <div style="margin-top: 16px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 10px; border-left: 3px solid rgba(139,92,246,0.5);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                  <i data-lucide="shield-check" style="width: 16px; height: 16px; color: #8b5cf6;"></i>
+                  <span style="font-size: 0.9rem; font-weight: 600; color: white;">Super Admin Security (2FA)</span>
+                  <span id="2fa-status-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Loading...</span>
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0 0 14px;">
+                  <strong style="color: white;">Two-Factor Authentication</strong> adds an extra layer of security to the Super Admin account.
+                  When enabled, a 6-digit code from your authenticator app is required at every login.
+                </p>
+                <button type="button" id="2fa-enable-btn" class="btn btn-primary" onclick="window.setup2FA()" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 8px 16px;">
+                  <i data-lucide="shield-check" style="width: 15px; height: 15px;"></i> Enable Two-Factor Auth
+                </button>
+                <div id="2fa-disable-area" style="display: none;">
+                  <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 10px;">Enter your current authenticator code to disable 2FA:</p>
+                  <div style="display: flex; gap: 8px; align-items: center; max-width: 320px;">
+                    <input type="text" id="2fa-disable-code" class="form-input" placeholder="6-digit code" maxlength="6" style="font-size: 0.9rem; text-align: center; letter-spacing: 4px; padding: 8px 12px;">
+                    <button type="button" class="btn btn-ghost" onclick="window.disable2FA()" style="white-space: nowrap; border: 1px solid rgba(239,68,68,0.4); color: #ef4444; font-size: 0.82rem; padding: 8px 12px;">
+                      Disable 2FA
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

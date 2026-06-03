@@ -4080,7 +4080,10 @@ document.getElementById('form-overage-reminder').addEventListener('submit', asyn
 
 async function fetchAdminDashboard() {
   loadAdminProfileFields();
-  loadPlatformOpenAIKeyStatus(); // Load platform OpenAI key status badge
+  loadPlatformOpenAIKeyStatus();    // Platform OpenAI key badge
+  loadAdminSignalWireStatus();      // SignalWire credentials badge + pre-fill
+  window.load2FAStatus?.();         // 2FA status badge
+
   // ---- Global SaaS Config ----
   try {
     const configResponse = await fetch('/api/admin/global-settings');
@@ -5322,6 +5325,68 @@ window.clearPlatformOpenAIKey = async function() {
     }
   } catch (e) { showToast('Error', 'Could not remove key.', 'danger'); }
 };
+
+// -------------------------------------------------------------
+// ADMIN CONSOLE — SignalWire Credentials
+// -------------------------------------------------------------
+async function loadAdminSignalWireStatus() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+    const badge = document.getElementById('admin-signalwire-badge');
+    const projInput  = document.getElementById('admin-signalwire-project-id');
+    const tokenInput = document.getElementById('admin-signalwire-api-token');
+    const spaceInput = document.getElementById('admin-signalwire-space-url');
+    const hasCredentials = s.signalwire_project_id && s.signalwire_space_url;
+    if (badge) {
+      if (hasCredentials) {
+        badge.textContent = '✓ Configured';
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#10b981';
+        badge.style.border = '1px solid rgba(16,185,129,0.3)';
+      } else {
+        badge.textContent = 'Not Configured';
+        badge.style.background = 'rgba(239,68,68,0.15)';
+        badge.style.color = '#ef4444';
+        badge.style.border = '1px solid rgba(239,68,68,0.3)';
+      }
+    }
+    if (projInput  && s.signalwire_project_id) projInput.value  = s.signalwire_project_id;
+    if (spaceInput && s.signalwire_space_url)   spaceInput.value = s.signalwire_space_url;
+    // Don't pre-fill token input (password field — security best practice)
+  } catch (e) { console.error('Failed to load SignalWire status:', e); }
+}
+
+window.saveAdminSignalWireCredentials = async function() {
+  const projectId = document.getElementById('admin-signalwire-project-id')?.value.trim();
+  const apiToken  = document.getElementById('admin-signalwire-api-token')?.value.trim();
+  const spaceUrl  = document.getElementById('admin-signalwire-space-url')?.value.trim().replace(/^https?:\/\//i, '');
+  if (!projectId || !spaceUrl) {
+    showToast('Missing Fields', 'Project ID and Space URL are required.', 'warning');
+    return;
+  }
+  try {
+    const body = { signalwire_project_id: projectId, signalwire_space_url: spaceUrl };
+    if (apiToken) body.signalwire_api_token = apiToken;
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      // Clear token field after save
+      const tokenInput = document.getElementById('admin-signalwire-api-token');
+      if (tokenInput) tokenInput.value = '';
+      await loadAdminSignalWireStatus();
+      showToast('SignalWire Saved', 'Platform SignalWire credentials updated.', 'success');
+    } else {
+      showToast('Save Failed', 'Could not save SignalWire credentials.', 'danger');
+    }
+  } catch (e) { showToast('Error', 'Network error saving credentials.', 'danger'); }
+};
+
+
 
 
 // =============================================================
