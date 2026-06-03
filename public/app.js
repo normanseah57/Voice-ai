@@ -3102,12 +3102,12 @@ function initAuthenticatedSession() {
       });
     }
 
-    // Regroup settings access based on tenant user role
+    // Regroup settings access based on tenant user role: Only Super Admin can access Advanced settings tabs
     const advTab = document.getElementById('tab-settings-advanced');
     const basicTab = document.getElementById('tab-settings-basic');
     if (advTab) {
       const tabsContainer = document.querySelector('.settings-group-tabs');
-      if (currentTenant && (currentTenant.role === 'owner' || !currentTenant.role)) {
+      if (currentTenant && currentTenant.is_admin === 1) {
         advTab.style.display = 'block';
         if (basicTab) basicTab.style.display = 'block';
         if (tabsContainer) tabsContainer.style.display = 'flex';
@@ -3165,10 +3165,10 @@ function switchSettingsGroup(group) {
       advTab.style.color = 'var(--text-dark)';
     }
 
-    // Hide Advanced Steps in Sidebar Stepper: Steps 1, 9, 10, 11, 12 are Advanced or Hidden.
+    // Hide Advanced Steps in Sidebar Stepper: Steps 1, 9, 10, 11, 12, 13 are Advanced or Hidden.
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([1, 9, 10, 11, 12].includes(step)) {
+      if ([1, 9, 10, 11, 12, 13].includes(step)) {
         item.style.display = 'none';
       } else {
         item.style.display = 'flex';
@@ -3181,7 +3181,7 @@ function switchSettingsGroup(group) {
     });
 
     // If current wizard step is one of the hidden steps, switch to Step 2
-    if ([1, 9, 10, 11, 12].includes(currentWizardStep)) {
+    if ([1, 9, 10, 11, 12, 13].includes(currentWizardStep)) {
       showWizardStep(2);
     }
   } else {
@@ -3197,7 +3197,7 @@ function switchSettingsGroup(group) {
     // Show Advanced Steps in Sidebar Stepper, Hide Basic ones
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([9, 10, 11, 12].includes(step)) {
+      if ([9, 10, 11, 12, 13].includes(step)) {
         item.style.display = 'flex';
       } else {
         item.style.display = 'none';
@@ -3214,7 +3214,7 @@ function switchSettingsGroup(group) {
     });
 
     // If current wizard step is not one of the advanced steps, switch to Step 9
-    if (![9, 10, 11, 12].includes(currentWizardStep)) {
+    if (![9, 10, 11, 12, 13].includes(currentWizardStep)) {
       showWizardStep(9);
     }
   }
@@ -3227,7 +3227,7 @@ window.switchSettingsGroup = switchSettingsGroup;
 
 function getNextVisibleStep(currentStep, direction) {
   let next = currentStep + direction;
-  while (next >= 1 && next <= 12) {
+  while (next >= 1 && next <= 13) {
     const item = document.querySelector(`.stepper-item[data-step="${next}"]`);
     if (item && item.style.display !== 'none') {
       return next;
