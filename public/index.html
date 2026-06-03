@@ -1527,6 +1527,20 @@
 
         <!-- PANE: AGENT CONFIGURATION -->
         <section class="pane" id="pane-settings">
+
+          <!-- Super Admin: Tenant Selector Banner (hidden for regular tenants) -->
+          <div id="settings-tenant-selector-bar" style="display: none; align-items: center; gap: 12px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.35); border-radius: 10px; padding: 10px 16px; margin-bottom: 16px;">
+            <i data-lucide="shield-alert" style="width: 18px; height: 18px; color: #f59e0b; flex-shrink: 0;"></i>
+            <span style="font-size: 0.85rem; color: #f59e0b; font-weight: 600; white-space: nowrap;">Configuring Tenant:</span>
+            <select id="settings-tenant-filter" onchange="window.handleGlobalTenantFilterChange(this); window.loadSettingsForSelectedTenant();"
+              style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(245,158,11,0.4); border-radius: 6px; color: white; padding: 6px 10px; font-size: 0.85rem; cursor: pointer; max-width: 300px;">
+              <option value="">— Select a Tenant —</option>
+            </select>
+            <span id="settings-tenant-active-label" style="font-size: 0.8rem; color: #fbbf24; display: none;">
+              ⚠️ Changes will apply to the selected tenant's workspace
+            </span>
+          </div>
+
           <div class="wizard-header-section" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <div>
               <h2>Tenant Onboarding</h2>

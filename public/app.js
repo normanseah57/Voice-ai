@@ -3114,6 +3114,9 @@ function initAuthenticatedSession() {
       document.querySelectorAll('.admin-only-field').forEach(el => {
         el.style.display = el.tagName === 'SELECT' ? 'block' : 'flex';
       });
+      // Show the tenant selector bar on Agent Settings page
+      const settingsTenantBar = document.getElementById('settings-tenant-selector-bar');
+      if (settingsTenantBar) settingsTenantBar.style.display = 'flex';
       // Load tenant list into all global tenant filter dropdowns
       loadGlobalTenantDropdowns();
     } else {
@@ -10056,7 +10059,8 @@ const GLOBAL_TENANT_FILTER_IDS = [
   'crm-tenant-filter',
   'history-tenant-filter',
   'billing-tenant-filter',
-  'accounting-tenant-filter'
+  'accounting-tenant-filter',
+  'settings-tenant-filter'  // Agent Settings tenant selector (Super Admin only)
 ];
 
 // Fetch all tenant list and populate every filter dropdown
@@ -10124,10 +10128,50 @@ window.handleGlobalTenantFilterChange = function(changedSelect) {
   else if (tab === 'billing') fetchBillingDetails();
   else if (tab === 'accounting') fetchAccountingData();
   else if (tab === 'admin')   fetchAdminDashboard();
+  else if (tab === 'settings') window.loadSettingsForSelectedTenant?.();
 
-  const msg = tenantId ? `Viewing data for: ${tenantName}` : 'Viewing all tenants';
-  showToast('Filter Applied', msg, 'info');
+  // Show/hide the "Changes apply to tenant" warning label on the settings page
+  const settingsActiveLabel = document.getElementById('settings-tenant-active-label');
+  if (settingsActiveLabel) {
+    settingsActiveLabel.style.display = tenantId ? 'inline' : 'none';
+  }
+
+  const msg = tenantId ? `Configuring workspace: ${tenantName}` : 'Viewing all tenants';
+  showToast('Tenant Selected', msg, tenantId ? 'warning' : 'info');
 };
+
+// Reload wizard settings when Super Admin switches tenant on the settings page
+window.loadSettingsForSelectedTenant = async function() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+    window.lastLoadedSettings = s;
+
+    // Repopulate all wizard form fields with the selected tenant's settings
+    if (settingsCompany)    settingsCompany.value    = s.company_name || '';
+    if (settingsAgentName)  settingsAgentName.value  = s.agent_name   || '';
+    if (settingsHours)      settingsHours.value      = s.business_hours || '';
+    if (settingsServices)   settingsServices.value   = s.services_offered || '';
+    if (settingsModel)      settingsModel.value      = s.openai_model || 'gpt-4o-mini-realtime-preview';
+    if (settingsVoice)      settingsVoice.value      = s.voice || 'alloy';
+    if (settingsAccent)     settingsAccent.value     = s.voice_accent || 'default';
+    if (settingsTwilio)     settingsTwilio.value     = s.twilio_phone_number || '';
+    if (settingsTransfer)   settingsTransfer.value   = s.transfer_phone_number || '';
+    if (settingsResources)  settingsResources.value  = s.resources_list || '';
+    if (settingsPrompt)     settingsPrompt.value     = s.system_prompt || '';
+    if (settingsWebsiteUrl) settingsWebsiteUrl.value = s.website_url || '';
+    if (settingsMaxDuration) settingsMaxDuration.value = s.max_call_duration || 10;
+    if (settingsSilenceTimeout) settingsSilenceTimeout.value = s.max_no_speech_timeout || 30;
+
+    updateOnboardingProgress();
+    showWizardStep(2); // Reset to first step for the newly selected tenant
+    showToast('Settings Loaded', `Loaded settings for selected tenant.`, 'success');
+  } catch (e) {
+    console.error('[Admin] Failed to load tenant settings:', e);
+  }
+};
+
 
 // Remote-manage a specific tenant: set global filter + go to Overview
 window.remoteManageTenantSettings = function(tenantId, companyName) {
