@@ -641,7 +641,7 @@ export const initDb = async () => {
     console.error('Failed to backfill existing tenants:', err);
   }
 
-  // Seed default super admin account
+  // Seed and ensure default super admin account
   try {
     const adminExists = await get('SELECT id FROM tenants WHERE email = ?', ['admin@aurasaas.com']);
     if (!adminExists) {
@@ -650,9 +650,23 @@ export const initDb = async () => {
         VALUES ('Super Admin', 'admin@aurasaas.com', 'admin123', 'VoiceDesk Inc.', 'professional', 'active', 1)
       `);
       console.log('Default super admin account seeded: admin@aurasaas.com');
+    } else {
+      await run(`
+        UPDATE tenants SET password_hash = 'admin123', is_admin = 1 WHERE email = 'admin@aurasaas.com'
+      `);
     }
+
+    // Force user password status to plain text 'admin123' to fix any login failures
+    await run(`
+      UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0, role = 'owner'
+      WHERE email = 'admin@aurasaas.com'
+    `);
+
+    // Upgrade Google OAuth email to Super Admin status if it exists
+    await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");
+    console.log('Super Admin configuration verified.');
   } catch (err) {
-    console.error('Failed to seed default super admin account:', err);
+    console.error('Failed to initialize super admin account:', err);
   }
 
   // Seed initial activities if table is empty
