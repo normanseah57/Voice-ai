@@ -2957,28 +2957,32 @@ formSettingsAi.addEventListener('submit', async (e) => {
   
   const nextVisible = getNextVisibleStep(currentWizardStep, 1);
   if (nextVisible > currentWizardStep) {
-    const saved = await saveWizardSettings(true);
-    if (saved) {
-      showWizardStep(nextVisible);
-    }
+    // Navigate immediately — save fires silently in background
+    showWizardStep(nextVisible);
+    saveWizardSettings(true); // fire-and-forget
   } else {
-    // Save and Complete
+    // Last step: Save & Complete — wait for save before showing confirmation
     const saved = await saveWizardSettings(true);
     if (saved) {
-      const originalText = btn.innerHTML;
-      btn.textContent = 'SAVED';
-      btn.style.background = '#10b981';
-      btn.style.borderColor = '#10b981';
-      
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.textContent = 'SAVED';
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+      }
       setTimeout(() => {
         showToast('Onboarding Complete', 'AI Receptionist is now active and live!', 'success');
-        btn.innerHTML = originalText;
-        btn.style.background = '';
-        btn.style.borderColor = '';
-        btn.disabled = false;
+        if (btn) {
+          btn.innerHTML = originalText;
+          btn.style.background = '';
+          btn.style.borderColor = '';
+          btn.disabled = false;
+        }
         if (window.lucide) window.lucide.createIcons();
       }, 1000);
       return;
+    } else {
+      showToast('Save Failed', 'Could not save settings. Please try again.', 'danger');
     }
   }
   
