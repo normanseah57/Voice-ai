@@ -1293,12 +1293,13 @@ export const authenticateTenant = async (email, password) => {
 // =============================================
 export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
   // Look up by google_id first
-  let user = await get('SELECT tu.*, t.* FROM tenant_users tu JOIN tenants t ON t.id = tu.tenant_id WHERE tu.google_id = ?', [googleId]);
+  let user = await get('SELECT * FROM tenant_users WHERE google_id = ?', [googleId]);
   if (!user) {
     // Try to link by email
-    user = await get('SELECT tu.*, t.id as tenant_row_id FROM tenant_users tu JOIN tenants t ON t.id = tu.tenant_id WHERE tu.email = ?', [email]);
+    user = await get('SELECT * FROM tenant_users WHERE email = ?', [email]);
     if (user) {
       await run('UPDATE tenant_users SET google_id = ? WHERE id = ?', [googleId, user.id]);
+      user.google_id = googleId;
     }
   }
   if (user) {
