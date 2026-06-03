@@ -2936,15 +2936,28 @@ async function saveWizardSettings(silent = false) {
       updateOnboardingProgress();
       return true;
     } else {
+      // Log the exact server error so we can debug
+      let errMsg = `HTTP ${response.status}`;
+      try {
+        const errBody = await response.json();
+        errMsg = errBody.error || errBody.message || JSON.stringify(errBody);
+      } catch (_) {
+        errMsg = await response.text().catch(() => errMsg);
+      }
+      console.error('[saveWizardSettings] Server error:', errMsg);
       if (!silent) {
-        showToast('Save Failed', 'Failed to save settings.', 'danger');
+        showToast('Save Failed', errMsg, 'danger');
+      } else {
+        showToast('Save Failed', `Settings could not be saved: ${errMsg}`, 'danger');
       }
       return false;
     }
   } catch (err) {
-    console.error('Error saving settings:', err);
+    console.error('[saveWizardSettings] Network/JS error:', err);
     if (!silent) {
-      showToast('Save Error', 'Error saving settings.', 'danger');
+      showToast('Save Error', err.message || 'Error saving settings.', 'danger');
+    } else {
+      showToast('Save Error', err.message || 'Error saving settings.', 'danger');
     }
     return false;
   }
