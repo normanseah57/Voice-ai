@@ -2953,41 +2953,48 @@ async function saveWizardSettings(silent = false) {
 formSettingsAi.addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('btn-wizard-next');
-  if (btn) btn.disabled = true;
-  
+
   const nextVisible = getNextVisibleStep(currentWizardStep, 1);
+
   if (nextVisible > currentWizardStep) {
-    // Navigate immediately — save fires silently in background
+    // Mid-wizard step: navigate immediately, save silently in background
+    if (btn) btn.disabled = true;
     showWizardStep(nextVisible);
     saveWizardSettings(true); // fire-and-forget
+    setTimeout(() => { if (btn) btn.disabled = false; }, 300);
+
   } else {
-    // Last step: Save & Complete — wait for save before showing confirmation
-    const saved = await saveWizardSettings(true);
-    if (saved) {
-      const originalText = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.textContent = 'SAVED';
-        btn.style.background = '#10b981';
-        btn.style.borderColor = '#10b981';
-      }
+    // Last step (Go Live for Basic, SignalWire for Advanced): show SAVED immediately
+    if (btn) {
+      btn.disabled = true;
+      const originalHTML = btn.innerHTML;
+      btn.textContent = 'SAVED ✓';
+      btn.style.background = '#10b981';
+      btn.style.borderColor = '#10b981';
+      btn.style.color = 'white';
+
+      // Restore button after 2 seconds
       setTimeout(() => {
-        showToast('Onboarding Complete', 'AI Receptionist is now active and live!', 'success');
-        if (btn) {
-          btn.innerHTML = originalText;
-          btn.style.background = '';
-          btn.style.borderColor = '';
-          btn.disabled = false;
-        }
+        btn.innerHTML = originalHTML;
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
+        btn.disabled = false;
         if (window.lucide) window.lucide.createIcons();
-      }, 1000);
-      return;
-    } else {
-      showToast('Save Failed', 'Could not save settings. Please try again.', 'danger');
+      }, 2000);
     }
+
+    // Fire save in background — show error only if it fails
+    saveWizardSettings(true).then(saved => {
+      if (saved) {
+        showToast('Settings Saved', 'Your configuration has been saved successfully.', 'success');
+      } else {
+        showToast('Save Failed', 'Could not save settings. Please try again.', 'danger');
+      }
+    });
   }
-  
-  if (btn) btn.disabled = false;
 });
+
 
 btnCopyWebhook.addEventListener('click', () => {
   const url = webhookCopyUrl.textContent;
