@@ -1302,6 +1302,7 @@ export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
     }
   }
   if (user) {
+    const tenant = await getTenantById(user.tenant_id);
     return { existing: true, id: tenant.id, userId: user.id, name: user.name, email: user.email, company_name: tenant.company_name, subscription_tier: tenant.subscription_tier, billing_cycle: tenant.billing_cycle || 'monthly', subscription_status: tenant.subscription_status, is_admin: tenant.is_admin, addon_call_recording: tenant.addon_call_recording || 0, addon_department_routing: tenant.addon_department_routing || 0, addon_whatsapp: tenant.addon_whatsapp || 0, addon_crm: tenant.addon_crm || 0, addon_accounting: tenant.addon_accounting || 0, addon_payment_gateway: tenant.addon_payment_gateway || 0, role: user.role, totp_enabled: false };
   }
   // Create new account
