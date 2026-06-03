@@ -61,7 +61,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 // Helper to run query with Promise
-const run = (sql, params = []) => {
+export const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) reject(err);
@@ -71,7 +71,7 @@ const run = (sql, params = []) => {
 };
 
 // Helper to get single row
-const get = (sql, params = []) => {
+export const get = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
       if (err) reject(err);
@@ -81,7 +81,7 @@ const get = (sql, params = []) => {
 };
 
 // Helper to get all rows
-const all = (sql, params = []) => {
+export const all = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
       if (err) reject(err);
