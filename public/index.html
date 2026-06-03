@@ -537,67 +537,209 @@
           </div>
         </div>
         
-        <div class="pricing-grid">
-          <!-- Starter Tier -->
-          <div class="price-card glass popular">
-            <div class="price-badge-popular">Most Popular</div>
-            <div class="price-header">
-              <h3>Starter Plan</h3>
-              <div class="price-value" id="landing-price-starter">$99<span>/mo</span></div>
-              <p class="text-muted" style="font-size: 0.85rem; font-weight: 600; color: #10b981; margin: 4px 0 8px;">+ $1,000 Setup Fee (One-time)</p>
-              <p class="text-muted">Ideal for growing small businesses</p>
-            </div>
-            <ul class="price-features">
-              <li><i data-lucide="check"></i> 100 Min Call time / mo</li>
-              <li><i data-lucide="check"></i> 100 Contacts Database</li>
-              <li><i data-lucide="check"></i> $0.35 / min Overage rate</li>
-              <li><i data-lucide="check"></i> Unlimited Appointments</li>
-              <li><i data-lucide="check"></i> 1 Workspace User limit</li>
-              <li><i data-lucide="check"></i> Custom prompt personalization</li>
-              <li class="disabled"><i data-lucide="x"></i> AI CRM Copilot</li>
-            </ul>
-            <button class="btn btn-primary btn-block mt-4" onclick="openRequestDemoModal()">Request Demo</button>
-          </div>
+        <!-- Pricing Comparison Table -->
+        <div style="width: 100%; overflow-x: auto; margin-top: 8px; padding-bottom: 20px;">
+          <table id="pricing-comparison-table" style="width: 100%; min-width: 720px; border-collapse: separate; border-spacing: 0; font-size: 0.92rem;">
+            <colgroup>
+              <col style="width: 38%;">
+              <col style="width: 20%;">
+              <col style="width: 20%;">
+              <col style="width: 22%;">
+            </colgroup>
 
-          <!-- Professional Tier -->
-          <div class="price-card glass">
-            <div class="price-header">
-              <h3>Professional</h3>
-              <div class="price-value" id="landing-price-professional">$999<span>/mo</span></div>
-              <p class="text-muted" style="font-size: 0.85rem; font-weight: 600; color: #10b981; margin: 4px 0 8px;">+ $5,000 Setup Fee (One-time)</p>
-              <p class="text-muted">Complete sales and booking powerhouse</p>
-            </div>
-            <ul class="price-features">
-              <li><i data-lucide="check"></i> 1000 Min Call time / mo</li>
-              <li><i data-lucide="check"></i> Unlimited Contacts</li>
-              <li><i data-lucide="check"></i> $0.35 / min Overage rate</li>
-              <li><i data-lucide="check"></i> Unlimited Appointments</li>
-              <li><i data-lucide="check"></i> Up to 10 Workspace Users</li>
-              <li><i data-lucide="check"></i> Custom prompt personalization</li>
-              <li><i data-lucide="check"></i> AI CRM Copilot & Command Terminal</li>
-            </ul>
-            <button class="btn btn-secondary btn-block mt-4" onclick="openRequestDemoModal()">Request Demo</button>
-          </div>
+            <!-- Header row -->
+            <thead>
+              <tr>
+                <th style="padding: 0 0 20px 0; text-align: left; color: var(--text-muted); font-weight: 500; font-size: 0.85rem; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.06);">Features &amp; Modules</th>
 
-          <!-- Enterprise Tier -->
-          <div class="price-card glass">
-            <div class="price-header">
-              <h3>Enterprise Tier</h3>
-              <div class="price-value" style="font-size: 2.5rem; letter-spacing: -0.02em;">Custom</div>
-              <p class="text-muted" style="font-size: 0.85rem; font-weight: 600; color: #10b981; margin: 4px 0 8px;">Tailored Quote</p>
-              <p class="text-muted">Built for larger organizations with high call volumes</p>
-            </div>
-            <ul class="price-features">
-              <li><i data-lucide="check"></i> Custom AI voice receptionist setup</li>
-              <li><i data-lucide="check"></i> Multi-tenant support</li>
-              <li><i data-lucide="check"></i> CRM and calendar integrations</li>
-              <li><i data-lucide="check"></i> Priority support & dedicated onboarding</li>
-              <li><i data-lucide="check"></i> Advanced analytics & compliance controls</li>
-              <li><i data-lucide="check"></i> Negotiated per-minute usage rates</li>
-            </ul>
-            <button class="btn btn-secondary btn-block mt-4" onclick="event.preventDefault(); openRequestDemoModal()">Contact Sales / Request Demo</button>
-          </div>
+                <!-- Starter -->
+                <th style="padding: 0 12px 20px; text-align: center; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="color: var(--text-muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;">Starter</div>
+                  <div style="font-size: 1.8rem; font-weight: 800; color: white; line-height: 1;" id="landing-price-starter">$99<span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">/mo</span></div>
+                  <div style="font-size: 0.72rem; color: #10b981; font-weight: 600; margin-top: 4px;">+ $1,000 setup (one-time)</div>
+                  <button class="btn btn-secondary btn-block" style="margin-top: 14px; padding: 8px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Request Demo</button>
+                </th>
+
+                <!-- Professional — highlighted -->
+                <th style="padding: 0 12px 20px; text-align: center; vertical-align: bottom; background: linear-gradient(180deg, rgba(6,182,212,0.08) 0%, transparent 100%); border-radius: 16px 16px 0 0; border: 1px solid rgba(6,182,212,0.25); border-bottom: none; position: relative;">
+                  <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg,#06b6d4,#8b5cf6); color: white; font-size: 0.68rem; font-weight: 700; padding: 3px 12px; border-radius: 20px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.06em;">Most Popular</div>
+                  <div style="color: #06b6d4; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;">Professional</div>
+                  <div style="font-size: 1.8rem; font-weight: 800; color: white; line-height: 1;" id="landing-price-professional">$999<span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">/mo</span></div>
+                  <div style="font-size: 0.72rem; color: #10b981; font-weight: 600; margin-top: 4px;">+ $5,000 setup (one-time)</div>
+                  <button class="btn btn-primary btn-block" style="margin-top: 14px; padding: 8px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Request Demo</button>
+                </th>
+
+                <!-- Enterprise -->
+                <th style="padding: 0 12px 20px; text-align: center; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="color: var(--text-muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;">Enterprise</div>
+                  <div style="font-size: 1.8rem; font-weight: 800; color: white; line-height: 1;">Custom</div>
+                  <div style="font-size: 0.72rem; color: #10b981; font-weight: 600; margin-top: 4px;">Tailored Quote</div>
+                  <button class="btn btn-secondary btn-block" style="margin-top: 14px; padding: 8px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Contact Sales</button>
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <!-- ── CORE PLATFORM ── -->
+              <tr>
+                <td colspan="4" style="padding: 20px 0 8px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Core Platform</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">AI Voice Receptionist (24/7)</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);" class="pricing-cell-starter">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);" class="pricing-cell-pro">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);" class="pricing-cell-ent">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Call Minutes / mo</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">100 min</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: var(--text-muted); font-size: 0.85rem;">1,000 min</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">Unlimited</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Contacts Database</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">100</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: var(--text-muted); font-size: 0.85rem;">Unlimited</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">Unlimited</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Unlimited Appointments</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Overage Rate</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">$0.35/min</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: var(--text-muted); font-size: 0.85rem;">$0.35/min</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">Negotiated</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Workspace Users</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">1</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: var(--text-muted); font-size: 0.85rem;">Up to 10</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.85rem;">Unlimited</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Custom Prompt Personalization</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Services &amp; Pricing Catalog</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);">✅</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+
+              <!-- ── ADD-ON MODULES ── -->
+              <tr>
+                <td colspan="4" style="padding: 22px 0 8px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Add-On Modules</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">AI CRM Hub</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Manage leads, contacts &amp; sync call logs in real-time</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$50/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">Accounting &amp; Invoicing</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Ledger, purchase bills, product catalog &amp; financial reports</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$20/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">WhatsApp, SMS &amp; Email Notifications</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Automated reminders, alerts &amp; booking confirmations</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$10/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$10/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">Multi-Department &amp; Extension Routing</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Route calls dynamically across departments &amp; extensions</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$25/ext/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">Call Recording</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Record, replay &amp; audit all inbound/outbound calls</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$10/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="color: var(--text-primary); font-weight: 500;">Payment Gateway (Stripe)</div>
+                  <div style="color: var(--text-muted); font-size: 0.78rem;">Collect live credit card payments directly from callers</div>
+                </td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$5/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #f59e0b; font-size: 0.78rem;">Add-on<br><span style="color: var(--text-muted);">$5/mo</span></td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅ <span style="font-size: 0.72rem; color: #10b981; display: block;">Included</span></td>
+              </tr>
+
+              <!-- ── ENTERPRISE ONLY ── -->
+              <tr>
+                <td colspan="4" style="padding: 22px 0 8px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Enterprise &amp; Support</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Priority Support &amp; Dedicated Onboarding</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Multi-Tenant Support</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-primary);">Advanced Analytics &amp; Compliance Controls</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; border-bottom: 1px solid rgba(255,255,255,0.05);">✅</td>
+              </tr>
+              <tr class="pricing-row">
+                <td style="padding: 11px 0; color: var(--text-primary);">SLA &amp; Negotiated Per-Minute Rates</td>
+                <td style="text-align:center; color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center; background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.15); border-right: 1px solid rgba(6,182,212,0.15); color: #ef4444; font-size: 1.1rem;">✗</td>
+                <td style="text-align:center;">✅</td>
+              </tr>
+            </tbody>
+
+            <!-- Footer CTA row -->
+            <tfoot>
+              <tr>
+                <td style="padding: 20px 0 0;"></td>
+                <td style="padding: 20px 12px 0; text-align: center; border-top: 1px solid rgba(255,255,255,0.06);">
+                  <button class="btn btn-secondary btn-block" style="font-size: 0.82rem;" onclick="openRequestDemoModal()">Get Started</button>
+                </td>
+                <td style="padding: 20px 12px 0; text-align: center; background: rgba(6,182,212,0.05); border-left: 1px solid rgba(6,182,212,0.25); border-right: 1px solid rgba(6,182,212,0.25); border-bottom: 1px solid rgba(6,182,212,0.25); border-radius: 0 0 16px 16px;">
+                  <button class="btn btn-primary btn-block" style="font-size: 0.82rem;" onclick="openRequestDemoModal()">Get Started</button>
+                </td>
+                <td style="padding: 20px 12px 0; text-align: center; border-top: 1px solid rgba(255,255,255,0.06);">
+                  <button class="btn btn-secondary btn-block" style="font-size: 0.82rem;" onclick="openRequestDemoModal()">Contact Sales</button>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
+
       </section>
     </main>
 
