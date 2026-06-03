@@ -3935,6 +3935,14 @@ mediaStreamWss.on('connection', (ws) => {
 
         if (!apiKey) {
           console.error('CRITICAL: No OpenAI API key configured for Tenant', tenantId, '— neither tenant key nor OPENAI_API_KEY env var is set.');
+          // Notify the browser client with a clear error before closing
+          try {
+            ws.send(JSON.stringify({
+              event: 'error',
+              code: 'NO_OPENAI_KEY',
+              message: 'No OpenAI API Key configured. Please add your OpenAI API Key in Agent Settings → Advanced → OpenAI API Key.'
+            }));
+          } catch (_) {}
           ws.close();
           return;
         }

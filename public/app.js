@@ -5763,7 +5763,12 @@ async function startBrowserVoiceCall() {
     browserMediaSocket.onmessage = (msg) => {
       try {
         const data = JSON.parse(msg.data);
-        if (data.event === 'media' && data.media?.payload) {
+        if (data.event === 'error') {
+          // Server sent a meaningful error — show it to the user
+          console.error('[Browser Call] Server error:', data.code, data.message);
+          showToast('Call Failed', data.message || 'Connection error. Check your configuration.', 'danger');
+          stopBrowserVoiceCall(originalHTML);
+        } else if (data.event === 'media' && data.media?.payload) {
           playBrowserUlawAudio(data.media.payload);
         }
       } catch (e) {
