@@ -1532,8 +1532,8 @@
               <h2>Tenant Onboarding</h2>
               <p>Complete steps to configure and activate your AI receptionist.</p>
             </div>
-            <!-- Basic vs Advanced Settings Toggle -->
-            <div class="settings-group-tabs" style="display: flex; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; padding: 4px; gap: 4px;">
+            <!-- Basic vs Advanced Settings Toggle (Super Admin only — hidden by default) -->
+            <div class="settings-group-tabs" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; padding: 4px; gap: 4px;">
               <button type="button" class="btn" id="tab-settings-basic" style="font-size: 0.85rem; padding: 6px 12px; border: none; border-radius: 6px; background: var(--color-primary); color: white; cursor: pointer;" onclick="switchSettingsGroup('basic')">Basic Settings</button>
               <button type="button" class="btn" id="tab-settings-advanced" style="font-size: 0.85rem; padding: 6px 12px; border: none; border-radius: 6px; background: transparent; color: var(--text-dark); cursor: pointer;" onclick="switchSettingsGroup('advanced')">Advanced Settings</button>
             </div>

@@ -3102,20 +3102,14 @@ function initAuthenticatedSession() {
       });
     }
 
-    // Regroup settings access based on tenant user role: Only Super Admin can access Advanced settings tabs
-    const advTab = document.getElementById('tab-settings-advanced');
-    const basicTab = document.getElementById('tab-settings-basic');
-    if (advTab) {
-      const tabsContainer = document.querySelector('.settings-group-tabs');
-      if (currentTenant && currentTenant.is_admin === 1) {
-        advTab.style.display = 'block';
-        if (basicTab) basicTab.style.display = 'block';
-        if (tabsContainer) tabsContainer.style.display = 'flex';
-      } else {
-        advTab.style.display = 'none';
-        if (basicTab) basicTab.style.display = 'none';
-        if (tabsContainer) tabsContainer.style.display = 'none';
-      }
+    // Settings toggle: Super Admin only — show the Basic/Advanced toggle; regular tenants always stay on Basic.
+    const tabsContainer = document.querySelector('.settings-group-tabs');
+    if (currentTenant && currentTenant.is_admin === 1) {
+      // Super Admin: reveal the toggle so they can switch to Advanced
+      if (tabsContainer) tabsContainer.style.display = 'flex';
+    } else {
+      // Regular tenant: keep toggle hidden and lock to Basic mode
+      if (tabsContainer) tabsContainer.style.display = 'none';
     }
     
     switchSettingsGroup('basic');
@@ -3151,6 +3145,14 @@ function initAuthenticatedSession() {
 let currentSettingsGroup = 'basic';
 
 function switchSettingsGroup(group) {
+  // Security guard: only Super Admins may activate the Advanced group.
+  // Regular tenants are always locked to Basic regardless of how this is called.
+  const isAdmin = currentTenant && currentTenant.is_admin === 1;
+  if (group === 'advanced' && !isAdmin) {
+    console.warn('[Settings] Advanced Settings access denied — Super Admin only.');
+    group = 'basic'; // Silently fall back to Basic
+  }
+
   currentSettingsGroup = group;
   const basicTab = document.getElementById('tab-settings-basic');
   const advTab = document.getElementById('tab-settings-advanced');
