@@ -4080,6 +4080,7 @@ document.getElementById('form-overage-reminder').addEventListener('submit', asyn
 
 async function fetchAdminDashboard() {
   loadAdminProfileFields();
+  loadPlatformOpenAIKeyStatus(); // Load platform OpenAI key status badge
   // ---- Global SaaS Config ----
   try {
     const configResponse = await fetch('/api/admin/global-settings');
@@ -5249,16 +5250,79 @@ window.saveGlobalSettings = async function() {
     const result = await response.json();
     if (response.ok && result.success) {
       window.globalOverageRate = rate;
-      alert('Global SaaS configuration saved successfully.');
+      showToast('Saved', 'Global SaaS configuration saved successfully.', 'success');
       fetchAdminDashboard();
     } else {
-      alert(`Failed to save settings: ${result.error || 'Unknown error'}`);
+      showToast('Error', result.error || 'Failed to save settings.', 'danger');
     }
   } catch (err) {
     console.error(err);
-    alert('Error saving global settings.');
+    showToast('Error', 'Error saving global settings.', 'danger');
   }
 };
+
+// -------------------------------------------------------------
+// PLATFORM OPENAI API KEY (Super Admin — applies to all tenants)
+// -------------------------------------------------------------
+async function loadPlatformOpenAIKeyStatus() {
+  try {
+    const res = await fetch('/api/admin/platform-openai-key');
+    if (!res.ok) return;
+    const data = await res.json();
+    const badge   = document.getElementById('platform-openai-key-badge');
+    const display = document.getElementById('platform-openai-key-display');
+    const masked  = document.getElementById('platform-openai-key-masked');
+    const clearBtn = document.getElementById('btn-clear-platform-key');
+    if (data.set && data.masked) {
+      if (badge)   { badge.textContent = '✓ Active'; badge.style.background = 'rgba(16,185,129,0.15)'; badge.style.color = '#10b981'; badge.style.border = '1px solid rgba(16,185,129,0.3)'; }
+      if (display) display.style.display = 'block';
+      if (masked)  masked.textContent = data.masked;
+      if (clearBtn) clearBtn.style.display = 'inline-flex';
+    } else {
+      if (badge)   { badge.textContent = 'Not Set'; badge.style.background = 'rgba(239,68,68,0.15)'; badge.style.color = '#ef4444'; badge.style.border = '1px solid rgba(239,68,68,0.3)'; }
+      if (display) display.style.display = 'none';
+      if (clearBtn) clearBtn.style.display = 'none';
+    }
+  } catch (e) { console.error('Failed to load platform OpenAI key status:', e); }
+}
+
+window.savePlatformOpenAIKey = async function() {
+  const input = document.getElementById('platform-openai-key-input');
+  const key = input ? input.value.trim() : '';
+  if (!key) { showToast('No key entered', 'Please paste your OpenAI API key first.', 'warning'); return; }
+  if (!key.startsWith('sk-')) { showToast('Invalid Key', 'OpenAI API keys must start with "sk-".', 'danger'); return; }
+  try {
+    const res = await fetch('/api/admin/platform-openai-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_api_key: key })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (input) input.value = '';
+      await loadPlatformOpenAIKeyStatus();
+      showToast('Platform Key Saved', 'All tenants will now use this OpenAI API key.', 'success');
+    } else {
+      showToast('Save Failed', data.error || 'Could not save platform key.', 'danger');
+    }
+  } catch (e) { showToast('Error', 'Network error saving platform key.', 'danger'); }
+};
+
+window.clearPlatformOpenAIKey = async function() {
+  if (!confirm('Remove the platform OpenAI key? Tenants without their own key will stop working until a new key is set.')) return;
+  try {
+    const res = await fetch('/api/admin/platform-openai-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai_api_key: '' })
+    });
+    if (res.ok) {
+      await loadPlatformOpenAIKeyStatus();
+      showToast('Key Removed', 'Platform OpenAI key cleared.', 'warning');
+    }
+  } catch (e) { showToast('Error', 'Could not remove key.', 'danger'); }
+};
+
 
 // =============================================================
 // SUPER ADMIN PROFILE

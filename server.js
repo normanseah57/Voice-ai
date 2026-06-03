@@ -189,6 +189,8 @@ import {
   getPlatformBillingEvents,
   getCallCostTotals,
   getTenantCallCostTotals,
+  encryptField,
+  decryptField,
   run,
   all,
   get
@@ -1517,6 +1519,47 @@ app.put('/api/admin/global-settings', requireAuth, requireAdmin, async (req, res
   try {
     await updateGlobalOverageRate(rate);
     res.json({ success: true, global_overage_rate: rate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET platform-wide OpenAI API key status (masked)
+app.get('/api/admin/platform-openai-key', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const row = await get("SELECT value FROM global_settings WHERE key = 'platform_openai_api_key'");
+    if (row && row.value) {
+      const decrypted = decryptField(row.value);
+      const masked = decrypted ? 'sk-...' + decrypted.slice(-4) : null;
+      res.json({ set: true, masked });
+    } else {
+      res.json({ set: false, masked: null });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST save/clear platform-wide OpenAI API key
+app.post('/api/admin/platform-openai-key', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { openai_api_key } = req.body;
+    if (openai_api_key === '' || openai_api_key === null) {
+      await run("DELETE FROM global_settings WHERE key = 'platform_openai_api_key'");
+      await logTenantActivity(null, 'settings_update', 'Super Admin cleared the platform-wide OpenAI API key.');
+      return res.json({ success: true, cleared: true });
+    }
+    if (!openai_api_key || !openai_api_key.startsWith('sk-')) {
+      return res.status(400).json({ error: 'Invalid OpenAI API key. Must start with sk-' });
+    }
+    const encrypted = encryptField(openai_api_key);
+    await run(
+      "INSERT OR REPLACE INTO global_settings (key, value) VALUES ('platform_openai_api_key', ?)",
+      [encrypted]
+    );
+    await logTenantActivity(null, 'settings_update', 'Super Admin updated the platform-wide OpenAI API key.');
+    const masked = 'sk-...' + openai_api_key.slice(-4);
+    res.json({ success: true, masked });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3931,7 +3974,19 @@ mediaStreamWss.on('connection', (ws) => {
           'gpt-4o-realtime-preview-2024-10-01': 'gpt-realtime-2'
         };
         const model = MODEL_MAPPING[dbModel] || dbModel;
-        const apiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
+
+        // Key resolution: tenant key → platform key (global_settings) → env var
+        let apiKey = settings.openai_api_key || null;
+        if (!apiKey) {
+          const platformKeyRow = await get("SELECT value FROM global_settings WHERE key = 'platform_openai_api_key'");
+          if (platformKeyRow && platformKeyRow.value) {
+            apiKey = decryptField(platformKeyRow.value);
+            if (apiKey) console.log(`Tenant ${tenantId}: Using platform-wide OpenAI API key.`);
+          }
+        }
+        if (!apiKey) {
+          apiKey = process.env.OPENAI_API_KEY || null;
+        }
 
         if (!apiKey) {
           console.error('CRITICAL: No OpenAI API key configured for Tenant', tenantId, '— neither tenant key nor OPENAI_API_KEY env var is set.');

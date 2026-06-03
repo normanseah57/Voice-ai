@@ -3919,6 +3919,31 @@
                   <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save Global Settings
                 </button>
               </div>
+
+              <!-- Platform OpenAI API Key (applies to all tenants) -->
+              <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-glass);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <i data-lucide="key-round" style="width: 16px; height: 16px; color: #f59e0b;"></i>
+                  <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin: 0;">Platform OpenAI API Key</label>
+                  <span id="platform-openai-key-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px; background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3);">Not Set</span>
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0 0 12px 0;">
+                  Set once here — used by <strong>all tenants</strong> unless they have their own key configured. Tenants without their own key will automatically use this platform key.
+                </p>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <input type="password" id="platform-openai-key-input" class="form-input" placeholder="sk-..." autocomplete="off"
+                    style="flex: 1; min-width: 260px; max-width: 420px; font-family: monospace; font-size: 0.85rem;">
+                  <button class="btn btn-primary" onclick="savePlatformOpenAIKey()" style="white-space: nowrap;">
+                    <i data-lucide="save" style="width: 15px; height: 15px;"></i> Save Platform Key
+                  </button>
+                  <button class="btn btn-secondary" onclick="clearPlatformOpenAIKey()" id="btn-clear-platform-key" style="display: none; white-space: nowrap;">
+                    <i data-lucide="trash-2" style="width: 15px; height: 15px;"></i> Remove
+                  </button>
+                </div>
+                <div id="platform-openai-key-display" style="display: none; margin-top: 10px; font-size: 0.82rem; color: #10b981;">
+                  ✓ Active key: <span id="platform-openai-key-masked" style="font-family: monospace; letter-spacing: 2px;"></span>
+                </div>
+              </div>
             </div>
 
             <!-- Platform Owner Profile -->
