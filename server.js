@@ -315,7 +315,10 @@ app.use(cors());
 
 // Force HTTPS redirect in production (based on load balancer headers)
 app.use((req, res, next) => {
-  if (req.headers['x-forwarded-proto'] === 'http') {
+  if (req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'))) {
+    return next();
+  }
+  if (req.protocol === 'http' || req.headers['x-forwarded-proto'] === 'http') {
     return res.redirect(301, `https://${req.headers.host}${req.url}`);
   }
   next();
