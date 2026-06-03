@@ -318,6 +318,7 @@ app.use((req, res, next) => {
   if (req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'))) {
     return next();
   }
+  console.log(`[Redirect Check] host=${req.headers.host}, protocol=${req.protocol}, x-forwarded-proto=${req.headers['x-forwarded-proto']}`);
   if (req.protocol === 'http' || req.headers['x-forwarded-proto'] === 'http') {
     return res.redirect(301, `https://${req.headers.host}${req.url}`);
   }
