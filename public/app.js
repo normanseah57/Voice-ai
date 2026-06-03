@@ -2789,7 +2789,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!textarea) return;
       
       if (textarea.disabled) {
-        alert("System Instruction customization is locked in Sandbox Mode. Please upgrade your subscription tier in the Billing tab to unlock and load templates!");
+        alert("System Instruction customization is locked in Setup Mode. Please upgrade your subscription tier in the Billing tab to unlock and load templates!");
         settingsTemplateSelect.value = '';
         return;
       }
@@ -3247,7 +3247,7 @@ function updateHeaderUserInfo() {
     }
     if (headerTier) {
       const tier = currentTenant.subscription_tier || 'free';
-      headerTier.textContent = tier === 'free' ? 'SANDBOX' : tier.toUpperCase();
+      headerTier.textContent = tier === 'free' ? 'SETUP' : tier.toUpperCase();
       headerTier.className = `lead-stage-pill ${tier === 'free' ? 'subscriber' : tier === 'starter' ? 'lead' : tier === 'professional' ? 'customer' : 'vip'}`;
     }
   }
@@ -3300,7 +3300,7 @@ async function fetchBillingDetails() {
     if (tierBadge) {
       const cycleLabel = (usage.tier === 'free' || usage.tier === 'enterprise') ? '' : (usage.billing_cycle === 'annual' ? ' (Annual)' : ' (Monthly)');
       const tierNames = {
-        free: 'Sandbox Plan',
+        free: 'Setup Mode',
         starter: 'Starter Plan',
         professional: 'Professional Plan',
         enterprise: 'Enterprise Plan'
@@ -3357,7 +3357,7 @@ async function fetchBillingDetails() {
     if (overageHint) {
       const overageRate = usage.tier === 'free' ? 0.0 : (usage.overage_rate || 0.35);
       overageHint.textContent = usage.tier === 'free'
-        ? 'Sandbox limit. Call connections block after exceeding 15 minutes.'
+        ? 'Setup mode limit. Call connections block after exceeding 15 minutes.'
         : `Overage: Pro-rated at $${overageRate.toFixed(2)}/minute.`;
     }
     
@@ -3663,7 +3663,7 @@ window.togglePaymentModal = function(show) {
         const cycleSuffix = isAnnual ? '/month - Billed Annually' : '/month';
         
         tierDisplay = selectedUpgradeTier === 'free' 
-          ? 'Sandbox Plan ($0)' 
+          ? 'Setup Mode ($0)' 
           : (selectedUpgradeTier === 'starter' 
             ? `Starter Plan ($${starterPrice}${cycleSuffix} + $1,000 Setup - Billed Upfront)` 
             : `Professional Plan ($${proPrice}${cycleSuffix} + $5,000 Setup - Billed Upfront)`);
@@ -3885,7 +3885,7 @@ document.getElementById('form-saas-register').addEventListener('submit', async (
   } catch (err) {
     showToast('Error connecting to registration service.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Register & Start Sandbox'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Register & Get Started'; }
   }
 });
 
@@ -4109,7 +4109,7 @@ async function fetchAdminDashboard() {
         ? `<span style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary);">Owner (PRO)</span>`
         : `
           <select class="admin-select" onchange="updateTenantTier(${t.id}, this.value)">
-            <option value="free" ${t.subscription_tier === 'free' ? 'selected' : ''}>Sandbox</option>
+            <option value="free" ${t.subscription_tier === 'free' ? 'selected' : ''}>Setup Mode</option>
             <option value="starter" ${t.subscription_tier === 'starter' ? 'selected' : ''}>Starter</option>
             <option value="professional" ${t.subscription_tier === 'professional' ? 'selected' : ''}>Professional</option>
             <option value="enterprise" ${t.subscription_tier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
@@ -7452,7 +7452,7 @@ fetch('/api/crm/contacts', {
           6. Upgrade Plan & Billing Cycles
         </h5>
         <p style="margin: 0; font-size: 0.85rem; line-height: 1.5; color: var(--text-muted); margin-bottom: 8px;">
-          Your sandbox account limits your desk to 15 calling minutes, 15 contacts, and 5 appointments, with Kanban board and Copilot access locked. To remove limits and go live:
+          Your setup account limits your desk to 15 calling minutes, 15 contacts, and 5 appointments, with Kanban board and Copilot access locked. To remove limits and go live:
         </p>
         <ul style="padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); display: grid; gap: 6px; margin: 0;">
           <li>Go to the <strong>Billing & Usage</strong> tab on the sidebar.</li>

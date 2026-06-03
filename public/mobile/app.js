@@ -99,7 +99,7 @@ async function initAuthenticatedSession() {
     
     // Update Header
     headerCompany.textContent = currentTenant.company_name || 'My Workspace';
-    headerTier.textContent = billing.usage.tier;
+    headerTier.textContent = billing.usage.tier === 'free' ? 'Setup Mode' : billing.usage.tier.toUpperCase();
     document.getElementById('m-user-name').textContent = currentTenant.name || 'Manager';
     
     // Fetch profile and Load current Screen Data
@@ -164,7 +164,7 @@ async function loadHomeData() {
     const data = await billingRes.json();
     document.getElementById('m-stat-active-calls').textContent = data.usage.usage_active_calls || 0;
     document.getElementById('m-stat-minutes').textContent = (data.usage.usage_minutes || 0).toFixed(1);
-    headerTier.textContent = data.usage.tier;
+    headerTier.textContent = data.usage.tier === 'free' ? 'Setup Mode' : data.usage.tier.toUpperCase();
   }
 
   // Load Settings for Indicator
