@@ -644,23 +644,35 @@ export const initDb = async () => {
   // Seed and ensure default super admin account
   try {
     const adminExists = await get('SELECT id FROM tenants WHERE email = ?', ['admin@aurasaas.com']);
+    let tenantId = 1;
     if (!adminExists) {
-      await run(`
+      const res = await run(`
         INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status, is_admin)
         VALUES ('Super Admin', 'admin@aurasaas.com', 'admin123', 'VoiceDesk Inc.', 'professional', 'active', 1)
       `);
+      tenantId = res.id;
       console.log('Default super admin account seeded: admin@aurasaas.com');
     } else {
+      tenantId = adminExists.id;
       await run(`
         UPDATE tenants SET password_hash = 'admin123', is_admin = 1 WHERE email = 'admin@aurasaas.com'
       `);
     }
 
-    // Force user password status to plain text 'admin123' to fix any login failures
-    await run(`
-      UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0, role = 'owner'
-      WHERE email = 'admin@aurasaas.com'
-    `);
+    // Ensure the corresponding user exists in the tenant_users table
+    const userExists = await get('SELECT id FROM tenant_users WHERE email = ?', ['admin@aurasaas.com']);
+    if (!userExists) {
+      await run(`
+        INSERT INTO tenant_users (tenant_id, name, email, password_hash, password_is_hashed, role)
+        VALUES (?, 'Super Admin', 'admin@aurasaas.com', 'admin123', 0, 'owner')
+      `, [tenantId]);
+      console.log('Default super admin user seeded: admin@aurasaas.com');
+    } else {
+      await run(`
+        UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0, role = 'owner', tenant_id = ?
+        WHERE email = 'admin@aurasaas.com'
+      `, [tenantId]);
+    }
 
     // Upgrade Google OAuth email to Super Admin status if it exists
     await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");

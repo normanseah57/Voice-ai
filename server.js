@@ -190,7 +190,8 @@ import {
   getCallCostTotals,
   getTenantCallCostTotals,
   run,
-  all
+  all,
+  get
 } from './database.js';
 
 import Stripe from 'stripe';
@@ -674,14 +675,26 @@ app.post('/api/auth/register', signupLimiter, async (req, res) => {
 
 app.get('/api/auth/debug-reset', async (req, res) => {
   try {
-    // Import helper database functions if they are accessible (all and run are global imports)
-    const tenants = await all('SELECT id, name, email, is_admin FROM tenants');
-    const users = await all('SELECT id, tenant_id, name, email, role, password_hash, password_is_hashed FROM tenant_users');
-    
+    // Ensure the corresponding user exists in the tenant_users table
+    let adminUser = await get("SELECT * FROM tenant_users WHERE email = 'admin@aurasaas.com'");
+    if (!adminUser) {
+      await run(`
+        INSERT INTO tenant_users (tenant_id, name, email, password_hash, password_is_hashed, role)
+        VALUES (1, 'Super Admin', 'admin@aurasaas.com', 'admin123', 0, 'owner')
+      `);
+    } else {
+      await run(`
+        UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0, role = 'owner', tenant_id = 1
+        WHERE email = 'admin@aurasaas.com'
+      `);
+    }
+
     // Explicitly run resets here to be 100% sure they run on the active database instance
     await run("UPDATE tenants SET password_hash = 'admin123', is_admin = 1 WHERE email = 'admin@aurasaas.com'");
-    await run("UPDATE tenant_users SET password_hash = 'admin123', password_is_hashed = 0 WHERE email = 'admin@aurasaas.com'");
     await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");
+
+    const tenants = await all('SELECT id, name, email, is_admin FROM tenants');
+    const users = await all('SELECT id, tenant_id, name, email, role, password_hash, password_is_hashed FROM tenant_users');
 
     res.json({
       success: true,
