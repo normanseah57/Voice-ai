@@ -336,11 +336,7 @@ export const initDb = async () => {
     // Column already exists, ignore
   }
 
-  try {
-    await run('ALTER TABLE settings ADD COLUMN openai_api_key TEXT DEFAULT NULL');
-  } catch (e) {
-    // Column already exists, ignore
-  }
+
 
   // 2. Settings Table (scoped by tenant_id)
   await run(`
@@ -368,9 +364,17 @@ export const initDb = async () => {
       max_no_speech_timeout INTEGER DEFAULT 30,
       website_url TEXT,
       crawled_content TEXT,
+      openai_api_key TEXT DEFAULT NULL,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     )
   `);
+
+  // Ensure openai_api_key column exists on older databases (migration guard)
+  try {
+    await run('ALTER TABLE settings ADD COLUMN openai_api_key TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
 
   // 3. Appointments Table (scoped by tenant_id)
   await run(`
