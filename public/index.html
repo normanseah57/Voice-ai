@@ -1564,71 +1564,85 @@
               <div class="stepper-item active" data-step="2">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">Add Modules</span>
-                  <span class="stepper-subtitle">Activate voice and business addons</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="3">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
                   <span class="stepper-title">Business Profile</span>
                   <span class="stepper-subtitle">Company name, scheduling mode</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="4">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Branding</span>
-                  <span class="stepper-subtitle">AI name, avatar & security</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="5">
-                <div class="stepper-circle"></div>
-                <div class="stepper-text">
-                  <span class="stepper-title">Voice Provider</span>
-                  <span class="stepper-subtitle">Gateways & OpenAI API Key</span>
-                </div>
-              </div>
-              <div class="stepper-item" data-step="6">
+              <div class="stepper-item" data-step="3">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Phone Number</span>
                   <span class="stepper-subtitle">Assign inbound phone number</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="7">
+              <div class="stepper-item" data-step="4">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">AI Receptionist</span>
-                  <span class="stepper-subtitle">Configure your AI agent</span>
+                  <span class="stepper-subtitle">Configure your AI agent & voice</span>
                 </div>
               </div>
-              <div class="stepper-item" data-step="8">
+              <div class="stepper-item" data-step="5">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
                   <span class="stepper-title">Business Hours</span>
                   <span class="stepper-subtitle">Set operating schedule</span>
                 </div>
               </div>
+              <div class="stepper-item" data-step="6">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Team Members</span>
+                  <span class="stepper-subtitle">Invite staff and set resources</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="7">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Add Modules</span>
+                  <span class="stepper-subtitle">Activate voice & business addons</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="8">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Go Live</span>
+                  <span class="stepper-subtitle">Test and activate your AI</span>
+                </div>
+              </div>
               <div class="stepper-item" data-step="9">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">Knowledge Base</span>
-                  <span class="stepper-subtitle">Upload FAQs and documents</span>
+                  <span class="stepper-title">OpenAI API Key</span>
+                  <span class="stepper-subtitle">Configure OpenAI project key</span>
                 </div>
               </div>
               <div class="stepper-item" data-step="10">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">Team Members</span>
-                  <span class="stepper-subtitle">Invite staff and set roles</span>
+                  <span class="stepper-title">Security (2FA)</span>
+                  <span class="stepper-subtitle">Configure account 2FA protection</span>
                 </div>
               </div>
               <div class="stepper-item" data-step="11">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">Go Live</span>
-                  <span class="stepper-subtitle">Test and activate your AI</span>
+                  <span class="stepper-title">Voice Provider</span>
+                  <span class="stepper-subtitle">Select underlying voice gateway</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="12">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">Knowledge Base</span>
+                  <span class="stepper-subtitle">Upload FAQs and training data</span>
+                </div>
+              </div>
+              <div class="stepper-item" data-step="13">
+                <div class="stepper-circle"></div>
+                <div class="stepper-text">
+                  <span class="stepper-title">SignalWire Credentials</span>
+                  <span class="stepper-subtitle">Configure SignalWire credentials</span>
                 </div>
               </div>
             </div>
@@ -1672,7 +1686,7 @@
                   </div>
 
                   <!-- STEP 2: Business Profile -->
-                  <div class="wizard-step-pane active" data-step="2">
+                  <div class="wizard-step-pane" data-step="2">
                     <div class="wizard-step-header">
                       <div class="wizard-step-icon-wrapper">
                         <i data-lucide="building"></i>
@@ -1999,6 +2013,80 @@
 
 
 
+
+
+                  <!-- STEP 6: Team Members -->
+                  <div class="wizard-step-pane" data-step="6">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="users"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 5: Team Members &amp; Rooms</h3>
+                        <p>Configure staff resources or bookable slots.</p>
+                      </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-resources">Resources / Staff Members (Comma-separated)</label>
+                      <input type="text" id="settings-resources" class="form-input" placeholder="e.g. Therapist A, Therapist B, General">
+                      <small class="text-muted">List of staff members, doctors, or tables available for scheduling.</small>
+                    </div>
+
+                    <!-- Dynamic team listing container -->
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 15px;">
+                      <!-- Team Members card -->
+                      <div class="settings-card-side glass" id="team-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
+                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                          <h3 style="margin: 0; font-size: 0.95rem;">Workspace Team Roles</h3>
+                          <button type="button" class="btn btn-primary" id="btn-invite-team-member" onclick="openInviteMemberForm()" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Invite Member
+                          </button>
+                        </div>
+                        <div id="team-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
+                          <!-- Dynamically populated team rows -->
+                        </div>
+                      </div>
+
+                      <!-- Pending Invitations card -->
+                      <div class="settings-card-side glass" id="invitations-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
+                        <div class="pane-section-header" style="margin-bottom: 15px;">
+                          <h3 style="margin: 0; font-size: 0.95rem;">Pending Invitations</h3>
+                        </div>
+                        <div id="invitations-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
+                          <!-- Dynamically populated invitation rows -->
+                          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No pending invitations.</div>
+                        </div>
+                      </div>
+
+                      <!-- Restaurant Tables card -->
+                      <div class="settings-card-side glass" id="tables-management-card" style="display: none; flex-direction: column; padding: 15px; border-radius: 10px;">
+                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                          <h3 style="margin: 0; font-size: 0.95rem;" id="tables-management-header">Restaurant Tables</h3>
+                          <button type="button" class="btn btn-primary" id="btn-open-add-table" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Table
+                          </button>
+                        </div>
+                        <div id="tables-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
+                          <!-- Dynamically populated restaurant table rows -->
+                        </div>
+                      </div>
+
+                      <!-- Hotel Rooms card -->
+                      <div class="settings-card-side glass" id="rooms-management-card" style="display: none; flex-direction: column; padding: 15px; border-radius: 10px;">
+                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                          <h3 style="margin: 0; font-size: 0.95rem;" id="rooms-management-header">Hotel Rooms</h3>
+                          <button type="button" class="btn btn-primary" id="btn-open-add-room" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Room
+                          </button>
+                        </div>
+                        <div id="rooms-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
+                          <!-- Dynamically populated room rows -->
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- STEP 7: Add Modules -->
                   <div class="wizard-step-pane" data-step="7">
                     <div class="wizard-step-header">
@@ -2013,7 +2101,7 @@
 
                     <!-- Addon Modules Grid -->
                     <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
-                      
+
                       <!-- 1. WhatsApp / SMS / Email Addon -->
                       <div style="padding: 15px; border-radius: 12px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 6px;">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -2176,78 +2264,6 @@
                         </div>
                       </div>
 
-                    </div>
-                  </div>
-
-                  <!-- STEP 6: Team Members -->
-                  <div class="wizard-step-pane" data-step="6">
-                    <div class="wizard-step-header">
-                      <div class="wizard-step-icon-wrapper">
-                        <i data-lucide="users"></i>
-                      </div>
-                      <div class="wizard-step-header-text">
-                        <h3>Step 5: Team Members &amp; Rooms</h3>
-                        <p>Configure staff resources or bookable slots.</p>
-                      </div>
-                    </div>
-
-                    <div class="form-group mb-4">
-                      <label for="settings-resources">Resources / Staff Members (Comma-separated)</label>
-                      <input type="text" id="settings-resources" class="form-input" placeholder="e.g. Therapist A, Therapist B, General">
-                      <small class="text-muted">List of staff members, doctors, or tables available for scheduling.</small>
-                    </div>
-
-                    <!-- Dynamic team listing container -->
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 15px;">
-                      <!-- Team Members card -->
-                      <div class="settings-card-side glass" id="team-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
-                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                          <h3 style="margin: 0; font-size: 0.95rem;">Workspace Team Roles</h3>
-                          <button type="button" class="btn btn-primary" id="btn-invite-team-member" onclick="openInviteMemberForm()" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
-                            <i data-lucide="mail" style="width: 12px; height: 12px;"></i> Invite Member
-                          </button>
-                        </div>
-                        <div id="team-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
-                          <!-- Dynamically populated team rows -->
-                        </div>
-                      </div>
-
-                      <!-- Pending Invitations card -->
-                      <div class="settings-card-side glass" id="invitations-management-card" style="display: flex; flex-direction: column; padding: 15px; border-radius: 10px;">
-                        <div class="pane-section-header" style="margin-bottom: 15px;">
-                          <h3 style="margin: 0; font-size: 0.95rem;">Pending Invitations</h3>
-                        </div>
-                        <div id="invitations-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
-                          <!-- Dynamically populated invitation rows -->
-                          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 10px;">No pending invitations.</div>
-                        </div>
-                      </div>
-
-                      <!-- Restaurant Tables card -->
-                      <div class="settings-card-side glass" id="tables-management-card" style="display: none; flex-direction: column; padding: 15px; border-radius: 10px;">
-                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                          <h3 style="margin: 0; font-size: 0.95rem;" id="tables-management-header">Restaurant Tables</h3>
-                          <button type="button" class="btn btn-primary" id="btn-open-add-table" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
-                            <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Table
-                          </button>
-                        </div>
-                        <div id="tables-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
-                          <!-- Dynamically populated restaurant table rows -->
-                        </div>
-                      </div>
-
-                      <!-- Hotel Rooms card -->
-                      <div class="settings-card-side glass" id="rooms-management-card" style="display: none; flex-direction: column; padding: 15px; border-radius: 10px;">
-                        <div class="pane-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                          <h3 style="margin: 0; font-size: 0.95rem;" id="rooms-management-header">Hotel Rooms</h3>
-                          <button type="button" class="btn btn-primary" id="btn-open-add-room" style="padding: 4px 8px; font-size: 0.75rem; display: flex; align-items: center; gap: 4px;">
-                            <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Room
-                          </button>
-                        </div>
-                        <div id="rooms-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto;">
-                          <!-- Dynamically populated room rows -->
-                        </div>
-                      </div>
                     </div>
                   </div>
 
@@ -2461,6 +2477,37 @@
                         </div>
                         <div id="crawl-status-preview" style="color: var(--text-muted); font-style: italic; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto; margin-top: 5px; font-size: 0.75rem; border-top: 1px solid var(--border-glass); padding-top: 5px;"></div>
                       </div>
+                    </div>
+                  </div>
+
+                  <!-- STEP 13: SignalWire Credentials -->
+                  <div class="wizard-step-pane" data-step="13">
+                    <div class="wizard-step-header">
+                      <div class="wizard-step-icon-wrapper">
+                        <i data-lucide="key-round"></i>
+                      </div>
+                      <div class="wizard-step-header-text">
+                        <h3>Step 12: SignalWire Credentials</h3>
+                        <p>Configure project keys for SignalWire integration.</p>
+                      </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-signalwire-project-id">SignalWire Project ID</label>
+                      <input type="text" id="settings-signalwire-project-id" class="form-input" placeholder="e.g. 5d5a23bc-11a2-45e3-99b3-...">
+                      <small class="text-muted">Enter your SignalWire Space Project ID.</small>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-signalwire-api-token">SignalWire API Token</label>
+                      <input type="password" id="settings-signalwire-api-token" class="form-input" placeholder="PT... or api token">
+                      <small class="text-muted">Generate a project API token in the SignalWire dashboard.</small>
+                    </div>
+
+                    <div class="form-group mb-4">
+                      <label for="settings-signalwire-space-url">SignalWire Space URL</label>
+                      <input type="text" id="settings-signalwire-space-url" class="form-input" placeholder="e.g. space-name.signalwire.com">
+                      <small class="text-muted">Your space domain URL (excluding http/https).</small>
                     </div>
                   </div>
 
