@@ -236,32 +236,7 @@ export const initDb = async () => {
     await run('ALTER TABLE tenants ADD COLUMN addon_payment_gateway INTEGER DEFAULT 0');
   } catch (e) { /* already exists */ }
 
-  try {
-    await run('ALTER TABLE tenant_departments ADD COLUMN record_calls INTEGER DEFAULT 0');
-  } catch (e) { /* already exists */ }
-
-  // Security columns on tenant_users
-  const secCols = [
-    "ALTER TABLE tenant_users ADD COLUMN totp_secret TEXT DEFAULT NULL",
-    "ALTER TABLE tenant_users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
-    "ALTER TABLE tenant_users ADD COLUMN google_id TEXT DEFAULT NULL",
-    "ALTER TABLE tenant_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0",
-    "ALTER TABLE tenant_users ADD COLUMN locked_until DATETIME DEFAULT NULL",
-    "ALTER TABLE tenant_users ADD COLUMN password_is_hashed INTEGER DEFAULT 0"
-  ];
-  for (const sql of secCols) {
-    try { await run(sql); } catch (e) { /* already exists */ }
-  }
-
-  // Google Calendar OAuth integration columns on tenant_users
-  const gcalCols = [
-    "ALTER TABLE tenant_users ADD COLUMN google_access_token TEXT DEFAULT NULL",
-    "ALTER TABLE tenant_users ADD COLUMN google_refresh_token TEXT DEFAULT NULL",
-    "ALTER TABLE tenant_users ADD COLUMN google_token_expiry INTEGER DEFAULT 0"
-  ];
-  for (const sql of gcalCols) {
-    try { await run(sql); } catch (e) { /* already exists */ }
-  }
+  // Migrations for tenant_users and tenant_departments moved to the end of initDb
 
   // Password reset tokens table
   await run(`
@@ -527,6 +502,15 @@ export const initDb = async () => {
       google_calendar_connected INTEGER DEFAULT 0,
       working_hours TEXT,
       appointment_gap INTEGER DEFAULT 15,
+      totp_secret TEXT DEFAULT NULL,
+      totp_enabled INTEGER DEFAULT 0,
+      google_id TEXT DEFAULT NULL,
+      failed_login_attempts INTEGER DEFAULT 0,
+      locked_until DATETIME DEFAULT NULL,
+      password_is_hashed INTEGER DEFAULT 0,
+      google_access_token TEXT DEFAULT NULL,
+      google_refresh_token TEXT DEFAULT NULL,
+      google_token_expiry INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     )
@@ -1105,6 +1089,34 @@ Sales Director
     }
   } catch (err) {
     console.error('Failed to seed default accounting data:', err);
+  }
+
+  // --- MIGRATIONS RUN AFTER ALL TABLES ARE DEFINED ---
+  try {
+    await run('ALTER TABLE tenant_departments ADD COLUMN record_calls INTEGER DEFAULT 0');
+  } catch (e) { /* already exists */ }
+
+  // Security columns on tenant_users
+  const secCols = [
+    "ALTER TABLE tenant_users ADD COLUMN totp_secret TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
+    "ALTER TABLE tenant_users ADD COLUMN google_id TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0",
+    "ALTER TABLE tenant_users ADD COLUMN locked_until DATETIME DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN password_is_hashed INTEGER DEFAULT 0"
+  ];
+  for (const sql of secCols) {
+    try { await run(sql); } catch (e) { /* already exists */ }
+  }
+
+  // Google Calendar OAuth integration columns on tenant_users
+  const gcalCols = [
+    "ALTER TABLE tenant_users ADD COLUMN google_access_token TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN google_refresh_token TEXT DEFAULT NULL",
+    "ALTER TABLE tenant_users ADD COLUMN google_token_expiry INTEGER DEFAULT 0"
+  ];
+  for (const sql of gcalCols) {
+    try { await run(sql); } catch (e) { /* already exists */ }
   }
 
   console.log('Multi-Tenant Database schema initialized.');
