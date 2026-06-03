@@ -3194,10 +3194,10 @@ function switchSettingsGroup(group) {
       advTab.style.color = 'var(--text-dark)';
     }
 
-    // Hide Advanced Steps in Sidebar Stepper: Steps 1, 9, 10, 11, 12, 13 are Advanced or Hidden.
+    // Hide Advanced Steps in Sidebar Stepper (11=Voice Provider, 12=Knowledge Base)
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([1, 9, 10, 11, 12, 13].includes(step)) {
+      if ([1, 11, 12].includes(step)) {
         item.style.display = 'none';
       } else {
         item.style.display = 'flex';
@@ -3210,7 +3210,7 @@ function switchSettingsGroup(group) {
     });
 
     // If current wizard step is one of the hidden steps, switch to Step 2
-    if ([1, 9, 10, 11, 12, 13].includes(currentWizardStep)) {
+    if ([1, 11, 12].includes(currentWizardStep)) {
       showWizardStep(2);
     }
   } else {
@@ -3223,10 +3223,10 @@ function switchSettingsGroup(group) {
       advTab.style.color = 'white';
     }
 
-    // Show Advanced Steps in Sidebar Stepper, Hide Basic ones
+    // Show Advanced Steps in Sidebar Stepper (11=Voice Provider, 12=Knowledge Base)
     document.querySelectorAll('.stepper-item').forEach(item => {
       const step = parseInt(item.getAttribute('data-step'));
-      if ([9, 10, 11, 12, 13].includes(step)) {
+      if ([11, 12].includes(step)) {
         item.style.display = 'flex';
       } else {
         item.style.display = 'none';
@@ -3242,9 +3242,9 @@ function switchSettingsGroup(group) {
       }
     });
 
-    // If current wizard step is not one of the advanced steps, switch to Step 9
-    if (![9, 10, 11, 12, 13].includes(currentWizardStep)) {
-      showWizardStep(9);
+    // If current wizard step is not one of the advanced steps, switch to Step 11
+    if (![11, 12].includes(currentWizardStep)) {
+      showWizardStep(11);
     }
   }
   
