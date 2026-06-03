@@ -713,6 +713,30 @@ function connectWebSocket() {
           showCreditWarningToast(data);
           fetchBillingDetails();
           break;
+
+        case 'session_refresh':
+          // Tier changed by admin — re-fetch profile + billing to get updated addon flags
+          try {
+            const profileRes = await fetch('/api/profile');
+            if (profileRes.ok) {
+              const profileData = await profileRes.json();
+              if (profileData.tenant && currentTenant) {
+                // Update all addon flags in currentTenant
+                currentTenant.addon_crm          = profileData.tenant.addon_crm          ?? currentTenant.addon_crm;
+                currentTenant.addon_accounting   = profileData.tenant.addon_accounting   ?? currentTenant.addon_accounting;
+                currentTenant.addon_whatsapp     = profileData.tenant.addon_whatsapp     ?? currentTenant.addon_whatsapp;
+                currentTenant.addon_call_recording = profileData.tenant.addon_call_recording ?? currentTenant.addon_call_recording;
+                currentTenant.subscription_tier  = profileData.tenant.subscription_tier  ?? currentTenant.subscription_tier;
+              }
+            }
+          } catch (e) { console.warn('session_refresh profile fetch failed:', e); }
+          refreshSidebarAddonTabs();
+          updateHeaderUserInfo();
+          fetchBillingDetails();
+          const newTierName = (currentTenant?.subscription_tier || 'free');
+          showToast('Plan Updated', `Your workspace is now on the ${newTierName.charAt(0).toUpperCase() + newTierName.slice(1)} plan — CRM & Accounting are now available!`, 'success');
+          break;
+
       }
     } catch (err) {
       console.error('Error handling websocket message:', err);

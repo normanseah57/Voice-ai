@@ -977,6 +977,22 @@ app.get('/api/saas/billing', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Auto-enable or disable addons based on the purchased tier.
+ * Professional & Enterprise: CRM + Accounting included.
+ * Starter & Free: CRM + Accounting disabled.
+ */
+async function autoEnableAddonsForTier(tenantId, tier) {
+  const includedInPro = ['professional', 'enterprise'].includes(tier);
+  try {
+    await updateTenantAddonCrm(tenantId, includedInPro);
+    await updateTenantAddonAccounting(tenantId, includedInPro);
+    console.log(`[Tier] Tenant ${tenantId} → ${tier}: addon_crm=${+includedInPro}, addon_accounting=${+includedInPro}`);
+  } catch (err) {
+    console.error('[Tier] Failed to auto-set addons for tenant', tenantId, err.message);
+  }
+}
+
 app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
   const { tier, billing_cycle } = req.body;
   const cycle = billing_cycle || 'monthly';
@@ -988,7 +1004,10 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
   }
   try {
     const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
-    
+
+    // Auto-enable CRM & Accounting for Pro/Enterprise; disable for lower tiers
+    await autoEnableAddonsForTier(req.tenantId, tier);
+
     // Auto-assign phone number if they upgraded to a paid plan
     if (tier !== 'free') {
       try {
@@ -1256,10 +1275,14 @@ app.put('/api/admin/tenants/:id', requireAuth, requireAdmin, async (req, res) =>
   
   try {
     const usage = await updateTenantByAdmin(targetId, { subscription_tier, subscription_status, billing_cycle: cycle });
-    
+
+    // Auto-enable CRM & Accounting for Pro/Enterprise; disable for lower tiers
+    await autoEnableAddonsForTier(targetId, subscription_tier);
+
     // Force refresh dashboard UI of upgraded/downgraded client
     broadcastToDashboard(targetId, 'refresh_crm', {});
-    
+    broadcastToDashboard(targetId, 'session_refresh', { reason: 'tier_change', tier: subscription_tier });
+
     res.json({ success: true, usage });
   } catch (err) {
     res.status(500).json({ error: err.message });
