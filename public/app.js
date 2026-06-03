@@ -5665,79 +5665,101 @@ let nextPlayTime = 0;
 
 async function startBrowserVoiceCall() {
   const btnTest = document.getElementById('btn-test-in-browser');
-  const originalText = btnTest.innerHTML;
+  if (!btnTest) return;
+
+  // Guard: must be logged in with a valid tenant
+  if (!currentTenant || !currentTenant.id) {
+    showToast('Not Logged In', 'Please log in before starting a browser call.', 'danger');
+    return;
+  }
+
+  const tenantId = parseInt(currentTenant.id);
+  if (isNaN(tenantId)) {
+    showToast('Session Error', 'Invalid session. Please log out and log in again.', 'danger');
+    return;
+  }
+
+  const originalHTML = btnTest.innerHTML;
   btnTest.disabled = true;
-  btnTest.innerHTML = 'Connecting...';
-  
+  btnTest.innerHTML = '<i data-lucide="loader"></i> Connecting...';
+  if (window.lucide) window.lucide.createIcons();
+
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/media-stream`;
     browserMediaSocket = new WebSocket(wsUrl);
-    
+
     browserMediaSocket.onopen = () => {
       console.log('Browser Media Stream WebSocket connected.');
-      
+
       const streamSid = 'browser-stream-' + Math.random().toString(36).substring(2, 10);
       const callSid = 'browser-call-' + Math.random().toString(36).substring(2, 10);
-      
-      const extractedTenantId = currentTenant && currentTenant.id ? String(currentTenant.id).split(':')[0] : (saasToken ? String(saasToken).split(':')[0] : null);
-      
+
       browserMediaSocket.send(JSON.stringify({
         event: 'start',
         streamSid,
         start: {
           callSid,
           customParameters: {
-            tenantId: extractedTenantId,
+            tenantId: String(tenantId),
             phoneNumber: 'Browser Client',
             direction: 'inbound'
           }
         }
       }));
-      
+
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
       nextPlayTime = audioContext.currentTime;
-      
+
       micNode = audioContext.createMediaStreamSource(micStream);
       processorNode = audioContext.createScriptProcessor(2048, 1, 1);
-      
+
       processorNode.onaudioprocess = (e) => {
         const inputBuffer = e.inputBuffer.getChannelData(0);
         const downsampled = downsampleBuffer(inputBuffer, audioContext.sampleRate, 8000);
-        
+
         const uLawBytes = new Uint8Array(downsampled.length);
         for (let i = 0; i < downsampled.length; i++) {
           let val = Math.max(-1, Math.min(1, downsampled[i]));
           let pcmVal = val < 0 ? val * 0x8000 : val * 0x7FFF;
           uLawBytes[i] = pcmToUlaw(Math.round(pcmVal));
         }
-        
+
         let binary = '';
         for (let i = 0; i < uLawBytes.length; i++) {
           binary += String.fromCharCode(uLawBytes[i]);
         }
         const base64Payload = btoa(binary);
-        
-        if (browserMediaSocket.readyState === WebSocket.OPEN) {
+
+        if (browserMediaSocket && browserMediaSocket.readyState === WebSocket.OPEN) {
           browserMediaSocket.send(JSON.stringify({
             event: 'media',
             streamSid,
-            media: {
-              payload: base64Payload
-            }
+            media: { payload: base64Payload }
           }));
         }
       };
-      
+
       micNode.connect(processorNode);
       processorNode.connect(audioContext.destination);
-      
+
+      // Show active call state
       btnTest.disabled = false;
-      btnTest.innerHTML = originalText;
+      btnTest.style.background = '#ef4444';
+      btnTest.style.borderColor = '#ef4444';
+      btnTest.innerHTML = '<i data-lucide="mic-off"></i> End Call';
+      if (window.lucide) window.lucide.createIcons();
+
+      // Re-wire click to end the call
+      btnTest._endCallHandler = () => stopBrowserVoiceCall();
+      btnTest.removeEventListener('click', startBrowserVoiceCall);
+      btnTest.addEventListener('click', btnTest._endCallHandler);
+
+      showToast('Browser Call Active', 'Microphone connected — speak to test your AI receptionist.', 'success');
     };
-    
+
     browserMediaSocket.onmessage = (msg) => {
       try {
         const data = JSON.parse(msg.data);
@@ -5748,22 +5770,23 @@ async function startBrowserVoiceCall() {
         console.error('Error handling media socket message:', e);
       }
     };
-    
+
     browserMediaSocket.onclose = () => {
       console.log('Browser Media Socket closed.');
-      stopBrowserVoiceCall();
+      stopBrowserVoiceCall(originalHTML);
     };
-    
+
     browserMediaSocket.onerror = (err) => {
       console.error('Browser Media Socket error:', err);
-      stopBrowserVoiceCall();
+      stopBrowserVoiceCall(originalHTML);
     };
-    
+
   } catch (err) {
     console.error('Failed to start browser voice test:', err);
-    alert('Microphone permission or audio connection failed: ' + err.message);
+    showToast('Microphone Error', err.message || 'Could not access microphone.', 'danger');
     btnTest.disabled = false;
-    btnTest.innerHTML = originalText;
+    btnTest.innerHTML = originalHTML;
+    if (window.lucide) window.lucide.createIcons();
   }
 }
 
@@ -5795,35 +5818,53 @@ function playBrowserUlawAudio(base64Payload) {
   }
 }
 
-function stopBrowserVoiceCall() {
+function stopBrowserVoiceCall(originalHTML) {
   if (micStream) {
     micStream.getTracks().forEach(track => track.stop());
     micStream = null;
   }
-  
+
+  if (processorNode) {
+    processorNode.disconnect();
+    processorNode = null;
+  }
+
+  if (micNode) {
+    micNode.disconnect();
+    micNode = null;
+  }
+
   if (audioContext) {
     if (audioContext.state !== 'closed') {
       audioContext.close();
     }
     audioContext = null;
   }
-  
-  if (processorNode) {
-    processorNode.disconnect();
-    processorNode = null;
-  }
-  
-  if (micNode) {
-    micNode.disconnect();
-    micNode = null;
-  }
-  
+
   if (browserMediaSocket) {
     if (browserMediaSocket.readyState === WebSocket.OPEN || browserMediaSocket.readyState === WebSocket.CONNECTING) {
       browserMediaSocket.close();
     }
     browserMediaSocket = null;
   }
+
+  // Restore the Test in Browser button
+  const btnTest = document.getElementById('btn-test-in-browser');
+  if (btnTest) {
+    btnTest.disabled = false;
+    btnTest.style.background = '';
+    btnTest.style.borderColor = '';
+    btnTest.innerHTML = originalHTML || '<i data-lucide="mic"></i> Test in Browser';
+    if (window.lucide) window.lucide.createIcons();
+
+    // Rewire click back to start
+    if (btnTest._endCallHandler) {
+      btnTest.removeEventListener('click', btnTest._endCallHandler);
+      btnTest._endCallHandler = null;
+    }
+    btnTest.addEventListener('click', () => startBrowserVoiceCall());
+  }
+
   console.log('Browser voice call stopped.');
 }
 
