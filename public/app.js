@@ -5663,7 +5663,10 @@ let micNode = null;
 let processorNode = null;
 let nextPlayTime = 0;
 
+let browserCallActive = false; // Guard against multiple simultaneous calls
+
 async function startBrowserVoiceCall() {
+  if (browserCallActive) return; // Already in a call — ignore duplicate clicks
   const btnTest = document.getElementById('btn-test-in-browser');
   if (!btnTest) return;
 
@@ -5709,6 +5712,8 @@ async function startBrowserVoiceCall() {
           }
         }
       }));
+
+      browserCallActive = true;
 
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
       nextPlayTime = audioContext.currentTime;
@@ -5861,15 +5866,14 @@ function stopBrowserVoiceCall(originalHTML) {
     btnTest.style.borderColor = '';
     btnTest.innerHTML = originalHTML || '<i data-lucide="mic"></i> Test in Browser';
     if (window.lucide) window.lucide.createIcons();
-
-    // Rewire click back to start
+    // No need to re-add listeners — the original static listener handles clicks
     if (btnTest._endCallHandler) {
       btnTest.removeEventListener('click', btnTest._endCallHandler);
       btnTest._endCallHandler = null;
     }
-    btnTest.addEventListener('click', () => startBrowserVoiceCall());
   }
 
+  browserCallActive = false;
   console.log('Browser voice call stopped.');
 }
 
