@@ -3128,8 +3128,10 @@ function initAuthenticatedSession() {
   try {
     console.log('Initializing authenticated session for tenant:', currentTenant);
     
-    document.getElementById('landing-page-container').style.display = 'none';
-    document.getElementById('app-container').style.display = 'flex';
+    const landingPageContainer = document.getElementById('landing-page-container');
+    if (landingPageContainer) landingPageContainer.style.display = 'none';
+    const appContainer = document.getElementById('app-container');
+    if (appContainer) appContainer.style.display = 'flex';
     // Dismiss loading screen — dashboard is now visible
     if (typeof window._appReady === 'function') window._appReady();
     const adminMenuItem = document.getElementById('menu-item-admin');
@@ -5720,8 +5722,10 @@ document.addEventListener('DOMContentLoaded', () => {
       window.location.href = '/';
       return;
     }
-    document.getElementById('landing-page-container').style.display = 'block';
-    document.getElementById('app-container').style.display = 'none';
+    const landingPageContainer = document.getElementById('landing-page-container');
+    if (landingPageContainer) landingPageContainer.style.display = 'block';
+    const appContainer = document.getElementById('app-container');
+    if (appContainer) appContainer.style.display = 'none';
     if (typeof window._appReady === 'function') window._appReady();
 
   } else {
