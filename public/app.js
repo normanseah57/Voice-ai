@@ -3120,7 +3120,10 @@ function logout() {
   
   document.getElementById('landing-page-container').style.display = 'block';
   document.getElementById('app-container').style.display = 'none';
+  // Dismiss loading screen — landing page is now visible
+  if (typeof window._appReady === 'function') window._appReady();
 }
+
 
 function initAuthenticatedSession() {
   try {
@@ -3128,7 +3131,8 @@ function initAuthenticatedSession() {
     
     document.getElementById('landing-page-container').style.display = 'none';
     document.getElementById('app-container').style.display = 'flex';
-    
+    // Dismiss loading screen — dashboard is now visible
+    if (typeof window._appReady === 'function') window._appReady();
     const adminMenuItem = document.getElementById('menu-item-admin');
     const settingsMenuItem = document.querySelector('.menu-item[data-tab="settings"]');
     
