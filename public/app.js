@@ -1838,42 +1838,58 @@ function updateSummaryInHistory(callSid, summaryText) {
 
 // Refresh Sidebar Addon Tabs is defined globally above
 
+// Global tracking for module purchases
+let pendingAddonInfo = null;
+
 // Toggle WhatsApp addon status
 const whatsappToggle = document.getElementById('settings-addon-whatsapp');
 const whatsappStatus = document.getElementById('addon-whatsapp-status');
 if (whatsappToggle) {
   whatsappToggle.addEventListener('change', async () => {
     const active = whatsappToggle.checked;
+    if (active) {
+      // Revert checked state until payment checkout succeeds
+      whatsappToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'whatsapp',
+        label: 'WhatsApp, SMS, & Email Notifications',
+        price: '$10/mo',
+        toggle: whatsappToggle,
+        status: whatsappStatus,
+        endpoint: '/api/addons/toggle-whatsapp'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
+    // Deactivation
     try {
       const res = await fetch('/api/addons/toggle-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_whatsapp === 1;
         whatsappToggle.checked = activeVal;
         if (whatsappStatus) {
-          whatsappStatus.textContent = activeVal ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
-          whatsappStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+          whatsappStatus.textContent = 'Status: Inactive';
+          whatsappStatus.style.color = '#94a3b8';
         }
         if (currentTenant) {
-          currentTenant.addon_whatsapp = activeVal ? 1 : 0;
+          currentTenant.addon_whatsapp = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
         refreshSidebarAddonTabs();
-        showToast(
-          activeVal ? 'Addon Activated' : 'Addon Deactivated',
-          activeVal ? 'WhatsApp, SMS, & Email Notifications is now active.' : 'Notification addon has been deactivated.',
-          activeVal ? 'success' : 'info'
-        );
+        showToast('Addon Deactivated', 'Notification addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        whatsappToggle.checked = !active;
-        showToast('Error', 'Failed to toggle WhatsApp addon.', 'danger');
+        whatsappToggle.checked = true;
+        showToast('Error', 'Failed to deactivate WhatsApp addon.', 'danger');
       }
     } catch (err) {
-      whatsappToggle.checked = !active;
+      whatsappToggle.checked = true;
       console.error('Failed to toggle WhatsApp addon:', err);
       showToast('Error', 'Network error toggling WhatsApp addon.', 'danger');
     }
@@ -1886,38 +1902,47 @@ const crmStatus = document.getElementById('addon-crm-status');
 if (crmToggle) {
   crmToggle.addEventListener('change', async () => {
     const active = crmToggle.checked;
+    if (active) {
+      crmToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'crm',
+        label: 'AI CRM Hub',
+        price: '$50/mo',
+        toggle: crmToggle,
+        status: crmStatus,
+        endpoint: '/api/addons/toggle-crm'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
     try {
       const res = await fetch('/api/addons/toggle-crm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_crm === 1;
         crmToggle.checked = activeVal;
         if (crmStatus) {
-          crmStatus.textContent = activeVal ? 'Status: Active (+$50/mo)' : 'Status: Inactive';
-          crmStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+          crmStatus.textContent = 'Status: Inactive';
+          crmStatus.style.color = '#94a3b8';
         }
         if (currentTenant) {
-          currentTenant.addon_crm = activeVal ? 1 : 0;
+          currentTenant.addon_crm = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
-        
         refreshSidebarAddonTabs();
-
-        showToast(
-          activeVal ? 'Addon Activated' : 'Addon Deactivated',
-          activeVal ? 'AI CRM Hub is now active.' : 'CRM addon has been deactivated.',
-          activeVal ? 'success' : 'info'
-        );
+        showToast('Addon Deactivated', 'CRM addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        crmToggle.checked = !active;
-        showToast('Error', 'Failed to toggle CRM addon.', 'danger');
+        crmToggle.checked = true;
+        showToast('Error', 'Failed to deactivate CRM addon.', 'danger');
       }
     } catch (err) {
-      crmToggle.checked = !active;
+      crmToggle.checked = true;
       console.error('Failed to toggle CRM addon:', err);
       showToast('Error', 'Network error toggling CRM addon.', 'danger');
     }
@@ -1930,38 +1955,47 @@ const accountingStatus = document.getElementById('addon-accounting-status');
 if (accountingToggle) {
   accountingToggle.addEventListener('change', async () => {
     const active = accountingToggle.checked;
+    if (active) {
+      accountingToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'accounting',
+        label: 'Accounting and Invoicing',
+        price: '$20/mo',
+        toggle: accountingToggle,
+        status: accountingStatus,
+        endpoint: '/api/addons/toggle-accounting'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
     try {
       const res = await fetch('/api/addons/toggle-accounting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_accounting === 1;
         accountingToggle.checked = activeVal;
         if (accountingStatus) {
-          accountingStatus.textContent = activeVal ? 'Status: Active (+$20/mo)' : 'Status: Inactive';
-          accountingStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+          accountingStatus.textContent = 'Status: Inactive';
+          accountingStatus.style.color = '#94a3b8';
         }
         if (currentTenant) {
-          currentTenant.addon_accounting = activeVal ? 1 : 0;
+          currentTenant.addon_accounting = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
-        
         refreshSidebarAddonTabs();
-
-        showToast(
-          activeVal ? 'Addon Activated' : 'Addon Deactivated',
-          activeVal ? 'Accounting & Invoicing is now active.' : 'Accounting addon has been deactivated.',
-          activeVal ? 'success' : 'info'
-        );
+        showToast('Addon Deactivated', 'Accounting addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        accountingToggle.checked = !active;
-        showToast('Error', 'Failed to toggle Accounting addon.', 'danger');
+        accountingToggle.checked = true;
+        showToast('Error', 'Failed to deactivate Accounting addon.', 'danger');
       }
     } catch (err) {
-      accountingToggle.checked = !active;
+      accountingToggle.checked = true;
       console.error('Failed to toggle Accounting addon:', err);
       showToast('Error', 'Network error toggling Accounting addon.', 'danger');
     }
@@ -1974,36 +2008,47 @@ const recordingStatus = document.getElementById('addon-recording-status');
 if (recordingToggle) {
   recordingToggle.addEventListener('change', async () => {
     const active = recordingToggle.checked;
+    if (active) {
+      recordingToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'recording',
+        label: 'Call Handoff Recording & Transcription',
+        price: '$10/mo',
+        toggle: recordingToggle,
+        status: recordingStatus,
+        endpoint: '/api/addons/toggle-recording'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
     try {
       const res = await fetch('/api/addons/toggle-recording', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_call_recording === 1;
         recordingToggle.checked = activeVal;
         if (recordingStatus) {
-          recordingStatus.textContent = activeVal ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
-          recordingStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+          recordingStatus.textContent = 'Status: Inactive';
+          recordingStatus.style.color = '#94a3b8';
         }
         if (currentTenant) {
-          currentTenant.addon_call_recording = activeVal ? 1 : 0;
+          currentTenant.addon_call_recording = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
         refreshSidebarAddonTabs();
-        showToast(
-          activeVal ? 'Addon Activated' : 'Addon Deactivated',
-          activeVal ? 'Call handoff recording & transcription is now active.' : 'Call recording addon has been deactivated.',
-          activeVal ? 'success' : 'info'
-        );
+        showToast('Addon Deactivated', 'Call recording addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        recordingToggle.checked = !active;
-        showToast('Error', 'Failed to toggle call recording addon.', 'danger');
+        recordingToggle.checked = true;
+        showToast('Error', 'Failed to deactivate call recording addon.', 'danger');
       }
     } catch (err) {
-      recordingToggle.checked = !active;
+      recordingToggle.checked = true;
       console.error('Failed to toggle recording addon:', err);
       showToast('Error', 'Network error toggling addon.', 'danger');
     }
@@ -2014,46 +2059,53 @@ if (recordingToggle) {
 const deptToggle = document.getElementById('settings-addon-departments');
 const deptStatus = document.getElementById('addon-departments-status');
 const deptGridContainer = document.getElementById('departments-addon-grid-container');
-
 if (deptToggle) {
   deptToggle.addEventListener('change', async () => {
     const active = deptToggle.checked;
     const globalTransferGroup = document.getElementById('global-transfer-number-group');
+    if (active) {
+      deptToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'departments',
+        label: 'Multi-Department & Extension Routing',
+        price: '$25/mo',
+        toggle: deptToggle,
+        status: deptStatus,
+        endpoint: '/api/addons/toggle-departments'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
     try {
       const res = await fetch('/api/addons/toggle-departments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_department_routing === 1;
         deptToggle.checked = activeVal;
-        if (deptGridContainer) deptGridContainer.style.display = activeVal ? 'flex' : 'none';
-        if (globalTransferGroup) globalTransferGroup.style.display = activeVal ? 'none' : 'block';
-        
+        if (deptGridContainer) deptGridContainer.style.display = 'none';
+        if (globalTransferGroup) globalTransferGroup.style.display = 'block';
+        if (deptStatus) {
+          deptStatus.textContent = 'Status: Inactive';
+          deptStatus.style.color = '#94a3b8';
+        }
         if (currentTenant) {
-          currentTenant.addon_department_routing = activeVal ? 1 : 0;
+          currentTenant.addon_department_routing = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
-
         refreshSidebarAddonTabs();
-        if (activeVal) {
-          loadDepartmentsList();
-          showToast('Addon Activated', 'Multi-Department & Extension Routing is now active.', 'success');
-        } else {
-          if (deptStatus) {
-            deptStatus.textContent = 'Status: Inactive';
-            deptStatus.style.color = '#94a3b8';
-          }
-          showToast('Addon Deactivated', 'Department routing addon has been deactivated.', 'info');
-        }
+        showToast('Addon Deactivated', 'Department routing addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        deptToggle.checked = !active;
-        showToast('Error', 'Failed to toggle department routing addon.', 'danger');
+        deptToggle.checked = true;
+        showToast('Error', 'Failed to deactivate department routing addon.', 'danger');
       }
     } catch (err) {
-      deptToggle.checked = !active;
+      deptToggle.checked = true;
       console.error('Failed to toggle department routing addon:', err);
       showToast('Error', 'Network error toggling department routing addon.', 'danger');
     }
@@ -2068,40 +2120,51 @@ const paymentProviderHiddenInput = document.getElementById('settings-payment-pro
 if (stripeToggle) {
   stripeToggle.addEventListener('change', async () => {
     const active = stripeToggle.checked;
+    if (active) {
+      stripeToggle.checked = false;
+      stripePaymentMode = 'addon';
+      pendingAddonInfo = {
+        name: 'payment-gateway',
+        label: 'Stripe Payment Gateway',
+        price: '$5/mo',
+        toggle: stripeToggle,
+        status: stripeStatus,
+        endpoint: '/api/addons/toggle-payment-gateway'
+      };
+      window.togglePaymentModal(true);
+      return;
+    }
     try {
       const res = await fetch('/api/addons/toggle-payment-gateway', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active })
+        body: JSON.stringify({ active: false })
       });
       if (res.ok) {
         const data = await res.json();
         const activeVal = data.addon_payment_gateway === 1;
         stripeToggle.checked = activeVal;
-        if (stripeKeysContainer) stripeKeysContainer.style.display = activeVal ? 'flex' : 'none';
+        if (stripeKeysContainer) stripeKeysContainer.style.display = 'none';
         if (stripeStatus) {
-          stripeStatus.textContent = activeVal ? 'Status: Active (+$5/mo)' : 'Status: Inactive';
-          stripeStatus.style.color = activeVal ? '#10b981' : '#94a3b8';
+          stripeStatus.textContent = 'Status: Inactive';
+          stripeStatus.style.color = '#94a3b8';
         }
         if (paymentProviderHiddenInput) {
-          paymentProviderHiddenInput.value = activeVal ? 'stripe' : 'sandbox';
+          paymentProviderHiddenInput.value = 'sandbox';
         }
         if (currentTenant) {
-          currentTenant.addon_payment_gateway = activeVal ? 1 : 0;
+          currentTenant.addon_payment_gateway = 0;
           localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
         refreshSidebarAddonTabs();
-        showToast(
-          activeVal ? 'Addon Activated' : 'Addon Deactivated',
-          activeVal ? 'Stripe Payment Gateway is now active.' : 'Stripe Payment Gateway addon has been deactivated.',
-          activeVal ? 'success' : 'info'
-        );
+        showToast('Addon Deactivated', 'Stripe Payment Gateway addon has been deactivated.', 'info');
+        fetchBillingDetails();
       } else {
-        stripeToggle.checked = !active;
-        showToast('Error', 'Failed to toggle Stripe addon.', 'danger');
+        stripeToggle.checked = true;
+        showToast('Error', 'Failed to deactivate Stripe addon.', 'danger');
       }
     } catch (err) {
-      stripeToggle.checked = !active;
+      stripeToggle.checked = true;
       console.error('Failed to toggle Stripe addon:', err);
       showToast('Error', 'Network error toggling Stripe addon.', 'danger');
     }
@@ -3495,8 +3558,27 @@ async function fetchBillingDetails() {
     if (countEl) countEl.textContent = overageMins.toFixed(1);
     if (costEl) costEl.textContent = `$${overageCost.toFixed(2)}`;
     
-    // Update Upgrade options card highlights
-    document.querySelectorAll('.upgrade-option-card').forEach(card => card.classList.remove('selected'));
+    // Update Upgrade options card highlights and disabled states
+    const tierLevels = { free: 0, starter: 1, professional: 2, enterprise: 3 };
+    const currentLevel = tierLevels[usage.tier] || 0;
+
+    document.querySelectorAll('.upgrade-option-card').forEach(card => {
+      card.classList.remove('selected', 'disabled');
+      card.style.pointerEvents = 'auto';
+      card.style.opacity = '1';
+      card.style.cursor = 'pointer';
+
+      const cardTier = card.id.replace('upgrade-option-', '');
+      const cardLevel = tierLevels[cardTier] || 0;
+
+      if (cardLevel <= currentLevel) {
+        card.classList.add('disabled');
+        card.style.pointerEvents = 'none';
+        card.style.opacity = '0.4';
+        card.style.cursor = 'not-allowed';
+      }
+    });
+
     const currentCard = document.getElementById(`upgrade-option-${usage.tier}`);
     if (currentCard) {
       currentCard.classList.add('selected');
@@ -3586,10 +3668,13 @@ window.toggleAuthTab = function(mode) {
 };
 
 window.selectUpgradeTier = function(tier) {
+  const card = document.getElementById(`upgrade-option-${tier}`);
+  if (card && card.classList.contains('disabled')) {
+    return;
+  }
   selectedUpgradeTier = tier;
   
   document.querySelectorAll('.upgrade-option-card').forEach(card => card.classList.remove('selected'));
-  const card = document.getElementById(`upgrade-option-${tier}`);
   if (card) card.classList.add('selected');
   
   const upgradeBtn = document.getElementById('btn-upgrade-subscription');
@@ -3752,6 +3837,10 @@ window.togglePaymentModal = function(show) {
         const rate = (currentTenant && currentTenant.overage_rate != null) ? currentTenant.overage_rate : 0.35;
         const price = (blocks * 100 * rate).toFixed(2);
         tierDisplay = `${minutes} Prepaid Overage Minutes ($${price} - Billed Upfront at $${rate.toFixed(2)}/min)`;
+      } else if (stripePaymentMode === 'addon') {
+        if (pendingAddonInfo) {
+          tierDisplay = `${pendingAddonInfo.label} Module (${pendingAddonInfo.price})`;
+        }
       } else {
         const isAnnual = selectedBillingCycle === 'annual';
         const starterPrice = isAnnual ? 79 : 99;
@@ -3773,6 +3862,14 @@ window.togglePaymentModal = function(show) {
     } else {
       const form = document.getElementById('form-stripe-payment');
       if (form) form.reset();
+      
+      // If we cancelled an addon activation, revert the checkbox
+      if (stripePaymentMode === 'addon' && pendingAddonInfo) {
+        if (pendingAddonInfo.toggle) {
+          pendingAddonInfo.toggle.checked = false;
+        }
+        pendingAddonInfo = null;
+      }
     }
   }
 };
@@ -4081,6 +4178,68 @@ document.getElementById('form-stripe-payment').addEventListener('submit', async 
         fetchOverviewData();
       } else {
         alert(`Purchase failed: ${result.error || 'Unknown error'}`);
+      }
+    } else if (stripePaymentMode === 'addon') {
+      if (!pendingAddonInfo) throw new Error('No pending addon selection found.');
+      const response = await fetch(pendingAddonInfo.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          active: true,
+          payment_confirmed: true
+        })
+      });
+      const result = await response.json();
+      if (response.ok && result.success) {
+        alert(`Successfully purchased and activated the ${pendingAddonInfo.label} module!`);
+        
+        // Update check state & styles
+        if (pendingAddonInfo.toggle) pendingAddonInfo.toggle.checked = true;
+        if (pendingAddonInfo.status) {
+          pendingAddonInfo.status.textContent = `Status: Active (+${pendingAddonInfo.price})`;
+          pendingAddonInfo.status.style.color = '#10b981';
+        }
+
+        // Custom UI modifications depending on the addon
+        if (pendingAddonInfo.name === 'departments') {
+          const deptGridContainer = document.getElementById('departments-addon-grid-container');
+          const globalTransferGroup = document.getElementById('global-transfer-number-group');
+          if (deptGridContainer) deptGridContainer.style.display = 'flex';
+          if (globalTransferGroup) globalTransferGroup.style.display = 'none';
+          loadDepartmentsList();
+        } else if (pendingAddonInfo.name === 'payment-gateway') {
+          const stripeKeysContainer = document.getElementById('stripe-keys-config');
+          const paymentProviderHiddenInput = document.getElementById('settings-payment-provider');
+          if (stripeKeysContainer) stripeKeysContainer.style.display = 'flex';
+          if (paymentProviderHiddenInput) paymentProviderHiddenInput.value = 'stripe';
+        }
+        
+        if (currentTenant) {
+          const propMap = {
+            'whatsapp': 'addon_whatsapp',
+            'crm': 'addon_crm',
+            'accounting': 'addon_accounting',
+            'recording': 'addon_call_recording',
+            'departments': 'addon_department_routing',
+            'payment-gateway': 'addon_payment_gateway'
+          };
+          const mappedProp = propMap[pendingAddonInfo.name];
+          if (mappedProp) {
+            currentTenant[mappedProp] = 1;
+            localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+          }
+        }
+        
+        refreshSidebarAddonTabs();
+        showToast('Addon Activated', `${pendingAddonInfo.label} is now active.`, 'success');
+        
+        // Reset reference first so modal close won't revert toggle
+        pendingAddonInfo = null; 
+        
+        window.togglePaymentModal(false);
+        fetchBillingDetails();
+      } else {
+        alert(`Activation failed: ${result.error || 'Unknown error'}`);
       }
     } else {
       const response = await fetch('/api/saas/billing/upgrade', {

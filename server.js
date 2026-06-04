@@ -1062,6 +1062,19 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid billing cycle' });
   }
   try {
+    const tenant = await getTenantById(req.tenantId);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant workspace not found.' });
+    }
+
+    const tierLevels = { free: 0, starter: 1, professional: 2, enterprise: 3 };
+    const currentLevel = tierLevels[tenant.subscription_tier] || 0;
+    const requestedLevel = tierLevels[tier] || 0;
+
+    if (requestedLevel <= currentLevel) {
+      return res.status(400).json({ error: `Cannot upgrade: Selected plan is equal to or lower than your current subscription tier.` });
+    }
+
     const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
 
     // Auto-enable CRM & Accounting for Pro/Enterprise; disable for lower tiers
@@ -1077,8 +1090,8 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
     }
 
     broadcastToDashboard(req.tenantId, 'refresh_crm', {});
-    const tenant = await getTenantById(req.tenantId);
-    res.json({ success: true, usage, tenant });
+    const updatedTenant = await getTenantById(req.tenantId);
+    res.json({ success: true, usage, tenant: updatedTenant });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1445,9 +1458,12 @@ app.put('/api/billing/notification-phone', requireAuth, async (req, res) => {
 
 // Toggle call recording handoff addon status
 app.post('/api/addons/toggle-recording', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonRecording(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `Call Handoff Recording Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_call_recording: activeVal ? 1 : 0 });
@@ -1458,9 +1474,12 @@ app.post('/api/addons/toggle-recording', requireAuth, async (req, res) => {
 
 // Toggle department routing addon status
 app.post('/api/addons/toggle-departments', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonDepartmentRouting(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `Department & Extension Routing Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_department_routing: activeVal ? 1 : 0 });
@@ -1471,9 +1490,12 @@ app.post('/api/addons/toggle-departments', requireAuth, async (req, res) => {
 
 // Toggle WhatsApp addon status
 app.post('/api/addons/toggle-whatsapp', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonWhatsapp(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `WhatsApp/SMS/Email Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_whatsapp: activeVal ? 1 : 0 });
@@ -1484,9 +1506,12 @@ app.post('/api/addons/toggle-whatsapp', requireAuth, async (req, res) => {
 
 // Toggle CRM addon status
 app.post('/api/addons/toggle-crm', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonCrm(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `AI CRM Hub Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_crm: activeVal ? 1 : 0 });
@@ -1497,9 +1522,12 @@ app.post('/api/addons/toggle-crm', requireAuth, async (req, res) => {
 
 // Toggle Accounting addon status
 app.post('/api/addons/toggle-accounting', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonAccounting(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `Accounting & Invoicing Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_accounting: activeVal ? 1 : 0 });
@@ -1510,9 +1538,12 @@ app.post('/api/addons/toggle-accounting', requireAuth, async (req, res) => {
 
 // Toggle Payment Gateway addon status
 app.post('/api/addons/toggle-payment-gateway', requireAuth, async (req, res) => {
-  const { active } = req.body;
+  const { active, payment_confirmed } = req.body;
   try {
     const activeVal = active === true || active === 1 || active === '1';
+    if (activeVal && !payment_confirmed) {
+      return res.status(402).json({ error: 'Payment confirmation is required to activate this module.' });
+    }
     await updateTenantAddonPaymentGateway(req.tenantId, activeVal);
     await logTenantActivity(req.tenantId, 'settings_update', `Stripe Payment Gateway Addon ${activeVal ? 'Activated' : 'Deactivated'}`);
     res.json({ success: true, addon_payment_gateway: activeVal ? 1 : 0 });

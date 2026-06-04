@@ -1407,6 +1407,13 @@ export const resetPasswordWithToken = async (token, newPassword) => {
   if (new Date(record.expires_at) < new Date()) throw new Error('Reset link has expired. Please request a new one.');
   const hash = await bcrypt.hash(newPassword, 12);
   await run('UPDATE tenant_users SET password_hash = ?, password_is_hashed = 1, failed_login_attempts = 0, locked_until = NULL WHERE id = ?', [hash, record.user_id]);
+  
+  // Keep tenants table in sync if this is the owner
+  const user = await get('SELECT role, tenant_id FROM tenant_users WHERE id = ?', [record.user_id]);
+  if (user && user.role === 'owner') {
+    await run('UPDATE tenants SET password_hash = ? WHERE id = ?', [hash, user.tenant_id]);
+  }
+
   await run('UPDATE password_reset_tokens SET used = 1 WHERE id = ?', [record.id]);
   return { success: true };
 };
