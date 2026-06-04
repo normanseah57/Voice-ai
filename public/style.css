@@ -4545,8 +4545,8 @@ mark.gs-mark {
 }
 
 /* Prevent invisible off-screen content from consuming GPU */
-.pane-content:not(.active),
-.wizard-step-pane:not([style*="display: flex"]) {
+.pane:not(.active),
+.wizard-step-pane:not(.active) {
   contain: strict;
 }
 
