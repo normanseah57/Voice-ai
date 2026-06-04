@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import url from 'url';
@@ -316,6 +317,7 @@ const app = express();
 app.enable('trust proxy');
 const PORT = process.env.PORT || 3000;
 
+app.use(compression());
 app.use(cors());
 
 // Force HTTPS redirect in production (based on load balancer headers)

@@ -4476,6 +4476,53 @@ mark.gs-mark {
   }
 }
 
+/* Optimize layout and typography for extra small devices (phones under 480px width) */
+@media (max-width: 480px) {
+  .landing-hero h1 {
+    font-size: 1.9rem !important;
+    line-height: 1.2 !important;
+  }
+  .landing-hero h2 {
+    font-size: 1.3rem !important;
+  }
+  .landing-hero p {
+    font-size: 0.9rem !important;
+    line-height: 1.45 !important;
+  }
+  .live-demo-banner {
+    padding: 24px 16px !important;
+    border-radius: 12px !important;
+  }
+  .live-demo-banner h2 {
+    font-size: 1.35rem !important;
+  }
+  .demo-phone-btn {
+    font-size: 1.1rem !important;
+    padding: 12px 14px !important;
+  }
+  .roi-calculator-container {
+    padding: 24px 16px !important;
+    border-radius: 12px !important;
+  }
+  .roi-calculator-container h3 {
+    font-size: 1.25rem !important;
+  }
+  .economy-card {
+    padding: 16px !important;
+  }
+  .price-card {
+    padding: 20px 16px !important;
+  }
+  .pricing-section {
+    padding: 30px 12px !important;
+  }
+  .comparison-table th, .comparison-table td {
+    padding: 10px 8px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+
 /* Respect OS-level reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,
