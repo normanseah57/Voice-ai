@@ -3118,11 +3118,10 @@ function logout() {
     dashboardSocket = null;
   }
   
-  document.getElementById('landing-page-container').style.display = 'block';
-  document.getElementById('app-container').style.display = 'none';
-  // Dismiss loading screen — landing page is now visible
-  if (typeof window._appReady === 'function') window._appReady();
+  // Redirect to landing page (page split architecture)
+  window.location.href = '/';
 }
+
 
 
 function initAuthenticatedSession() {
@@ -5716,9 +5715,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (!saasToken) {
+    // If somehow app.html is loaded without auth, redirect to landing
+    if (window.location.pathname.startsWith('/app')) {
+      window.location.href = '/';
+      return;
+    }
     document.getElementById('landing-page-container').style.display = 'block';
     document.getElementById('app-container').style.display = 'none';
-    
+    if (typeof window._appReady === 'function') window._appReady();
 
   } else {
     try {

@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoiceDesk - 24/7 Receptionist & CRM</title>
+  <!-- Google Fonts: Inter and Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- DNS prefetch for Railway API -->
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <!-- Lucide Icons — deferred so it never blocks first render -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <!-- Minified stylesheet (69KB vs 90KB original) -->
+  <link rel="stylesheet" href="style.min.css?v=1.0.6">
+  <style>
+    /* ── Instant Loading Screen — renders before any JS ── */
+    #app-loading-screen {
+      position: fixed; inset: 0; z-index: 99999;
+      background: #0b0f19;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 20px;
+    }
+    #app-loading-screen .ld-logo {
+      display: flex; align-items: center; gap: 12px;
+      animation: ld-fadein 0.4s ease both;
+    }
+    #app-loading-screen .ld-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      box-shadow: 0 0 30px rgba(6,182,212,0.4);
+    }
+    #app-loading-screen .ld-name {
+      font-family: -apple-system, 'Outfit', sans-serif;
+      font-size: 1.8rem; font-weight: 800;
+      color: #fff; letter-spacing: -0.5px;
+    }
+    #app-loading-screen .ld-name span { color: #22c55e; }
+    #app-loading-screen .ld-bar-wrap {
+      width: 180px; height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px; overflow: hidden;
+      animation: ld-fadein 0.4s 0.2s ease both;
+    }
+    #app-loading-screen .ld-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+      border-radius: 2px;
+      animation: ld-progress 2.5s cubic-bezier(0.4,0,0.2,1) forwards;
+    }
+    #app-loading-screen .ld-label {
+      font-family: -apple-system, sans-serif;
+      font-size: 0.8rem; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.05em;
+      animation: ld-fadein 0.4s 0.3s ease both;
+    }
+    @keyframes ld-fadein { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    @keyframes ld-progress { 0% { width:0% } 60% { width:75% } 85% { width:88% } 100% { width:100% } }
+    #app-loading-screen.ld-done {
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    /* Animated Voice Visualizer Waveform */
+    .wave-bar.animate { animation: wave-bounce 1s ease-in-out infinite alternate; }
+    .wave-bar:nth-child(2n) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3n) { animation-delay: 0.25s; }
+    .wave-bar:nth-child(4n) { animation-delay: 0.4s; }
+    .wave-bar:nth-child(5n) { animation-delay: 0.05s; }
+    @keyframes wave-bounce { 0% { height: 6px; } 100% { height: 45px; } }
+
+    /* Floating Call Demo Button */
+    .floating-demo-btn {
+      position: fixed; bottom: 30px; left: 30px; z-index: 999;
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(6,182,212,0.4);
+      cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+      transition: all 0.3s ease;
+    }
+    .floating-demo-btn:hover { transform: translateY(-5px) scale(1.05); box-shadow: 0 6px 25px rgba(6,182,212,0.6); }
+    .floating-demo-btn::before {
+      content:''; position:absolute; width:100%; height:100%;
+      border-radius:50%; border:2px solid #06b6d4;
+      animation: pulse-border 2s linear infinite; opacity:0;
+    }
+    @keyframes pulse-border {
+      0% { transform:scale(1); opacity:0.8; }
+      50% { transform:scale(1.3); opacity:0.4; }
+      100% { transform:scale(1.6); opacity:0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══ INSTANT LOADING SCREEN ══ -->
+  <div id="app-loading-screen">
+    <div class="ld-logo">
+      <div class="ld-icon">🎙️</div>
+      <div class="ld-name">Voice<span>Desk</span></div>
+    </div>
+    <div class="ld-bar-wrap"><div class="ld-bar"></div></div>
+    <div class="ld-label">Loading…</div>
+  </div>
+
+  <!-- Toast notification container -->
+  <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
+
+  <!-- =============================================================
+       1. SAAS LANDING PAGE
+       ============================================================= -->
+  <div id="landing-page-container" class="landing-container">
+    <header class="landing-header">
+      <div class="landing-brand" style="display: flex; align-items: center; gap: 10px;">
+        <img src="assets/company_logo.png" alt="Company Logo" style="width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(34,197,94,0.35));">
+        <h2 style="font-family: var(--font-display); font-weight: 800; font-size: 1.5rem; letter-spacing: -0.5px; text-transform: uppercase; margin: 0;">
+          <span style="color: #ffffff; background: none; -webkit-text-fill-color: initial;">Voice</span><span style="color: #22c55e; background: none; -webkit-text-fill-color: initial;">Desk</span>
+        </h2>
+      </div>
+      <div class="landing-nav-actions">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <button class="btn btn-secondary" onclick="openAuthModal('login')">Sign In</button>
+        <button class="btn btn-primary" onclick="openRequestDemoModal()">Request Demo</button>
+      </div>
+    </header>
+
+    <main class="landing-hero">
+      <div class="hero-content">
+        <span class="hero-badge"><i data-lucide="sparkles"></i> Low-Latency Voice AI</span>
+        <h1 style="background: none; -webkit-text-fill-color: initial; color: white;">Every call answered.<br><span style="background: linear-gradient(135deg, var(--color-primary), #0ea5e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Every booking captured.</span></h1>
+        <h2 style="font-size: 1.8rem; font-weight: 500; color: var(--text-muted); margin-bottom: 24px; margin-top: -12px;">Even at 11 p.m.</h2>
+        <p>
+          VoiceDesk is an AI receptionist for businesses of all types — service providers, retail, healthcare, hospitality, and more across Singapore and Malaysia. It answers calls, books appointments, handles enquiries, and confirms reservations — without putting a single customer on hold. PDPA-compliant. Live in 48 hours.
+        </p>
+        <div class="hero-actions mt-4" style="display: flex; flex-direction: column; align-items: center; gap: 24px; width: 100%;">
+          <button class="btn btn-secondary btn-hero" onclick="openCallDemoModal()" style="display: inline-flex; align-items: center; gap: 8px; justify-content: center; background: rgba(6, 182, 212, 0.1); border: 1px solid var(--color-primary); color: white; padding: 14px 28px; font-size: 1.1rem; width: fit-content; box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);">
+            <i data-lucide="phone" class="pulse-icon-menu" style="width: 20px; height: 20px; color: var(--color-primary);"></i> Listen to Demo Call
+          </button>
+          
+          <!-- AI Receptionist Image Display -->
+          <div class="hero-image-wrapper" style="width: 100%; max-width: 500px; border-radius: 16px; overflow: hidden; border: 1px solid var(--border-glass); box-shadow: 0 20px 40px rgba(0,0,0,0.5); background: rgba(0,0,0,0.2); padding: 8px; backdrop-filter: blur(10px); margin-top: 10px;">
+            <picture>
+              <source srcset="/ai_receptionist_hero.webp" type="image/webp">
+              <img src="/ai_receptionist_hero.png" alt="AI Voice Receptionist" loading="lazy" decoding="async" style="width: 100%; height: auto; border-radius: 12px; object-fit: cover; display: block;">
+            </picture>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Twilio Demo Call Callout Banner -->
+      <div class="live-demo-banner" style="margin-top: 40px; text-align: left; width: 100%;">
+        <div class="live-demo-left">
+          <span class="live-demo-badge"><i data-lucide="zap"></i> Live Demo environment</span>
+          <h2>Hear your AI receptionist <span>answer right now</span></h2>
+          <p style="font-size: 1rem; line-height: 1.5; color: var(--text-muted); margin-bottom: 20px;">
+            Call our demo number and speak to VoiceDesk directly. Book a real appointment, test urgent enquiry handling, request business information, or cancel & reschedule bookings. No form. No sales call. Just the product.
+          </p>
+          <div style="display: flex; gap: 16px; margin-top: 15px;">
+            <span class="badge-item">🔒 PDPA Compliant</span>
+            <span class="badge-item">⚡ Live in 48 Hours</span>
+            <span class="badge-item">🚫 No Credit Card</span>
+          </div>
+        </div>
+        <div class="live-demo-right">
+          <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--color-success); font-weight: 700;">Place A Real Call</span>
+          <a href="tel:+15203538181" class="demo-phone-btn" id="demo-phone-link">
+            <i data-lucide="phone-call"></i> <span id="demo-phone-display">+1 (520) 353-8181</span>
+          </a>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Serving Singapore & Malaysia • 9 AM - 6 PM SGT</span>
+          <ul class="demo-checklist">
+            <li>Book appointments</li>
+            <li>Test urgent enquiries</li>
+            <li>Request information</li>
+          </ul>
+          <div style="display: flex; gap: 10px; width: 100%; margin-top: 15px;">
+            <button class="btn btn-primary" onclick="openAuthModal('register')" style="flex: 1; padding: 10px; font-size: 0.85rem;">Get Started</button>
+            <button class="btn btn-secondary" onclick="openRequestDemoModal()" style="flex: 1; padding: 10px; font-size: 0.85rem;">Request Demo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features Section -->
+      <section id="features" style="width: 100%; margin-bottom: 80px; padding: 40px 0; border-top: 1px solid var(--border-glass);">
+        <div class="pricing-title text-center mb-5">
+          <h2>Impactful Core Capabilities</h2>
+          <p class="text-muted" style="max-width: 600px; margin: 0 auto;">Streamline customer interactions, automate appointments, and scale sales pipeline deals seamlessly.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px;">
+          <!-- Feature 1 -->
+          <div class="price-card glass" style="align-items: flex-start; text-align: left; padding: 24px; min-height: auto;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(6, 182, 212, 0.15); color: var(--color-primary); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; flex-shrink: 0;">
+              <i data-lucide="phone-call" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h3 style="font-size: 1.15rem; font-weight: 600; color: white; margin-bottom: 8px;">24/7 Low-Latency Call Reception</h3>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">Instant voice responses built on OpenAI's GA Realtime API to handle customer inquiries 24/7 with zero latency.</p>
+          </div>
+
+          <!-- Feature 2 -->
+          <div class="price-card glass" style="align-items: flex-start; text-align: left; padding: 24px; min-height: auto;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(139, 92, 246, 0.15); color: var(--color-secondary); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; flex-shrink: 0;">
+              <i data-lucide="calendar" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h3 style="font-size: 1.15rem; font-weight: 600; color: white; margin-bottom: 8px;">Automated Calendar Seeding</h3>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">Evaluates working hours, rest breaks, and buffer gaps, and schedules hotel/restaurant tables or appointments directly on the call.</p>
+          </div>
+
+          <!-- Feature 3 -->
+          <div class="price-card glass" style="align-items: flex-start; text-align: left; padding: 24px; min-height: auto;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(16, 185, 129, 0.15); color: #10b981; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; flex-shrink: 0;">
+              <i data-lucide="kanban" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h3 style="font-size: 1.15rem; font-weight: 600; color: white; margin-bottom: 8px;">HubSpot-Style Pipeline CRM</h3>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">Track customer inquiries, schedules, and pipeline revenue via a fluid drag-and-drop Kanban deals board.</p>
+          </div>
+
+          <!-- Feature 4 -->
+          <div class="price-card glass" style="align-items: flex-start; text-align: left; padding: 24px; min-height: auto;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; flex-shrink: 0;">
+              <i data-lucide="terminal" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h3 style="font-size: 1.15rem; font-weight: 600; color: white; margin-bottom: 8px;">AI Copilot Terminal</h3>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">Query contacts, create deals, and transition pipeline stages using direct natural language instructions with our Copilot ("Hubie").</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Advantages & Gains Section -->
+      <section style="width: 100%; margin-bottom: 80px; padding: 40px 0; border-top: 1px solid var(--border-glass);">
+        <div class="pricing-title text-center mb-5">
+          <h2>Why Choose AI Voice Reception & CRM?</h2>
+          <p class="text-muted" style="max-width: 600px; margin: 0 auto;">Deploying intelligent voice agents and pipelines delivers concrete performance advantages and financial gains.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; width: 100%;">
+          <!-- AI Voice Receptionist Gains -->
+          <div class="price-card glass" style="display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 32px; min-height: auto;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border-glass); padding-bottom: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(6, 182, 212, 0.15); color: var(--color-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="mic" style="width: 20px; height: 20px;"></i>
+              </div>
+              <h3 style="font-size: 1.3rem; font-weight: 700; color: white; margin: 0;">AI Voice Receptionist Advantages</h3>
+            </div>
+            
+            <ul style="list-style: none; padding: 0; margin: 0; display: grid; gap: 16px;">
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Zero Missed Calls:</strong> Runs 24/7/365 to handle up to 5 concurrent customer calls simultaneously, catching every single booking lead.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>80%+ Cost Reduction:</strong> Eliminates receptionist shift overheads, agencies commission, and night-shift fees, saving thousands monthly.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Error-Free Automations:</strong> Books appointments, table reservations, or hotel rooms directly inside availability bounds.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Multi-Channel Dispatch:</strong> Integrates phone calls and automated WhatsApp messaging backups seamlessly.
+              </li>
+            </ul>
+          </div>
+
+          <!-- AI CRM Gains -->
+          <div class="price-card glass" style="display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 32px; min-height: auto;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border-glass); padding-bottom: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(139, 92, 246, 0.15); color: var(--color-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="database" style="width: 20px; height: 20px;"></i>
+              </div>
+              <h3 style="font-size: 1.3rem; font-weight: 700; color: white; margin: 0;">AI CRM & Pipeline Gains</h3>
+            </div>
+            
+            <ul style="list-style: none; padding: 0; margin: 0; display: grid; gap: 16px;">
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Automated Client Onboarding:</strong> Inbound call details instantly populate the CRM contact database, tracking call transcripts.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Natural Language Queries:</strong> Talk directly to your CRM using the AI Copilot to fetch lists, modify deal stages, and update fields.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>HubSpot-Style Kanban board:</strong> Shift sales opportunities across visual columns from appointment scheduled to closed won.
+              </li>
+              <li style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; padding-left: 28px; position: relative;">
+                <span style="position: absolute; left: 0; top: 2px; color: #10b981;"><i data-lucide="sparkles" style="width: 18px; height: 18px;"></i></span>
+                <strong>Live Business Intelligence:</strong> Instantly check platform usage logs, MRR growth, and activity feeds.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quiet Phone Economics Section -->
+      <section class="marketing-section" style="border-top: 1px solid var(--border-glass);">
+        <div class="pricing-title text-center mb-5">
+          <span class="live-demo-badge"><i data-lucide="bar-chart-2"></i> Economics & ROI</span>
+          <h2>The cost of a quiet phone isn't silence — it's S$130K+</h2>
+          <p class="text-muted" style="max-width: 650px; margin: 0 auto; font-size: 0.95rem;">
+            Every unanswered ring is a booking that didn't happen, a customer who found another business, and a sale that was lost. The numbers are specific for Singapore & Malaysia.
+          </p>
+        </div>
+
+        <div class="metrics-grid-economy">
+          <!-- Metric Card 1 -->
+          <div class="economy-card cyan">
+            <div class="metric-circle-progress" style="--percent: 85; --color: var(--color-primary);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">S$130K</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">Recoverable Revenue</strong>
+            <p class="text-muted">Per location from missed calls alone (SGD).</p>
+            <span class="source">Source: Business Performance Analysis</span>
+          </div>
+
+          <!-- Metric Card 2 -->
+          <div class="economy-card orange">
+            <div class="metric-circle-progress" style="--percent: 28; --color: var(--color-warning);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">28%</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">Calls Go Unanswered</strong>
+            <p class="text-muted">At the average local business during peak hours.</p>
+            <span class="source">Source: Business Industry Report</span>
+          </div>
+
+          <!-- Metric Card 3 -->
+          <div class="economy-card purple">
+            <div class="metric-circle-progress" style="--percent: 85; --color: var(--color-secondary);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">85%</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">Never Call Back</strong>
+            <p class="text-muted">Of callers who reach voicemail call a competitor instead.</p>
+            <span class="source">Source: Consumer Behaviour Study</span>
+          </div>
+
+          <!-- Metric Card 4 -->
+          <div class="economy-card orange">
+            <div class="metric-circle-progress" style="--percent: 11; --color: var(--color-warning);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">S$41K</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">No-Show Revenue Lost</strong>
+            <p class="text-muted">At the average 11% industry appointment no-show rate.</p>
+            <span class="source">Source: Business Practice Economics</span>
+          </div>
+
+          <!-- Metric Card 5 -->
+          <div class="economy-card green">
+            <div class="metric-circle-progress" style="--percent: 22; --color: var(--color-success);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">22%</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">No-Show Reduction</strong>
+            <p class="text-muted">With automated SMS reminders and 24/7 client scheduling.</p>
+            <span class="source">Source: VoiceDesk Customer Data</span>
+          </div>
+
+          <!-- Metric Card 6 -->
+          <div class="economy-card cyan">
+            <div class="metric-circle-progress" style="--percent: 100; --color: var(--color-primary);">
+              <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg"></circle></svg>
+              <div class="number">40h</div>
+            </div>
+            <strong style="color: white; display: block; margin-bottom: 6px;">Staff Hours Reclaimed</strong>
+            <p class="text-muted">Redirected from phone triage duty to serving in-person clients.</p>
+            <span class="source">Source: VoiceDesk Business Survey</span>
+          </div>
+        </div>
+
+        <!-- Interactive ROI Calculator Widget -->
+        <div class="roi-calculator-container glass" style="margin-top: 40px; padding: 40px; border-radius: 20px; border: 1px solid var(--border-glass); background: rgba(15, 23, 42, 0.35);">
+          <div class="pricing-title text-center" style="margin-bottom: 30px;">
+            <span class="live-demo-badge" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); color: var(--color-success);"><i data-lucide="calculator"></i> Interactive Tool</span>
+            <h3 style="color: white; font-size: 1.6rem; font-weight: 700; margin: 8px 0 0 0;">Calculate Your Lost Revenue & VoiceDesk ROI</h3>
+            <p class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">Drag the sliders to match your local clinic, spa, or business metrics.</p>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: start;">
+            <!-- Sliders Panel -->
+            <div style="display: flex; flex-direction: column; gap: 24px; text-align: left;">
+              <!-- Slider 1 -->
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <label for="roi-calls" style="color: white; font-weight: 600; font-size: 0.95rem;">Average Inbound Calls / Month</label>
+                  <span id="roi-calls-val" style="color: var(--color-primary); font-family: var(--font-display); font-size: 1.15rem; font-weight: 700;">500 calls</span>
+                </div>
+                <input type="range" id="roi-calls" min="50" max="2500" step="50" value="500" style="width: 100%; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); outline: none; cursor: pointer; accent-color: var(--color-primary);" oninput="updateROICalculator()">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                  <span>50</span>
+                  <span>1,250</span>
+                  <span>2,500</span>
+                </div>
+              </div>
+
+              <!-- Slider 2 -->
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <label for="roi-value" style="color: white; font-weight: 600; font-size: 0.95rem;">Average Booking Value (S$ / RM)</label>
+                  <span id="roi-value-val" style="color: var(--color-secondary); font-family: var(--font-display); font-size: 1.15rem; font-weight: 700;">$100</span>
+                </div>
+                <input type="range" id="roi-value" min="10" max="500" step="5" value="100" style="width: 100%; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); outline: none; cursor: pointer; accent-color: var(--color-secondary);" oninput="updateROICalculator()">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                  <span>$10</span>
+                  <span>$250</span>
+                  <span>$500</span>
+                </div>
+              </div>
+              
+              <!-- Burnout stress comparison notes -->
+              <div style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.15); padding: 20px; border-radius: 12px; margin-top: 15px;">
+                <h5 style="color: white; margin: 0 0 8px 0; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                  <span>👥</span> Lower Staff Burnout
+                </h5>
+                <p class="text-muted" style="font-size: 0.8rem; line-height: 1.4; margin: 0;">
+                  In businesses using VoiceDesk, front desk teams shift from "phone triage" to actual client care. Burnout decreases and customer face-time increases 3x!
+                </p>
+              </div>
+            </div>
+            
+            <!-- Animated Motion Chart Output Panel -->
+            <div class="glass" style="padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.01); display: flex; flex-direction: column; gap: 20px; text-align: left;">
+              <!-- Cost comparison bars -->
+              <div>
+                <h4 style="color: white; font-size: 1rem; margin-top: 0; margin-bottom: 12px; font-weight: 600;">Yearly Revenue Economics Comparison</h4>
+                
+                <div style="margin-bottom: 12px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+                    <span style="color: var(--text-muted);">Unanswered Calls Revenue Loss</span>
+                    <span id="roi-loss-bar-text" style="color: #ef4444; font-weight: 700;">$142,800</span>
+                  </div>
+                  <div style="height: 24px; width: 100%; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                    <div id="roi-loss-bar" style="height: 100%; width: 100%; background: linear-gradient(to right, #ef4444, #f59e0b); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+                    <span style="color: var(--text-muted);">Recovered Profit (With VoiceDesk)</span>
+                    <span id="roi-recovered-bar-text" style="color: var(--color-success); font-weight: 700;">$139,200</span>
+                  </div>
+                  <div style="height: 24px; width: 100%; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                    <div id="roi-recovered-bar" style="height: 100%; width: 95%; background: linear-gradient(to right, var(--color-primary), var(--color-success)); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reclaimed Hours Circular gauge -->
+              <div style="display: flex; gap: 20px; align-items: center; border-top: 1px solid var(--border-glass); padding-top: 20px;">
+                <div class="metric-circle-progress" style="--percent: 75; --color: var(--color-success); flex-shrink: 0;">
+                  <svg><circle cx="35" cy="35" r="30"></circle><circle cx="35" cy="35" r="30" class="progress-bar-svg" id="roi-hours-circle"></circle></svg>
+                  <div class="number" id="roi-hours-text">41.6h</div>
+                </div>
+                <div>
+                  <h5 style="color: white; margin: 0 0 4px 0; font-size: 0.9rem; font-weight: 700;">Staff Hours Reclaimed / Month</h5>
+                  <p class="text-muted" style="font-size: 0.8rem; margin: 0; line-height: 1.4;">
+                    Time redirected from answering calls back to serving in-person guests.
+                  </p>
+                </div>
+              </div>
+              
+              <!-- Cost highlight comparative -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; border-top: 1px solid var(--border-glass); padding-top: 20px; font-size: 0.8rem;">
+                <div style="padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); background: rgba(255,255,255,0.01);">
+                  <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 2px;">VoiceDesk Subscription / Yr</div>
+                  <div id="roi-vd-cost-text" style="color: var(--color-primary); font-size: 1.05rem; font-weight: 700;">S$1,188</div>
+                </div>
+                <div style="padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); background: rgba(255,255,255,0.01);">
+                  <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 2px;">Traditional Front Desk / Yr</div>
+                  <div style="color: var(--text-muted); font-size: 1.05rem; font-weight: 700;">S$48K - S$72K</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VoiceDesk vs Traditional Front Desk -->
+      <section class="marketing-section" style="border-top: 1px solid var(--border-glass);">
+        <div class="pricing-title text-center mb-5">
+          <span class="live-demo-badge"><i data-lucide="scale"></i> Feature Comparison</span>
+          <h2>VoiceDesk vs. Traditional Front Desk</h2>
+          <h4 style="font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-top: 8px;">The numbers don't negotiate.</h4>
+          <p class="text-muted" style="max-width: 600px; margin: 8px auto 0 auto; font-size: 0.9rem;">
+            Ten metrics. One column is green across every row. The other is why you're reading this page.
+          </p>
+        </div>
+
+        <div class="comparison-table-wrapper">
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th>Metric / Capability</th>
+                <th style="color: var(--color-primary);">VoiceDesk AI Agent</th>
+                <th>Traditional Front Desk</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Call Answer Rate</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> 99% all hours</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> 72–85% business hrs</td>
+              </tr>
+              <tr>
+                <td><strong>After-Hours Coverage</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> 24 / 7 / 365</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> Voicemail only</td>
+              </tr>
+              <tr>
+                <td><strong>Average Hold Time</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> 0 sec instant answer</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> 4–8 min peak hours</td>
+              </tr>
+              <tr>
+                <td><strong>Booking Conversion</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> +60% vs prior system</td>
+                <td class="trad-gray">Baseline</td>
+              </tr>
+              <tr>
+                <td><strong>No-Show Reduction</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> -22% automated reminders</td>
+                <td class="trad-gray">Manual only</td>
+              </tr>
+              <tr>
+                <td><strong>Emergency Triage</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> Protocol-driven, instant</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> Voicemail / missed</td>
+              </tr>
+              <tr>
+                <td><strong>System Integration</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> Real-time sync</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> Manual entry</td>
+              </tr>
+              <tr>
+                <td><strong>Annual Cost</strong></td>
+                <td class="vd-highlight"><span class="check-icon">✓</span> S$4,800 - S$12,000</td>
+                <td class="trad-gray"><span class="cross-icon">✗</span> S$48,000 - S$72,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Interactive Pricing Grid -->
+      <section class="pricing-section" id="pricing">
+        <div class="pricing-title text-center mb-4">
+          <h2>Flexible, Usage-Based Subscription Plans</h2>
+          <p class="text-muted">Choose the pricing tier that scales with your spa, clinic, or business.</p>
+          
+          <div class="billing-toggle-container" id="billing-cycle-toggle">
+            <button type="button" class="billing-toggle-btn active" id="toggle-monthly" onclick="setBillingCycle('monthly')">Monthly</button>
+            <button type="button" class="billing-toggle-btn" id="toggle-yearly" onclick="setBillingCycle('annual')" style="display:flex;align-items:center;gap:6px;">
+              <span>⚡</span> Pay Annually <span class="discount-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-weight:800;">Save 20%</span>
+            </button>
+          </div>
+          <!-- Annual savings callout strip -->
+          <div id="annual-savings-callout" style="display:none;margin-top:12px;padding:10px 20px;border-radius:10px;background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(245,158,11,0.08));border:1px solid rgba(251,191,36,0.3);font-size:0.82rem;color:#fbbf24;font-weight:600;letter-spacing:0.01em;text-align:center;">
+            🎉 You save <strong>$238/yr</strong> on Starter &nbsp;|&nbsp; <strong>$2,388/yr</strong> on Professional — paid as one annual invoice
+          </div>
+        </div>
+        
+        <!-- Pricing Comparison Table -->
+        <div style="width: 100%; overflow-x: auto; margin-top: 24px; padding-bottom: 20px;">
+          <table id="pricing-comparison-table" style="width: 100%; max-width: 1100px; margin: 0 auto; border-collapse: separate; border-spacing: 0; font-size: 0.9rem; display: table;">
+            <colgroup>
+              <col style="width: 40%;">
+              <col style="width: 18%;">
+              <col style="width: 22%;">
+              <col style="width: 20%;">
+            </colgroup>
+
+            <!-- Header row -->
+            <thead>
+              <tr>
+                <th style="padding: 8px 0 24px; text-align: left; color: var(--text-muted); font-weight: 500; font-size: 0.82rem; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.08);">Features &amp; Modules</th>
+
+                <!-- Starter -->
+                <th style="padding: 8px 16px 24px; text-align: center; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                  <div style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Starter</div>
+                  <div style="font-size: 2rem; font-weight: 800; color: white; line-height: 1;" id="landing-price-starter">$99<span style="font-size: 0.85rem; font-weight: 400; color: #94a3b8;">/mo</span></div>
+                  <div style="font-size: 0.7rem; color: #10b981; font-weight: 600; margin-top: 6px;">+ $1,000 setup (one-time)</div>
+                  <button class="btn btn-secondary btn-block" style="margin-top: 14px; padding: 9px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Request Demo</button>
+                </th>
+
+                <!-- Professional -->
+                <th style="padding: 8px 16px 24px; text-align: center; vertical-align: bottom; background: linear-gradient(180deg, rgba(6,182,212,0.1) 0%, rgba(6,182,212,0.04) 100%); border: 1px solid rgba(6,182,212,0.3); border-bottom: none; border-radius: 14px 14px 0 0;">
+                  <div style="display: inline-block; background: linear-gradient(135deg,#06b6d4,#8b5cf6); color: white; font-size: 0.65rem; font-weight: 700; padding: 3px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;">⭐ Most Popular</div>
+                  <div style="color: #06b6d4; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Professional</div>
+                  <div style="font-size: 2rem; font-weight: 800; color: white; line-height: 1;" id="landing-price-professional">$999<span style="font-size: 0.85rem; font-weight: 400; color: #94a3b8;">/mo</span></div>
+                  <div style="font-size: 0.7rem; color: #10b981; font-weight: 600; margin-top: 6px;">+ $5,000 setup (one-time)</div>
+                  <button class="btn btn-primary btn-block" style="margin-top: 14px; padding: 9px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Request Demo</button>
+                </th>
+
+                <!-- Enterprise -->
+                <th style="padding: 8px 16px 24px; text-align: center; vertical-align: bottom; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                  <div style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Enterprise</div>
+                  <div style="font-size: 2rem; font-weight: 800; color: white; line-height: 1;">Custom</div>
+                  <div style="font-size: 0.7rem; color: #10b981; font-weight: 600; margin-top: 6px;">Tailored Quote</div>
+                  <button class="btn btn-secondary btn-block" style="margin-top: 14px; padding: 9px 14px; font-size: 0.8rem;" onclick="openRequestDemoModal()">Contact Sales</button>
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <!-- Core Platform -->
+              <tr><td colspan="4" style="padding: 20px 0 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b;">Core Platform</td></tr>
+
+              <tr class="pricing-row">
+                <td class="pf">AI Voice Receptionist (24/7)</td>
+                <td class="pc ps"><span class="chk">✓</span></td>
+                <td class="pc pp"><span class="chk">✓</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Call Minutes / month</td>
+                <td class="pc ps"><span class="pv">100 min</span></td>
+                <td class="pc pp"><span class="pv">1,000 min</span></td>
+                <td class="pc pe"><span class="pv">Unlimited</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Contacts Database</td>
+                <td class="pc ps"><span class="pv">100</span></td>
+                <td class="pc pp"><span class="pv">Unlimited</span></td>
+                <td class="pc pe"><span class="pv">Unlimited</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Unlimited Appointments</td>
+                <td class="pc ps"><span class="chk">✓</span></td>
+                <td class="pc pp"><span class="chk">✓</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Overage Rate</td>
+                <td class="pc ps"><span class="pv">$0.35/min</span></td>
+                <td class="pc pp"><span class="pv">$0.35/min</span></td>
+                <td class="pc pe"><span class="pv">Negotiated</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Workspace Users</td>
+                <td class="pc ps"><span class="pv">1 User</span></td>
+                <td class="pc pp"><span class="pv">Up to 10</span></td>
+                <td class="pc pe"><span class="pv">Unlimited</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Custom Prompt Personalization</td>
+                <td class="pc ps"><span class="chk">✓</span></td>
+                <td class="pc pp"><span class="chk">✓</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Services &amp; Pricing Catalog</td>
+                <td class="pc ps"><span class="chk">✓</span></td>
+                <td class="pc pp"><span class="chk">✓</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+
+              <!-- Add-On Modules -->
+              <tr><td colspan="4" style="padding: 22px 0 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b;">Add-On Modules</td></tr>
+
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">AI CRM Hub</strong><br><span style="color:#64748b;font-size:0.78rem;">Manage leads, contacts &amp; sync call logs in real-time</span></td>
+                <td class="pc ps"><span class="addon">Add-on<br><em>$50/mo</em></span></td>
+                <td class="pc pp"><span class="inc">✓ Included</span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">Accounting &amp; Invoicing</strong><br><span style="color:#64748b;font-size:0.78rem;">Ledger, purchase bills, product catalog &amp; financial reports</span></td>
+                <td class="pc ps"><span class="addon">Add-on<br><em>$20/mo</em></span></td>
+                <td class="pc pp"><span class="inc">✓ Included</span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">WhatsApp, SMS &amp; Email Notifications</strong><br><span style="color:#64748b;font-size:0.78rem;">Automated reminders, alerts &amp; booking confirmations</span></td>
+                <td class="pc ps"><span class="addon">Add-on<br><em>$10/mo</em></span></td>
+                <td class="pc pp"><span class="addon">Add-on<br><em>$10/mo</em></span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">Multi-Department &amp; Extension Routing</strong><br><span style="color:#64748b;font-size:0.78rem;">Route calls dynamically across departments &amp; extensions</span></td>
+                <td class="pc ps"><span class="cross">✗</span></td>
+                <td class="pc pp"><span class="addon">Add-on<br><em>$25/ext/mo</em></span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">Call Recording</strong><br><span style="color:#64748b;font-size:0.78rem;">Record, replay &amp; audit all inbound/outbound calls</span></td>
+                <td class="pc ps"><span class="cross">✗</span></td>
+                <td class="pc pp"><span class="addon">Add-on<br><em>$10/mo</em></span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf"><strong style="color:white;">Payment Gateway (Stripe)</strong><br><span style="color:#64748b;font-size:0.78rem;">Collect live credit card payments directly from callers</span></td>
+                <td class="pc ps"><span class="addon">Add-on<br><em>$5/mo</em></span></td>
+                <td class="pc pp"><span class="addon">Add-on<br><em>$5/mo</em></span></td>
+                <td class="pc pe"><span class="inc">✓ Included</span></td>
+              </tr>
+
+              <!-- Enterprise & Support -->
+              <tr><td colspan="4" style="padding: 22px 0 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b;">Enterprise &amp; Support</td></tr>
+
+              <tr class="pricing-row">
+                <td class="pf">Priority Support &amp; Dedicated Onboarding</td>
+                <td class="pc ps"><span class="cross">✗</span></td>
+                <td class="pc pp"><span class="cross">✗</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Multi-Tenant Support</td>
+                <td class="pc ps"><span class="cross">✗</span></td>
+                <td class="pc pp"><span class="cross">✗</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+              <tr class="pricing-row">
+                <td class="pf">Custom SLA &amp; Dedicated Infrastructure</td>
+                <td class="pc ps"><span class="cross">✗</span></td>
+                <td class="pc pp"><span class="cross">✗</span></td>
+                <td class="pc pe"><span class="chk">✓</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Footer section -->
+      <footer class="landing-footer" style="width: 100%; border-top: 1px solid var(--border-glass); padding: 60px 0 30px; margin-top: 80px;">
+        <div style="display: grid; grid-template-columns: 1.2fr repeat(3, 1fr); gap: 40px; margin-bottom: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; text-align: left;">
+          <!-- Left Brand Panel -->
+          <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="assets/company_logo.png" alt="Company Logo" style="width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(34,197,94,0.35));">
+              <h3 style="font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; margin: 0; text-transform: uppercase; letter-spacing: -0.5px;">
+                <span style="color: white;">Voice</span><span style="color: var(--color-success);">Desk</span>
+              </h3>
+            </div>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5; margin: 0;">
+              Next-generation conversational AI receptionists and HubSpot-style pipeline CRM pipelines for dental clinics, beauty spas, plumbing agencies, hotels, and restaurants.
+            </p>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Serving Singapore & Malaysia.</span>
+          </div>
+
+          <!-- Column 1: Resources -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="color: white; font-size: 0.9rem; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.05em;">Resources</h4>
+            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('documentation')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">Documentation</a></li>
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('howtostart')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">How To Start</a></li>
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('qa')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">Q&A / Help Center</a></li>
+            </ul>
+          </div>
+
+          <!-- Column 2: Legal & Trust -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="color: white; font-size: 0.9rem; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.05em;">Legal &amp; Trust</h4>
+            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('about')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">About Us</a></li>
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('privacy')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">Privacy Policy</a></li>
+              <li><a href="#" onclick="event.preventDefault(); openFooterModal('terms')" style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: var(--transition-smooth);">Terms of Service</a></li>
+            </ul>
+          </div>
+
+          <!-- Column 3: Newsletter -->
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <h4 style="color: white; font-size: 0.9rem; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.05em;">Weekly Insights</h4>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.4; margin: 0;">Get insights on optimizing customer booking conversions.</p>
+            <form style="display: flex; gap: 8px;" onsubmit="event.preventDefault(); alert('Subscribed successfully!'); this.reset();">
+              <input type="email" placeholder="you@company.com" required style="flex-grow: 1; padding: 8px 12px; font-size: 0.85rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); border-radius: var(--border-radius-sm); color: white; outline: none; width: 100%;">
+              <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 0.85rem; height: 35px; border-radius: var(--border-radius-sm); flex-shrink: 0;">Join</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Footer Sub Bar -->
+        <div style="max-width: 1200px; margin: 0 auto; border-top: 1px solid var(--border-glass); padding-top: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px;">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">&copy; 2026 VoiceDesk. All rights reserved.</span>
+          <div style="display: flex; align-items: center; gap: 15px;">
+            <span style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;"><i data-lucide="shield-check" style="width: 16px; height: 16px; color: #10b981;"></i> SSL Encrypted Connection</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;"><i data-lucide="credit-card" style="width: 16px; height: 16px; color: var(--color-primary);"></i> Stripe Verified Gateway</span>
+          </div>
+        </div>
+      </footer>
+
+      <!-- Floating Audio Demo Call Button -->
+      <div class="floating-demo-btn" onclick="openCallDemoModal()" title="Listen to AI Receptionist Call Demo">
+        <i data-lucide="phone" style="width: 24px; height: 24px; color: black; fill: black;"></i>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Request For A Demo Option Picker -->
+  <div class="modal-overlay" id="request-demo-modal" onclick="if(event.target===this) closeRequestDemoModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 500px; max-height: 80vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+        <h3 style="color: white; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px;">
+          <i data-lucide="help-circle" style="color: var(--color-primary); width: 22px; height: 22px;"></i>
+          Request For A Demo
+        </h3>
+        <button class="btn-close" onclick="closeRequestDemoModal()" style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer;"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 25px; color: var(--text-muted); text-align: center;">
+        <p style="margin: 0; font-size: 0.95rem; line-height: 1.5; color: white;">
+          How would you like to experience your VoiceDesk demo today? Choose an option below to proceed.
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+          <!-- Option A: Book / Talk to AI Receptionist -->
+          <div class="price-card glass" style="cursor: pointer; padding: 20px; text-align: left; transition: var(--transition-smooth); min-height: auto; border: 1px solid rgba(6, 182, 212, 0.15); display: flex; flex-direction: column;" onclick="selectDemoOption('ai')">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(6, 182, 212, 0.15); color: var(--color-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="phone-call" style="width: 18px; height: 18px;"></i>
+              </div>
+              <h4 style="color: white; margin: 0; font-size: 1.05rem; font-weight: 700;">Option A: Talk to AI Receptionist</h4>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-muted);">
+              Book an appointment immediately by chatting with our interactive, browser-based voice receptionist demo.
+            </p>
+          </div>
+
+          <!-- Option B: Fill up contact form -->
+          <div class="price-card glass" style="cursor: pointer; padding: 20px; text-align: left; transition: var(--transition-smooth); min-height: auto; border: 1px solid rgba(139, 92, 246, 0.15); display: flex; flex-direction: column;" onclick="selectDemoOption('form')">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(139, 92, 246, 0.15); color: var(--color-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="file-text" style="width: 18px; height: 18px;"></i>
+              </div>
+              <h4 style="color: white; margin: 0; font-size: 1.05rem; font-weight: 700;">Option B: Fill Up Contact Form</h4>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-muted);">
+              Send us your business requirements and we will contact you directly with a personalized demo proposal.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Phone Call Audio Demo Player -->
+  <div class="modal-overlay" id="call-demo-modal" onclick="if(event.target===this) closeCallDemoModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+        <h3 style="color: white; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px;">
+          <i data-lucide="phone-call" style="color: var(--color-primary); width: 22px; height: 22px;" class="pulse-icon-menu"></i>
+          AI Receptionist Demo Player
+        </h3>
+        <button class="btn-close" onclick="closeCallDemoModal()" style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer;"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 20px; color: var(--text-muted);">
+        <!-- Industry Selector Pills -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label style="color: white; font-size: 0.85rem; font-weight: 500;">Select Business Demo Industry:</label>
+          <div id="demo-industry-pills" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button type="button" class="billing-toggle-btn active" onclick="switchDemoIndustry('dental')" data-industry="dental" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;">🦷 Dental Clinic</button>
+            <button type="button" class="billing-toggle-btn" onclick="switchDemoIndustry('plumber')" data-industry="plumber" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;">🔧 Professional Plumber</button>
+            <button type="button" class="billing-toggle-btn" onclick="switchDemoIndustry('realestate')" data-industry="realestate" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;">🏠 Real Estate Agent</button>
+            <button type="button" class="billing-toggle-btn" onclick="switchDemoIndustry('restaurant')" data-industry="restaurant" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;">🍔 Restaurant Hosting</button>
+            <button type="button" class="billing-toggle-btn" onclick="switchDemoIndustry('hotel')" data-industry="hotel" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;">🏨 Hotel Reservation</button>
+          </div>
+        </div>
+
+        <!-- Simulated Telephone Screen & Visualizer -->
+        <div class="glass" style="padding: 20px; border-radius: 12px; border: 1px solid var(--border-glass); background: rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; align-items: center; gap: 15px; position: relative;">
+          <!-- Active Phone Connection Banner -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="demo-status-dot" class="live-badge" style="background: #ef4444; border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; color: white;">DISCONNECTED</span>
+            <span id="demo-phone-number" style="font-family: monospace; font-size: 0.9rem; color: white;">+1 (800) 555-VDESK</span>
+          </div>
+
+          <!-- Video Avatar Player -->
+          <video id="demo-avatar-video" style="display: none; width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 2px solid var(--color-primary); box-shadow: 0 0 15px rgba(6, 182, 212, 0.3); background: #000; margin: 10px 0;" playsinline></video>
+
+          <!-- Bouncing Waveform Visualizer -->
+          <div id="demo-waveform" style="display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 50px; width: 100%; margin: 10px 0;">
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+            <div class="wave-bar" style="width: 4px; height: 10px; background: var(--color-primary); border-radius: 2px; transition: height 0.1s ease;"></div>
+          </div>
+
+          <!-- Play / Control bar -->
+          <div style="display: flex; align-items: center; gap: 15px; width: 100%; justify-content: center;">
+            <button type="button" id="btn-demo-play" class="btn btn-primary" onclick="toggleDemoPlayback()" style="border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; box-shadow: 0 0 15px var(--color-primary);">
+              <i data-lucide="play" id="icon-demo-play" style="width: 20px; height: 20px; color: black; fill: black;"></i>
+            </button>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+                <span id="demo-time-elapsed">0:00</span>
+                <span id="demo-time-total">0:00</span>
+              </div>
+              <div style="background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; position: relative; overflow: hidden; cursor: pointer;" onclick="handleDemoProgressClick(event)">
+                <div id="demo-progress-bar" style="background: linear-gradient(90deg, var(--color-primary), var(--color-secondary)); width: 0%; height: 100%; border-radius: 3px; transition: width 0.2s linear;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transcription Dialogue Container -->
+        <div class="glass" style="border: 1px solid var(--border-glass); border-radius: 12px; height: 250px; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: rgba(0, 0, 0, 0.15); scroll-behavior: smooth;" id="demo-transcript-box">
+          <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 20px 0;" id="demo-transcript-empty">
+            Select an industry above and click Play to listen to the call demo.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Subscription Warning Overlay -->
+  <div class="modal-overlay" id="subscription-warning-modal" onclick="if(event.target===this) document.getElementById('subscription-warning-modal').classList.remove('active')" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 450px; text-align: center; display: flex; flex-direction: column; padding: 30px; gap: 20px; align-items: center;" onclick="event.stopPropagation()">
+      <div style="width: 64px; height: 64px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+        <i data-lucide="lock" style="width: 30px; height: 30px; color: #f59e0b;"></i>
+      </div>
+      <div>
+        <h3 id="subscription-warning-title" style="color: white; margin: 0 0 8px 0; font-size: 1.3rem;">Subscription Required</h3>
+        <p id="subscription-warning-message" style="color: var(--text-muted); font-size: 0.9rem; margin: 0; line-height: 1.5;">
+          Please subscribe to this addon module in settings (Step 8: Add Modules) to access this feature.
+        </p>
+      </div>
+      <div style="display: flex; gap: 12px; width: 100%; margin-top: 10px;">
+        <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;" onclick="document.getElementById('subscription-warning-modal').classList.remove('active')">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-warning-subscribe" style="flex: 1; padding: 10px; color: black; font-weight: 600;">Subscribe Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Footer Links Dynamic Info Modal -->
+  <div class="modal-overlay" id="footer-info-modal">
+    <div class="modal-card glass" style="width: 90%; max-width: 650px; max-height: 80vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+        <h3 id="footer-modal-title" style="color: white; margin: 0; font-size: 1.2rem;">VoiceDesk Info</h3>
+        <button class="btn-close" onclick="closeFooterModal()" style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer;"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="footer-modal-body" style="overflow-y: auto; padding: 24px 0 0; color: var(--text-muted); font-size: 0.9rem; line-height: 1.6;">
+        <!-- Dynamic content goes here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTER / SIGN IN SAAS -->
+  <div class="modal-overlay" id="saas-auth-modal" onclick="if(event.target===this) closeAuthModal()" style="z-index: 99999;">
+    <div class="modal-card glass" style="width: 90%; max-width: 420px; padding: 0; overflow: hidden;" onclick="event.stopPropagation()">
+
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15)); padding: 24px 28px 20px; border-bottom: 1px solid var(--border-glass); display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <h3 id="auth-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Sign In to VoiceDesk</h3>
+          <p style="margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted);">Secure access to your AI receptionist</p>
+        </div>
+        <button class="btn-close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
+      </div>
+
+      <!-- Tab Toggles -->
+      <div class="auth-tabs" style="display: flex; border-bottom: 1px solid var(--border-glass);">
+        <div class="auth-tab active" id="auth-tab-login" onclick="toggleAuthTab('login')" style="flex: 1; text-align: center; padding: 12px; cursor: pointer; color: var(--text-muted); font-weight: 500; font-size: 0.9rem; transition: all 0.2s;">Login</div>
+        <div class="auth-tab" id="auth-tab-register" onclick="toggleAuthTab('register')" style="flex: 1; text-align: center; padding: 12px; cursor: pointer; color: var(--text-muted); font-weight: 500; font-size: 0.9rem; transition: all 0.2s;">Create Account</div>
+      </div>
+
+      <!-- FORM: LOGIN -->
+      <form id="form-saas-login" style="padding: 24px 28px;">
+        <!-- Google Sign-In -->
+        <div id="google-signin-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or sign in with email</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+        </div>
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="form-input" required placeholder="e.g. manager@spa.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="login-password" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Password</span>
+            <button type="button" onclick="showForgotPassword()" style="background: none; border: none; color: var(--color-primary); font-size: 0.78rem; cursor: pointer; padding: 0;">Forgot password?</button>
+          </label>
+          <input type="password" id="login-password" class="form-input" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top: 8px;">Log In</button>
+      </form>
+
+      <!-- 2FA Step (hidden until needed) -->
+      <div id="auth-2fa-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="shield-check" style="width: 26px; height: 26px; color: #8b5cf6;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Two-Factor Authentication</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">Enter the 6-digit code from your authenticator app</p>
+        </div>
+        <form id="form-saas-2fa">
+          <input type="text" id="login-2fa-code" class="form-input" placeholder="000 000" maxlength="6" pattern="\d{6}" style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; margin-bottom: 16px;" autocomplete="one-time-code">
+          <button type="submit" class="btn btn-primary btn-block">Verify</button>
+          <button type="button" onclick="document.getElementById('auth-2fa-step').style.display='none'; document.getElementById('form-saas-login').style.display='block';" style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; cursor: pointer; width: 100%; margin-top: 10px;">← Back to Login</button>
+        </form>
+      </div>
+
+      <!-- Forgot Password Step (hidden until needed) -->
+      <div id="auth-forgot-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(6,182,212,0.15); border: 1px solid rgba(6,182,212,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="mail" style="width: 26px; height: 26px; color: #06b6d4;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Reset Password</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">Enter your email and we'll send a reset link</p>
+        </div>
+        <form id="form-forgot-password">
+          <input type="email" id="forgot-email" class="form-input" placeholder="your@email.com" required style="margin-bottom: 16px;" autocomplete="email">
+          <button type="submit" class="btn btn-primary btn-block">Send Reset Link</button>
+          <button type="button" onclick="document.getElementById('auth-forgot-step').style.display='none'; document.getElementById('form-saas-login').style.display='block';" style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; cursor: pointer; width: 100%; margin-top: 10px;">← Back to Login</button>
+        </form>
+      </div>
+
+      <!-- FORM: REGISTER -->
+      <form id="form-saas-register" style="display: none; padding: 24px 28px;">
+        <!-- Google Sign-Up -->
+        <div id="google-signup-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or register with email</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+        </div>
+        <div class="form-group">
+          <label for="reg-name">Your Full Name</label>
+          <input type="text" id="reg-name" class="form-input" required placeholder="e.g. John Doe" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <input type="email" id="reg-email" class="form-input" required placeholder="e.g. manager@spa.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password <span style="color: var(--text-muted); font-size: 0.75rem;">(min. 8 characters)</span></label>
+          <input type="password" id="reg-password" class="form-input" required placeholder="At least 8 characters" minlength="8" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reg-company">Company Name</label>
+          <input type="text" id="reg-company" class="form-input" required placeholder="e.g. Aura Wellness Spa" autocomplete="organization">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Register &amp; Get Started</button>
+      </form>
+      
+      <!-- FORM: ACCEPT INVITATION -->
+      <div id="auth-invite-step" style="display: none; padding: 24px 28px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: rgba(6,182,212,0.15); border: 1px solid rgba(6,182,212,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
+            <i data-lucide="user-plus" style="width: 26px; height: 26px; color: #06b6d4;"></i>
+          </div>
+          <h4 style="color: white; margin: 0 0 6px; font-size: 1.1rem;">Accept Workspace Invitation</h4>
+          <p id="invite-welcome-text" style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">You have been invited to join a workspace.</p>
+        </div>
+        
+        <!-- Google Sign-In for Invite Acceptance -->
+        <div id="google-invite-signin-btn" style="margin-bottom: 16px; display: flex; justify-content: center;"></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; white-space: nowrap;">or set password to accept</span>
+          <div style="flex: 1; height: 1px; background: var(--border-glass);"></div>
+        </div>
+
+        <form id="form-saas-invite">
+          <div class="form-group">
+            <label for="invite-email">Email Address</label>
+            <input type="email" id="invite-email" class="form-input" disabled style="opacity: 0.7; background: rgba(255,255,255,0.05);">
+          </div>
+          <div class="form-group">
+            <label for="invite-name">Your Full Name</label>
+            <input type="text" id="invite-name" class="form-input" required placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label for="invite-password">Password</label>
+            <input type="password" id="invite-password" class="form-input" required placeholder="Minimum 8 characters" minlength="8">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Accept &amp; Join Workspace</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Standalone Script -->
+  <script src="landing.min.js?v=1.0.0"></script>
+  
+  <script>
+    // Dismiss loading screen once the app has initialised
+    (function() {
+      function dismissLoader() {
+        var el = document.getElementById('app-loading-screen');
+        if (!el) return;
+        el.classList.add('ld-done');
+        setTimeout(function() { el.remove(); }, 400);
+      }
+      window._appReady = dismissLoader;
+      setTimeout(dismissLoader, 8000);
+    })();
+  </script>
+  <script>
+    // Initialize Google Sign-In buttons after GSI loads
+    window.addEventListener('load', () => {
+      const GOOGLE_CLIENT_ID = '24852228544-uv5kqlaque07pt4cq63bks9dj0jjg0ai.apps.googleusercontent.com';
+      function initGoogleButtons() {
+        if (!window.google) return setTimeout(initGoogleButtons, 300);
+        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: window.handleGoogleCredential });
+        const loginBtn = document.getElementById('google-signin-btn');
+        const registerBtn = document.getElementById('google-signup-btn');
+        const inviteBtn = document.getElementById('google-invite-signin-btn');
+        if (loginBtn) google.accounts.id.renderButton(loginBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signin_with' });
+        if (registerBtn) google.accounts.id.renderButton(registerBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
+        if (inviteBtn) google.accounts.id.renderButton(inviteBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
+      }
+      initGoogleButtons();
+    });
+
+    // Show forgot password step
+    window.showForgotPassword = function() {
+      document.getElementById('form-saas-login').style.display = 'none';
+      document.getElementById('auth-forgot-step').style.display = 'block';
+    };
+  </script>
+
+</body>
+</html>

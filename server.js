@@ -358,10 +358,12 @@ app.use((req, res, next) => {
     // Images & fonts: cache 30 days
     res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
   }
-  // Serve the main application directory (public/) for both root and app subdomains
-  express.static(path.join(__dirname, 'public'))(req, res, next);
+  // Serve the main application directory — landing.html is the new index for /
+  express.static(path.join(__dirname, 'public'), { index: 'landing.html' })(req, res, next);
 
 });
+
+
 
 // =============================================================
 // PUBLIC CHECKOUT ENDPOINTS (No Dashboard Auth Required)
@@ -371,6 +373,27 @@ app.use((req, res, next) => {
 app.get('/checkout/:appointmentId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
 });
+
+// =============================================================
+// LANDING / APP PAGE SPLIT
+// / → landing.html (public, ~40KB)
+// /app → app.html (full dashboard, loaded after login)
+// =============================================================
+
+// Serve landing.html explicitly at root so express.static picks it up
+// (express.static will serve landing.html as the default for /)
+
+// Serve the full dashboard app for authenticated users
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+// Catch-all for /app/* SPA routes (e.g. /app?tab=crm)
+app.get('/app/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+
 
 // Fetch checkout details (appointment info & tenant public settings)
 app.get('/api/checkout/:appointmentId', async (req, res) => {
