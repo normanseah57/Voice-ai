@@ -3128,6 +3128,38 @@ function initAuthenticatedSession() {
   try {
     console.log('Initializing authenticated session for tenant:', currentTenant);
     
+    // Sync latest profile details (addon activations and subscription tier) asynchronously on load
+    fetch('/api/profile')
+      .then(res => { if (res.ok) return res.json(); })
+      .then(profile => {
+        if (profile && currentTenant) {
+          currentTenant = { ...currentTenant, ...profile };
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
+          refreshSidebarAddonTabs();
+          updateHeaderUserInfo();
+          
+          // Sync addon checkboxes on settings page if visible
+          const crmToggle = document.getElementById('settings-addon-crm');
+          if (crmToggle) crmToggle.checked = currentTenant.addon_crm === 1;
+          const accountingToggle = document.getElementById('settings-addon-accounting');
+          if (accountingToggle) accountingToggle.checked = currentTenant.addon_accounting === 1;
+          
+          const crmStatus = document.getElementById('addon-crm-status');
+          if (crmStatus) {
+            const active = currentTenant.addon_crm === 1;
+            crmStatus.textContent = active ? 'Status: Active (+$50/mo)' : 'Status: Inactive';
+            crmStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+          const accountingStatus = document.getElementById('addon-accounting-status');
+          if (accountingStatus) {
+            const active = currentTenant.addon_accounting === 1;
+            accountingStatus.textContent = active ? 'Status: Active (+$20/mo)' : 'Status: Inactive';
+            accountingStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+        }
+      })
+      .catch(err => console.error('Failed to sync profile:', err));
+    
     const landingPageContainer = document.getElementById('landing-page-container');
     if (landingPageContainer) landingPageContainer.style.display = 'none';
     const appContainer = document.getElementById('app-container');
@@ -4064,11 +4096,21 @@ document.getElementById('form-stripe-payment').addEventListener('submit', async 
         alert(`Successfully upgraded subscription to the ${selectedUpgradeTier.toUpperCase()} Plan!`);
         window.togglePaymentModal(false);
         if (currentTenant) {
-          currentTenant.subscription_tier = selectedUpgradeTier;
-          currentTenant.billing_cycle = selectedBillingCycle;
+          if (result.tenant) {
+            currentTenant = result.tenant;
+          } else {
+            currentTenant.subscription_tier = selectedUpgradeTier;
+            currentTenant.billing_cycle = selectedBillingCycle;
+            const isPro = ['professional', 'enterprise'].includes(selectedUpgradeTier);
+            currentTenant.addon_crm = isPro ? 1 : 0;
+            currentTenant.addon_accounting = isPro ? 1 : 0;
+          }
+          localStorage.setItem('current_tenant', JSON.stringify(currentTenant));
         }
         fetchBillingDetails();
         fetchOverviewData();
+        refreshSidebarAddonTabs();
+        if (typeof fetchSettings === 'function') fetchSettings();
       } else {
         alert(`Upgrade failed: ${result.error || 'Unknown error'}`);
       }

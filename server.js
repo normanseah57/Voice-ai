@@ -969,7 +969,22 @@ app.get('/api/profile', requireAuth, async (req, res) => {
   try {
     const tenant = await getTenantById(req.tenantId);
     if (!tenant) return res.status(404).json({ error: 'Not found' });
-    res.json({ id: tenant.id, name: tenant.name, email: tenant.email, is_admin: tenant.is_admin });
+    res.json({
+      id: tenant.id,
+      name: tenant.name,
+      email: tenant.email,
+      company_name: tenant.company_name,
+      subscription_tier: tenant.subscription_tier,
+      billing_cycle: tenant.billing_cycle || 'monthly',
+      subscription_status: tenant.subscription_status,
+      is_admin: tenant.is_admin,
+      addon_call_recording: tenant.addon_call_recording || 0,
+      addon_department_routing: tenant.addon_department_routing || 0,
+      addon_whatsapp: tenant.addon_whatsapp || 0,
+      addon_crm: tenant.addon_crm || 0,
+      addon_accounting: tenant.addon_accounting || 0,
+      addon_payment_gateway: tenant.addon_payment_gateway || 0
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1062,7 +1077,8 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
     }
 
     broadcastToDashboard(req.tenantId, 'refresh_crm', {});
-    res.json({ success: true, usage });
+    const tenant = await getTenantById(req.tenantId);
+    res.json({ success: true, usage, tenant });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
