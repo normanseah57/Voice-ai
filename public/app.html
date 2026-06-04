@@ -4136,49 +4136,7 @@
     </div>
   </div>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <!-- Local Script Injection -->
-  <!-- Minified app (355KB vs 488KB) — loaded last so HTML renders first -->
-<script src="app.min.js?v=1.1.4"></script>
-<script>
-  // Dismiss loading screen once the app has initialised
-  (function() {
-    function dismissLoader() {
-      var el = document.getElementById('app-loading-screen');
-      if (!el) return;
-      el.classList.add('ld-done');
-      setTimeout(function() { el.remove(); }, 400);
-    }
-    // Give app.js up to 8s to call window._appReady, then auto-dismiss
-    window._appReady = dismissLoader;
-    setTimeout(dismissLoader, 8000);
-  })();
-</script>
-  <script>
-    // Initialize Google Sign-In buttons after GSI loads
-    window.addEventListener('load', () => {
-      const GOOGLE_CLIENT_ID = '24852228544-uv5kqlaque07pt4cq63bks9dj0jjg0ai.apps.googleusercontent.com';
-      function initGoogleButtons() {
-        if (!window.google) return setTimeout(initGoogleButtons, 300);
-        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: window.handleGoogleCredential });
-        const loginBtn = document.getElementById('google-signin-btn');
-        const registerBtn = document.getElementById('google-signup-btn');
-        const inviteBtn = document.getElementById('google-invite-signin-btn');
-        if (loginBtn) google.accounts.id.renderButton(loginBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signin_with' });
-        if (registerBtn) google.accounts.id.renderButton(registerBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
-        if (inviteBtn) google.accounts.id.renderButton(inviteBtn, { theme: 'filled_black', size: 'large', width: 360, text: 'signup_with' });
-      }
-      initGoogleButtons();
-    });
-
-    // Show forgot password step
-    window.showForgotPassword = function() {
-      document.getElementById('form-saas-login').style.display = 'none';
-      document.getElementById('auth-forgot-step').style.display = 'block';
-    };
-  </script>
 
   <!-- ===== GLOBAL SEARCH COMMAND PALETTE MODAL ===== -->
   <div id="global-search-modal" class="gs-modal-backdrop">
