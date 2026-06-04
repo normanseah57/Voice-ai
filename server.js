@@ -332,7 +332,17 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// =============================================================
+// HEALTH CHECK — Prevents Railway cold starts
+// Railway pings this to keep the server alive
+// =============================================================
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', ts: Date.now() });
+});
+
 // Subdomain Routing Middleware
+
 app.use((req, res, next) => {
   // Disable caching for JS and CSS to ensure clients always get latest code
   // Cache strategy: versioned assets (JS/CSS with ?v=) get long cache
@@ -4712,6 +4722,29 @@ initDb().then(async () => {
       console.error('[Billing System Error] Failed to run automated checks:', err);
     }
   }, 300000); // 5 minutes
+
+  // ── Self-ping keep-alive: prevents Railway cold starts ──
+  // Hits /health every 4 minutes so Railway never sleeps the server
+  const APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+  import('node:https').then(({ default: https }) => {
+    import('node:http').then(({ default: http }) => {
+      setInterval(() => {
+        try {
+          const url = new URL(`${APP_URL}/health`);
+          const mod = url.protocol === 'https:' ? https : http;
+          const req = mod.get({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: '/health', headers: { 'User-Agent': 'VoiceDesk-KeepAlive/1.0' } }, (res) => {
+            res.resume();
+          });
+          req.on('error', () => {}); // silent on network hiccup
+        } catch (_) {}
+      }, 240000); // every 4 minutes
+      console.log(`[Keep-Alive] Self-ping active → ${APP_URL}/health every 4 min`);
+    });
+  });
+
 
 
   // Payment reminder check — runs every hour

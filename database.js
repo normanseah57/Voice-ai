@@ -1150,8 +1150,36 @@ Sales Director
   }
 
   console.log('Multi-Tenant Database schema initialized.');
+
+  // ── Critical performance indexes ──
+  // Without these, every tenant query does a full table scan.
+  // CREATE INDEX IF NOT EXISTS is safe to run on every startup.
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_appointments_tenant ON appointments(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(tenant_id, date)',
+    'CREATE INDEX IF NOT EXISTS idx_calls_tenant ON calls(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_calls_created ON calls(tenant_id, created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_calls_sid ON calls(call_sid)',
+    'CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(tenant_id, phone)',
+    'CREATE INDEX IF NOT EXISTS idx_deals_tenant ON deals(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_activities_tenant ON activities(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tenant_activities_tenant ON tenant_activities(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tenant_activities_created ON tenant_activities(created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON accounting_invoices(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_bills_tenant ON accounting_bills(tenant_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tenant_users_email ON tenant_users(email)',
+    'CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant ON tenant_users(tenant_id)',
+  ];
+  for (const idx of indexes) {
+    try { await run(idx); } catch (e) { /* index already exists */ }
+  }
+  console.log('[DB] Performance indexes verified.');
+
   await logTenantActivity(null, 'registration', 'Voice AI SaaS server booted successfully.');
 };
+
 
 // ==========================================
 // SAAS TENANCY OPERATIONS
