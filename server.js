@@ -335,13 +335,22 @@ app.use(express.urlencoded({ extended: true }));
 // Subdomain Routing Middleware
 app.use((req, res, next) => {
   // Disable caching for JS and CSS to ensure clients always get latest code
-  if (req.url.endsWith('.js') || req.url.endsWith('.css')) {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+  // Cache strategy: versioned assets (JS/CSS with ?v=) get long cache
+  // HTML stays no-cache so users always get fresh page structure
+  const url = req.url.split('?')[0]; // strip query string for extension check
+  if (url.endsWith('.html')) {
+    // HTML: always revalidate
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  } else if (url.endsWith('.js') || url.endsWith('.css')) {
+    // JS/CSS: cache 7 days (versioned via ?v= query string in HTML)
+    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+  } else if (url.match(/\.(png|jpg|jpeg|webp|gif|svg|ico|woff2|woff)$/i)) {
+    // Images & fonts: cache 30 days
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
   }
   // Serve the main application directory (public/) for both root and app subdomains
   express.static(path.join(__dirname, 'public'))(req, res, next);
+
 });
 
 // =============================================================
@@ -4688,7 +4697,7 @@ initDb().then(async () => {
     console.log(`======================================================\n`);
   });
 
-  // Suspension check — runs every 15 seconds
+  // Suspension check — runs every 5 minutes (was 15s — too frequent for DB)
   setInterval(async () => {
     try {
       const suspended = await checkSubscriptionGracePeriodsAndSuspend();
@@ -4702,7 +4711,8 @@ initDb().then(async () => {
     } catch (err) {
       console.error('[Billing System Error] Failed to run automated checks:', err);
     }
-  }, 15000);
+  }, 300000); // 5 minutes
+
 
   // Payment reminder check — runs every hour
   setInterval(async () => {

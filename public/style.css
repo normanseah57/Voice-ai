@@ -4408,3 +4408,99 @@ mark.gs-mark {
   margin-right: 2px;
 }
 
+/* =============================================================
+   MOBILE PERFORMANCE OPTIMISATIONS
+   Backdrop-filter: blur() is the #1 GPU killer on mobile.
+   Replace with solid semi-transparent backgrounds on screens
+   under 768px to eliminate scroll jank and dropped frames.
+   ============================================================= */
+@media (max-width: 768px) {
+  /* Disable ALL backdrop-filter blurs on mobile */
+  .glass,
+  .modal,
+  .modal-content,
+  .sidebar,
+  .header,
+  .card,
+  .price-card,
+  .wizard-sidebar,
+  .wizard-content-panel,
+  .pane-content,
+  .dropdown-menu,
+  .toast,
+  [style*="backdrop-filter"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    /* Compensate with a slightly more opaque background */
+    background-color: rgba(13, 20, 40, 0.97) !important;
+  }
+
+  /* Reduce continuous pulse animations that force repaints */
+  .live-badge,
+  .activity-ping,
+  [class*="pulse"] {
+    animation-duration: 3s !important; /* Slower = fewer repaints */
+  }
+
+  /* Disable non-essential animations entirely on mobile */
+  .flame-pulse,
+  [class*="flame"],
+  [class*="sparkle"] {
+    animation: none !important;
+  }
+
+  /* Reduce motion on hover effects — mobile has no hover */
+  .btn:hover,
+  .menu-item:hover,
+  .card:hover {
+    transform: none !important;
+  }
+
+  /* Ensure sidebar doesn't use heavy effects */
+  .sidebar {
+    background-color: #0d1428 !important;
+  }
+
+  /* Speed up transitions on mobile */
+  * {
+    transition-duration: 0.1s !important;
+  }
+
+  /* Prevent layout thrashing from absolute positioned elements */
+  .pricing-section {
+    padding: 40px 16px !important;
+  }
+
+  #pricing-comparison-table {
+    font-size: 0.78rem !important;
+  }
+}
+
+/* Respect OS-level reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Performance hints: promote animated elements to their own GPU layer */
+.wave-bar,
+.live-badge,
+.activity-ping,
+.modal,
+.sidebar {
+  will-change: transform;
+  transform: translateZ(0); /* Force GPU compositing */
+}
+
+/* Prevent invisible off-screen content from consuming GPU */
+.pane-content:not(.active),
+.wizard-step-pane:not([style*="display: flex"]) {
+  contain: strict;
+}
+
+

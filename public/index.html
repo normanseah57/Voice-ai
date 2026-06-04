@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -7,13 +7,17 @@
   <!-- Google Fonts: Inter and Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Lucide Icons (CDN) -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- SheetJS Library for CSV/XLS/XLSX File Parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- DNS prefetch for Railway API -->
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <!-- Lucide Icons — deferred so it never blocks first render -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <!-- SheetJS Library — deferred, only needed in dashboard -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=1.0.5">
+  <link rel="stylesheet" href="style.css?v=1.0.6">
   <style>
     /* Animated Voice Visualizer Waveform */
     .wave-bar.animate {
@@ -115,7 +119,7 @@
           
           <!-- AI Receptionist Image Display -->
           <div class="hero-image-wrapper" style="width: 100%; max-width: 500px; border-radius: 16px; overflow: hidden; border: 1px solid var(--border-glass); box-shadow: 0 20px 40px rgba(0,0,0,0.5); background: rgba(0,0,0,0.2); padding: 8px; backdrop-filter: blur(10px); margin-top: 10px;">
-            <img src="/ai_receptionist_hero.png" alt="AI Voice Receptionist" style="width: 100%; height: auto; border-radius: 12px; object-fit: cover; display: block;">
+            <img src="/ai_receptionist_hero.png" alt="AI Voice Receptionist" loading="lazy" decoding="async" style="width: 100%; height: auto; border-radius: 12px; object-fit: cover; display: block;">
           </div>
         </div>
       </div>
