@@ -3243,6 +3243,8 @@ function switchSettingsGroup(group) {
     // If current wizard step is one of the hidden steps, switch to Step 2
     if ([1, 11, 12].includes(currentWizardStep)) {
       showWizardStep(2);
+    } else {
+      showWizardStep(currentWizardStep);
     }
   } else {
     if (basicTab) {
@@ -3276,6 +3278,8 @@ function switchSettingsGroup(group) {
     // If current wizard step is not one of the advanced steps, switch to Step 11
     if (![11, 12].includes(currentWizardStep)) {
       showWizardStep(11);
+    } else {
+      showWizardStep(currentWizardStep);
     }
   }
   
