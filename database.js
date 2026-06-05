@@ -1484,6 +1484,11 @@ export const updateTenantSubscription = async (tenant_id, tier, billing_cycle = 
     now.setDate(now.getDate() + daysToAdd);
     nextPaymentDue = now.toISOString();
   }
+
+  // Check if this is an upgrade/first-time purchase or a renewal
+  const tenant = await get('SELECT subscription_tier FROM tenants WHERE id = ?', [tenant_id]);
+  const isUpgradeOrFirstTime = !tenant || tenant.subscription_tier !== tier;
+
   await run(
     'UPDATE tenants SET subscription_tier = ?, billing_cycle = ?, subscription_status = \'active\', next_payment_due = ? WHERE id = ?',
     [tier, cycle, nextPaymentDue, tenant_id]
@@ -1492,19 +1497,34 @@ export const updateTenantSubscription = async (tenant_id, tier, billing_cycle = 
   // Log billing event
   let amount = 0.0;
   if (tier === 'starter') {
-    amount = cycle === 'annual' ? (79 * 12) + 1000 : 99 + 1000;
+    amount = cycle === 'annual' ? (79 * 12) : 99;
+    if (isUpgradeOrFirstTime) {
+      amount += 1000;
+    }
   } else if (tier === 'professional') {
-    amount = cycle === 'annual' ? (799 * 12) + 5000 : 999 + 5000;
+    amount = cycle === 'annual' ? (799 * 12) : 999;
+    if (isUpgradeOrFirstTime) {
+      amount += 5000;
+    }
   } else if (tier === 'enterprise') {
     amount = cycle === 'annual' ? 24000 : 2500;
   }
+
   if (amount > 0) {
-    await logPlatformBillingEvent(tenant_id, amount, 'subscription_upgrade', `Upgraded to ${tier.toUpperCase()} plan (${cycle.toUpperCase()})`);
+    const eventType = isUpgradeOrFirstTime ? 'subscription_upgrade' : 'subscription_renewal';
+    const eventDesc = isUpgradeOrFirstTime 
+      ? `Upgraded to ${tier.toUpperCase()} plan (${cycle.toUpperCase()})`
+      : `Renewed ${tier.toUpperCase()} plan (${cycle.toUpperCase()})`;
+    await logPlatformBillingEvent(tenant_id, amount, eventType, eventDesc);
   }
 
-  await logTenantActivity(tenant_id, 'billing_upgrade', `Upgraded subscription plan to ${tier.toUpperCase()} (${cycle.toUpperCase()})`);
+  const activityMsg = isUpgradeOrFirstTime
+    ? `Upgraded subscription plan to ${tier.toUpperCase()} (${cycle.toUpperCase()})`
+    : `Renewed subscription plan ${tier.toUpperCase()} (${cycle.toUpperCase()})`;
+  await logTenantActivity(tenant_id, 'billing_upgrade', activityMsg);
   return getTenantUsage(tenant_id);
 };
+
 
 // ==========================================
 // SCOPED SETTINGS
