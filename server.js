@@ -411,6 +411,28 @@ app.get('/api/checkout/:appointmentId', async (req, res) => {
     }
 
     const settings = await getSettings(appointment.tenant_id);
+    const isStripe = settings.payment_gateway_provider === 'stripe';
+    let clientSecret = '';
+    let paymentIntentId = '';
+
+    if (isStripe && settings.stripe_secret_key) {
+      try {
+        const stripeInstance = new Stripe(settings.stripe_secret_key);
+        const amountCents = Math.round((appointment.price || 80) * 100);
+        
+        // Create a PaymentIntent with card and paynow enabled (requires SGD currency for paynow)
+        const paymentIntent = await stripeInstance.paymentIntents.create({
+          amount: amountCents,
+          currency: 'sgd',
+          payment_method_types: ['card', 'paynow']
+        });
+        clientSecret = paymentIntent.client_secret;
+        paymentIntentId = paymentIntent.id;
+      } catch (stripeErr) {
+        console.error('Error creating Stripe PaymentIntent:', stripeErr);
+      }
+    }
+
     res.json({
       id: appointment.id,
       customer_name: appointment.customer_name,
@@ -422,12 +444,63 @@ app.get('/api/checkout/:appointmentId', async (req, res) => {
       payment_status: appointment.payment_status || 'unpaid',
       company_name: settings.company_name || 'Our Business',
       payment_gateway_provider: settings.payment_gateway_provider || 'sandbox',
-      stripe_publishable_key: settings.payment_gateway_provider === 'stripe' ? settings.stripe_publishable_key : ''
+      stripe_publishable_key: isStripe ? settings.stripe_publishable_key : '',
+      client_secret: clientSecret,
+      payment_intent_id: paymentIntentId
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Securely confirm payment from Stripe and update database
+app.post('/api/checkout/:appointmentId/confirm-payment', async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const { paymentIntentId } = req.body;
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'paymentIntentId is required' });
+    }
+
+    const appointment = await getAppointmentById(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    if (appointment.payment_status === 'paid') {
+      return res.json({ success: true, status: 'paid' });
+    }
+
+    const settings = await getSettings(appointment.tenant_id);
+    if (settings.payment_gateway_provider === 'stripe') {
+      const stripeInstance = new Stripe(settings.stripe_secret_key);
+      const paymentIntent = await stripeInstance.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status === 'succeeded') {
+        await updateAppointmentPaymentStatus(appointment.tenant_id, appointment.id, 'paid');
+        
+        // Find and update matching Kanban Deal
+        try {
+          const deal = await get('SELECT id FROM kanban_deals WHERE appointment_id = ?', [appointment.id]);
+          if (deal) {
+            await run('UPDATE kanban_deals SET stage = \'won\' WHERE id = ?', [deal.id]);
+          }
+        } catch (dealErr) {
+          console.error('Error auto-winning deal on Stripe confirm:', dealErr);
+        }
+        
+        return res.json({ success: true, status: 'paid' });
+      } else {
+        return res.status(400).json({ error: `Payment not completed. Status: ${paymentIntent.status}` });
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid payment provider' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Process public checkout payment
 app.post('/api/checkout/:appointmentId/pay', async (req, res) => {

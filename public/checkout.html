@@ -581,7 +581,7 @@
     let appointmentId = '';
     let appointmentData = null;
     let stripe = null;
-    let stripeCardElement = null;
+    let stripeElements = null;
 
     // Extract appointment ID from pathname URL
     function parseAppointmentId() {
@@ -599,6 +599,43 @@
       if (!appointmentId) {
         showInitialError('Invalid checkout URL. Missing booking reference ID.');
         return;
+      }
+
+      // Check if we are returning from a Stripe redirect
+      const urlParams = new URLSearchParams(window.location.search);
+      const paymentIntentId = urlParams.get('payment_intent');
+      if (paymentIntentId) {
+        // Show loader saying "Verifying payment confirmation..."
+        document.getElementById('initial-loader').classList.remove('hidden');
+        document.getElementById('checkout-grid').classList.add('hidden');
+        document.querySelector('#initial-loader p').innerText = 'Confirming your transaction with Stripe...';
+        
+        try {
+          const res = await fetch(`/api/checkout/${appointmentId}/confirm-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentIntentId })
+          });
+          const result = await res.json();
+          if (res.ok && result.success) {
+            // Show Success view directly!
+            document.getElementById('initial-loader').classList.add('hidden');
+            document.getElementById('success-panel').classList.remove('hidden');
+            
+            // Set values on success screen
+            document.getElementById('success-custname').innerText = urlParams.get('cust_name') || 'Customer';
+            document.getElementById('success-amount').innerText = urlParams.get('amount') ? `$${parseFloat(urlParams.get('amount')).toFixed(2)}` : 'Paid';
+            document.getElementById('success-ref').innerText = `#BK-${appointmentId}`;
+            lucide.createIcons();
+            return;
+          } else {
+            throw new Error(result.error || 'Payment confirmation failed.');
+          }
+        } catch (err) {
+          console.error(err);
+          showInitialError('Payment confirmation failed. ' + err.message);
+          return;
+        }
       }
 
       try {
@@ -642,8 +679,8 @@
       // Check payment gateway provider
       const provider = data.payment_gateway_provider || 'sandbox';
       if (provider === 'stripe') {
-        document.getElementById('gateway-notice-text').innerText = 'Payments are securely processed via Stripe.';
-        setupStripe(data.stripe_publishable_key);
+        document.getElementById('gateway-notice-text').innerText = 'Payments are securely processed via Stripe (Supports Cards & PayNow).';
+        setupStripe(data.stripe_publishable_key, data.client_secret);
       } else {
         document.getElementById('gateway-notice-text').innerText = 'Simulated sandbox environment active.';
         document.getElementById('initial-loader').classList.add('hidden');
@@ -651,9 +688,13 @@
       }
     }
 
-    function setupStripe(publishableKey) {
+    function setupStripe(publishableKey, clientSecret) {
       if (!publishableKey) {
         showInitialError('Merchant Stripe Publishable Key is not configured.');
+        return;
+      }
+      if (!clientSecret) {
+        showInitialError('Unable to create payment session client secret.');
         return;
       }
 
@@ -663,27 +704,28 @@
       stripeScript.onload = () => {
         try {
           stripe = Stripe(publishableKey);
-          const elements = stripe.elements();
           
-          // Premium glassmorphic styling mapping for Stripe Card Element
-          const style = {
-            base: {
-              color: '#f8fafc',
-              fontFamily: "'Inter', sans-serif",
-              fontSmoothing: 'antialiased',
-              fontSize: '14px',
-              '::placeholder': {
-                color: '#94a3b8'
+          // Configure options with clientSecret and night theme matching branding
+          const options = {
+            clientSecret,
+            appearance: {
+              theme: 'night',
+              variables: {
+                colorPrimary: '#06b6d4',
+                colorBackground: 'rgba(255, 255, 255, 0.02)',
+                colorText: '#f8fafc',
+                colorDanger: '#ef4444',
+                fontFamily: "'Inter', sans-serif",
+                borderRadius: '10px',
               }
-            },
-            invalid: {
-              color: '#ef4444',
-              iconColor: '#ef4444'
             }
           };
 
-          stripeCardElement = elements.create('card', { style });
-          stripeCardElement.mount('#stripe-card-element');
+          stripeElements = stripe.elements(options);
+          
+          // Create and mount Payment Element supporting Card + PayNow
+          const paymentElement = stripeElements.create('payment');
+          paymentElement.mount('#stripe-card-element');
 
           // Swap form views
           document.getElementById('sandbox-fields').classList.add('hidden');
@@ -723,50 +765,45 @@
 
       try {
         const provider = appointmentData.payment_gateway_provider || 'sandbox';
-        let body = {};
-
+        
         if (provider === 'stripe') {
-          // 1. Submit card details directly to Stripe, fetching paymentMethodId
-          const cardName = document.getElementById('cust-name').value;
-          const { paymentMethod, error } = await stripe.createPaymentMethod({
-            type: 'card',
-            card: stripeCardElement,
-            billing_details: {
-              name: cardName
-            }
+          // Confirm payment using Stripe Elements (handles Card and PayNow redirection/QR code)
+          const { error } = await stripe.confirmPayment({
+            elements: stripeElements,
+            confirmParams: {
+              return_url: `${window.location.origin}/checkout/${appointmentId}?cust_name=${encodeURIComponent(appointmentData.customer_name)}&amount=${appointmentData.price}`,
+            },
           });
 
           if (error) {
             throw new Error(error.message);
           }
-
-          body = { paymentMethodId: paymentMethod.id };
         } else {
-          // Sandbox inputs validation (already done by HTML5 validation, but check values just in case)
+          // Sandbox inputs validation
           const number = document.getElementById('sb-cardnumber').value.replace(/\s+/g, '');
           if (number.length < 13) {
             throw new Error('Please enter a valid credit card number.');
           }
+
+          // Submit payment method to sandbox checkout api
+          const payResponse = await fetch(`/api/checkout/${appointmentId}/pay`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+          });
+
+          const payResult = await payResponse.json();
+          if (!payResponse.ok) {
+            throw new Error(payResult.error || 'Payment transaction rejected.');
+          }
+
+          // Show Success view
+          document.getElementById('checkout-grid').classList.add('hidden');
+          document.getElementById('success-panel').classList.remove('hidden');
+          lucide.createIcons();
         }
-
-        // 2. Submit payment method or simulator triggers to local pay endpoint
-        const payResponse = await fetch(`/api/checkout/${appointmentId}/pay`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(body)
-        });
-
-        const payResult = await payResponse.json();
-        if (!payResponse.ok) {
-          throw new Error(payResult.error || 'Payment transaction rejected.');
-        }
-
-        // 3. Show Success view
-        document.getElementById('checkout-grid').classList.add('hidden');
-        document.getElementById('success-panel').classList.remove('hidden');
-        lucide.createIcons();
       } catch (err) {
         console.error('Payment Error:', err);
         errorMessage.innerText = err.message || 'Payment processing encountered an error.';
