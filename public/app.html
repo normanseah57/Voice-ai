@@ -1546,6 +1546,19 @@
                             <input type="password" id="settings-stripe-sec-key" class="form-input" placeholder="sk_test_..." style="font-size: 0.8rem; padding: 8px 12px;">
                           </div>
                         </div>
+                        
+                        <!-- Booking Payment Collection Method -->
+                        <div id="booking-payment-method-config" style="border-top: 1px solid var(--border-glass); padding-top: 15px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                          <label for="settings-booking-payment-method" style="font-size: 0.8rem; color: #94a3b8; font-weight: 600;">Booking Payment Mode</label>
+                          <select id="settings-booking-payment-method" class="form-input" style="font-size: 0.8rem; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white;">
+                            <option value="upfront">Method 1: Upfront Deposit/Full Payment Required</option>
+                            <option value="post_service">Method 2: Pay Later / Settle Bill Post-Service</option>
+                          </select>
+                          <span style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
+                            <strong>Upfront</strong>: Customers must pay online immediately to confirm their booking.<br>
+                            <strong>Pay Later</strong>: Bookings are confirmed for free; you charge their cards/PayNow post-service.
+                          </span>
+                        </div>
                       </div>
 
                     </div>

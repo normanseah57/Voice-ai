@@ -2466,6 +2466,10 @@ async function fetchSettings() {
     if (settingsStripeSecKey) {
       settingsStripeSecKey.value = settings.stripe_secret_key || '';
     }
+    const bookingPaymentMethodSelect = document.getElementById('settings-booking-payment-method');
+    if (bookingPaymentMethodSelect) {
+      bookingPaymentMethodSelect.value = settings.booking_payment_method || 'upfront';
+    }
     
     const host = window.location.origin;
     webhookCopyUrl.textContent = `${host}/incoming-call`;
@@ -3006,6 +3010,7 @@ async function saveWizardSettings(silent = false) {
     stripe_secret_key: settingsStripeSecKey ? settingsStripeSecKey.value.trim() : '',
     max_call_duration: settingsMaxDuration ? parseInt(settingsMaxDuration.value) : 10,
     max_no_speech_timeout: settingsSilenceTimeout ? parseInt(settingsSilenceTimeout.value) : 30,
+    booking_payment_method: document.getElementById('settings-booking-payment-method') ? document.getElementById('settings-booking-payment-method').value : 'upfront',
     website_url: settingsWebsiteUrl ? settingsWebsiteUrl.value.trim() : ''
   };
 

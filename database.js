@@ -365,13 +365,20 @@ export const initDb = async () => {
       website_url TEXT,
       crawled_content TEXT,
       openai_api_key TEXT DEFAULT NULL,
+      booking_payment_method TEXT DEFAULT 'upfront',
       FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     )
   `);
 
-  // Ensure openai_api_key column exists on older databases (migration guard)
+  // Ensure columns exist on older databases (migration guard)
   try {
     await run('ALTER TABLE settings ADD COLUMN openai_api_key TEXT DEFAULT NULL');
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+
+  try {
+    await run('ALTER TABLE settings ADD COLUMN booking_payment_method TEXT DEFAULT \'upfront\'');
   } catch (e) {
     // Column already exists — safe to ignore
   }
@@ -1566,7 +1573,8 @@ export const getSettings = async (tenant_id) => {
       max_call_duration: 10,
       max_no_speech_timeout: 30,
       website_url: '',
-      crawled_content: ''
+      crawled_content: '',
+      booking_payment_method: 'upfront'
     };
   }
   return {
@@ -1592,6 +1600,7 @@ export const getSettings = async (tenant_id) => {
     max_no_speech_timeout: r.max_no_speech_timeout !== null && r.max_no_speech_timeout !== undefined ? r.max_no_speech_timeout : 30,
     website_url: r.website_url || '',
     crawled_content: r.crawled_content || '',
+    booking_payment_method: r.booking_payment_method || 'upfront',
     openai_api_key: decryptField(r.openai_api_key || '')
   };
 };
@@ -1627,9 +1636,9 @@ export const updateSettings = async (tenant_id, settingsObj) => {
       working_hours, break_periods, appointment_gap, system_mode,
       payment_gateway_provider, stripe_publishable_key, stripe_secret_key,
       max_call_duration, max_no_speech_timeout,
-      website_url, crawled_content, openai_api_key
+      website_url, crawled_content, openai_api_key, booking_payment_method
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     tenant_id,
     settingsObj.company_name,
@@ -1654,7 +1663,8 @@ export const updateSettings = async (tenant_id, settingsObj) => {
     settingsObj.max_no_speech_timeout !== undefined && settingsObj.max_no_speech_timeout !== null ? parseInt(settingsObj.max_no_speech_timeout) : 30,
     settingsObj.website_url || '',
     settingsObj.crawled_content || '',
-    encryptedKey
+    encryptedKey,
+    settingsObj.booking_payment_method || 'upfront'
   ]);
   await logTenantActivity(tenant_id, 'settings_update', `AI settings updated (Receptionist: "${settingsObj.agent_name || 'Aura'}", Voice: "${settingsObj.voice || 'alloy'}", Accent: "${settingsObj.voice_accent || 'default'}")`);
   return getSettings(tenant_id);
