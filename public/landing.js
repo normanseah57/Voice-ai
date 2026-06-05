@@ -1106,7 +1106,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const email = document.getElementById('reg-email').value.trim();
       const password = document.getElementById('reg-password').value;
       const companyName = document.getElementById('reg-company').value.trim();
-      const referredBy = localStorage.getItem('referred_by') || null;
+      const manualRefCode = document.getElementById('reg-referred-by')?.value.trim();
+      const referredBy = manualRefCode || localStorage.getItem('referred_by') || null;
       const btn = e.target.querySelector('button[type="submit"]');
       if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
     
