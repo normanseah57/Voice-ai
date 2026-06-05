@@ -987,6 +987,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof window._appReady === 'function') window._appReady();
   
   const urlParams = new URLSearchParams(window.location.search);
+  const refCode = urlParams.get('ref') || urlParams.get('referral');
+  if (refCode) {
+    localStorage.setItem('referred_by', refCode.trim());
+  }
   const inviteToken = urlParams.get('invite_token');
   if (inviteToken) {
     window.activeInviteToken = inviteToken;
@@ -1102,6 +1106,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const email = document.getElementById('reg-email').value.trim();
       const password = document.getElementById('reg-password').value;
       const companyName = document.getElementById('reg-company').value.trim();
+      const referredBy = localStorage.getItem('referred_by') || null;
       const btn = e.target.querySelector('button[type="submit"]');
       if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
     
@@ -1109,7 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, companyName })
+          body: JSON.stringify({ name, email, password, companyName, referredBy })
         });
         const data = await response.json();
         if (response.ok && data.success) {
@@ -1211,7 +1216,8 @@ window.handleGoogleCredential = async function(response) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         credential: response.credential,
-        inviteToken: window.activeInviteToken || null
+        inviteToken: window.activeInviteToken || null,
+        referredBy: localStorage.getItem('referred_by') || null
       })
     });
     const data = await res.json();

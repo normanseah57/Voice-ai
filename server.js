@@ -194,7 +194,19 @@ import {
   decryptField,
   run,
   all,
-  get
+  get,
+
+  // Affiliate imports
+  createAffiliate,
+  authenticateAffiliate,
+  getAffiliateByTenantId,
+  getAffiliateByCode,
+  getAffiliateById,
+  getAffiliateStats,
+  getAffiliateEarningsList,
+  getAffiliateReferralsList,
+  getAllAffiliatePayoutsForAdmin,
+  updatePayoutStatus
 } from './database.js';
 
 import Stripe from 'stripe';
@@ -778,12 +790,12 @@ async function provisionOpenAIProject(tenantId, tenantName, companyName) {
 
 
 app.post('/api/auth/register', signupLimiter, async (req, res) => {
-  const { name, email, password, companyName } = req.body;
+  const { name, email, password, companyName, referredBy } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
   }
   try {
-    const tenant = await registerTenant({ name, email, password, company_name: companyName });
+    const tenant = await registerTenant({ name, email, password, company_name: companyName, referredBy });
 
     // Auto-provision OpenAI project in background — non-blocking so signup is instant
     provisionOpenAIProject(tenant.id, name, companyName).catch(e =>
@@ -878,7 +890,7 @@ app.post('/api/auth/login/2fa', async (req, res) => {
 
 // Google OAuth Sign-In
 app.post('/api/auth/google', async (req, res) => {
-  const { credential, inviteToken } = req.body;
+  const { credential, inviteToken, referredBy } = req.body;
   if (!credential) return res.status(400).json({ error: 'Google credential required.' });
   try {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
@@ -922,7 +934,7 @@ app.post('/api/auth/google', async (req, res) => {
         totp_enabled: false
       };
     } else {
-      tenant = await findOrCreateGoogleUser({ googleId, email, name });
+      tenant = await findOrCreateGoogleUser({ googleId, email, name, referredBy });
     }
 
     if (tenant.subscription_status === 'suspended') {
@@ -1154,6 +1166,30 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
 
     const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
 
+    // Affiliate Commission credit check
+    if (tenant.referred_by_affiliate_id && cycle === 'annual') {
+      try {
+        const existingEarning = await get('SELECT id FROM affiliate_earnings WHERE referred_tenant_id = ?', [tenant.id]);
+        if (!existingEarning) {
+          let basePrice = 0;
+          if (tier === 'starter') basePrice = 79 * 12;
+          else if (tier === 'professional') basePrice = 799 * 12;
+          else if (tier === 'enterprise') basePrice = 24000;
+
+          if (basePrice > 0) {
+            const commission = basePrice * 0.30;
+            await run(`
+              INSERT INTO affiliate_earnings (affiliate_id, referred_tenant_id, amount, commission_rate, payment_amount, status)
+              VALUES (?, ?, ?, 0.30, ?, 'pending')
+            `, [tenant.referred_by_affiliate_id, tenant.id, commission, basePrice]);
+            console.log(`[Affiliate] Commission of $${commission} generated for Affiliate ID ${tenant.referred_by_affiliate_id} from Tenant ID ${tenant.id}`);
+          }
+        }
+      } catch (affErr) {
+        console.error('[Affiliate Error] Failed to process commission:', affErr.message);
+      }
+    }
+
     // Auto-enable CRM & Accounting for Pro/Enterprise; disable for lower tiers
     await autoEnableAddonsForTier(req.tenantId, tier);
 
@@ -1235,6 +1271,184 @@ app.get('/api/network-ip', (req, res) => {
 // Expose the public Twilio demo phone number for the landing page
 app.get('/api/demo-number', (req, res) => {
   res.json({ number: process.env.TWILIO_PHONE_NUMBER || '+1 (520) 353-8181' });
+});
+
+// =============================================================
+// AFFILIATE SYSTEM ENDPOINTS & MIDDLEWARE
+// =============================================================
+
+async function resolveAffiliateSession(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ error: 'Authentication required.' });
+
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded.affiliateId) {
+        req.affiliateId = decoded.affiliateId;
+        return next();
+      } else if (decoded.tenantId) {
+        const affiliate = await getAffiliateByTenantId(decoded.tenantId);
+        if (!affiliate) {
+          return res.status(404).json({ error: 'Not registered as an affiliate.' });
+        }
+        req.affiliateId = affiliate.id;
+        req.tenantId = decoded.tenantId;
+        return next();
+      }
+      return res.status(401).json({ error: 'Invalid token payload.' });
+    } catch (err) {
+      return res.status(401).json({ error: 'Session expired.' });
+    }
+  }
+  return res.status(401).json({ error: 'Invalid token scheme.' });
+}
+
+// Public affiliate registration (for external referrals)
+app.post('/api/affiliate/register', async (req, res) => {
+  const { name, email, password, affiliateCode, paypalEmail } = req.body;
+  if (!name || !email || !password || !affiliateCode) {
+    return res.status(400).json({ error: 'Name, email, password, and custom referral code are required.' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const affiliate = await createAffiliate({
+      tenant_id: null,
+      name,
+      email,
+      password_hash: passwordHash,
+      affiliate_code: affiliateCode.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+      paypal_email: paypalEmail || ''
+    });
+    
+    res.json({ success: true, affiliate });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Public affiliate login
+app.post('/api/affiliate/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
+  
+  try {
+    const affiliate = await authenticateAffiliate(email, password);
+    const token = jwt.sign({ affiliateId: affiliate.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({
+      success: true,
+      token,
+      affiliate: {
+        id: affiliate.id,
+        name: affiliate.name,
+        email: affiliate.email,
+        affiliate_code: affiliate.affiliate_code,
+        paypal_email: affiliate.paypal_email
+      }
+    });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+// Tenant joins affiliate program
+app.post('/api/affiliate/join-tenant', requireAuth, async (req, res) => {
+  const { affiliateCode, paypalEmail } = req.body;
+  if (!affiliateCode) return res.status(400).json({ error: 'Referral code is required.' });
+  
+  try {
+    const tenant = await getTenantById(req.tenantId);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
+
+    // Check if already registered
+    const existing = await getAffiliateByTenantId(req.tenantId);
+    if (existing) {
+      return res.status(400).json({ error: 'This workspace is already registered as an affiliate.' });
+    }
+
+    const dummyPassword = crypto.randomBytes(16).toString('hex');
+    const dummyHash = await bcrypt.hash(dummyPassword, 12);
+
+    const affiliate = await createAffiliate({
+      tenant_id: req.tenantId,
+      name: tenant.name,
+      email: tenant.email,
+      password_hash: dummyHash,
+      affiliate_code: affiliateCode.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+      paypal_email: paypalEmail || ''
+    });
+
+    res.json({ success: true, affiliate });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get affiliate profile details for logged in tenant
+app.get('/api/affiliate/tenant-profile', requireAuth, async (req, res) => {
+  try {
+    const affiliate = await getAffiliateByTenantId(req.tenantId);
+    if (!affiliate) {
+      return res.status(404).json({ error: 'Not registered as an affiliate.' });
+    }
+    res.json({ success: true, affiliate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get affiliate stats (Unified)
+app.get('/api/affiliate/stats', resolveAffiliateSession, async (req, res) => {
+  try {
+    const stats = await getAffiliateStats(req.affiliateId);
+    const affiliate = await getAffiliateById(req.affiliateId);
+    res.json({
+      success: true,
+      stats,
+      affiliateCode: affiliate.affiliate_code,
+      paypalEmail: affiliate.paypal_email
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get affiliate earnings list (Unified)
+app.get('/api/affiliate/earnings', resolveAffiliateSession, async (req, res) => {
+  try {
+    const earnings = await getAffiliateEarningsList(req.affiliateId);
+    const referrals = await getAffiliateReferralsList(req.affiliateId);
+    res.json({ success: true, earnings, referrals });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin get all payouts
+app.get('/api/admin/affiliate-payouts', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const payouts = await getAllAffiliatePayoutsForAdmin();
+    res.json({ success: true, payouts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin update payout status
+app.post('/api/admin/affiliate-payouts/:id/status', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  if (!['pending', 'paid', 'cancelled'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid payout status.' });
+  }
+  try {
+    const result = await updatePayoutStatus(parseInt(id), status);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // =============================================================

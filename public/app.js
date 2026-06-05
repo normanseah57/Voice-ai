@@ -328,6 +328,8 @@ function switchTab(tabId) {
   } else if (tabId === 'billing') {
     fetchBillingDetails();
     loadNotificationPhone();
+  } else if (tabId === 'affiliate') {
+    fetchAffiliateData();
   } else if (tabId === 'services') {
     fetchServicesCatalog();
   } else if (tabId === 'accounting') {
@@ -4575,13 +4577,15 @@ window.switchAdminSubtab = function(tabName) {
   const tabOverview = document.getElementById('admin-subtab-overview');
   const tabFinance  = document.getElementById('admin-subtab-finance');
   const tabPH       = document.getElementById('admin-subtab-purchase-history');
+  const tabPayouts  = document.getElementById('admin-subtab-payouts');
   const paneOverview = document.getElementById('admin-subpane-overview-container');
   const paneFinance  = document.getElementById('admin-subpane-finance-container');
   const panePH       = document.getElementById('admin-subpane-purchase-history-container');
+  const panePayouts  = document.getElementById('admin-subpane-payouts-container');
 
   // Hide all sub-panes and deactivate all tabs
-  [paneOverview, paneFinance, panePH].forEach(p => { if (p) p.style.display = 'none'; });
-  [tabOverview, tabFinance, tabPH].forEach(t => {
+  [paneOverview, paneFinance, panePH, panePayouts].forEach(p => { if (p) p.style.display = 'none'; });
+  [tabOverview, tabFinance, tabPH, tabPayouts].forEach(t => {
     if (t) { t.classList.remove('active'); t.style.color = 'var(--text-muted)'; }
   });
 
@@ -4596,6 +4600,10 @@ window.switchAdminSubtab = function(tabName) {
     if (tabPH) { tabPH.classList.add('active'); tabPH.style.color = 'white'; }
     if (panePH) panePH.style.display = 'flex';
     populatePurchaseHistoryTenantSelect();
+  } else if (tabName === 'payouts') {
+    if (tabPayouts) { tabPayouts.classList.add('active'); tabPayouts.style.color = 'white'; }
+    if (panePayouts) panePayouts.style.display = 'flex';
+    window.loadAdminPayoutsData();
   }
 };
 
@@ -11795,5 +11803,283 @@ if (document.readyState === 'loading') {
 } else {
   initGlobalSearch();
 }
+
+// =============================================================
+// AFFILIATE MARKETING MODULE FRONTEND
+// =============================================================
+
+async function fetchAffiliateData() {
+  const onboardingView = document.getElementById('affiliate-onboarding-view');
+  const activeView = document.getElementById('affiliate-active-view');
+  if (!onboardingView || !activeView) return;
+
+  try {
+    const res = await fetch('/api/affiliate/tenant-profile');
+    if (res.status === 404) {
+      // Not registered yet
+      onboardingView.style.display = 'block';
+      activeView.style.display = 'none';
+      
+      // Proactively pre-fill the affiliate code suggestions
+      const codeInput = document.getElementById('join-affiliate-code');
+      if (codeInput && currentTenant) {
+        // Suggest clean slug based on company name
+        const cleanSlug = (currentTenant.company_name || currentTenant.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '')
+          .slice(0, 20);
+        codeInput.value = cleanSlug;
+      }
+      const paypalInput = document.getElementById('join-affiliate-paypal');
+      if (paypalInput && currentTenant) {
+        paypalInput.value = currentTenant.email;
+      }
+      return;
+    }
+    
+    if (!res.ok) throw new Error('Failed to load affiliate profile.');
+
+    const data = await res.json();
+    const affiliate = data.affiliate;
+
+    // Show active dashboard
+    onboardingView.style.display = 'none';
+    activeView.style.display = 'flex';
+
+    // Set referral link display
+    const linkDisplay = document.getElementById('affiliate-link-display');
+    if (linkDisplay) {
+      linkDisplay.value = `${window.location.origin}/landing.html?ref=${affiliate.affiliate_code}`;
+    }
+
+    // Load stats and earnings lists
+    await refreshAffiliateStats();
+
+  } catch (err) {
+    console.error('[Affiliate Load Error]', err);
+    showToast('Affiliate Error', 'Could not load your affiliate profile status.', 'error');
+  }
+}
+window.fetchAffiliateData = fetchAffiliateData;
+
+async function refreshAffiliateStats() {
+  try {
+    const statsRes = await fetch('/api/affiliate/stats');
+    if (!statsRes.ok) throw new Error('Failed to load affiliate stats.');
+    const statsData = await statsRes.json();
+    const stats = statsData.stats;
+
+    // Update stats elements
+    document.getElementById('affiliate-stat-earned').textContent = `S$${parseFloat(stats.total_earned).toFixed(2)}`;
+    document.getElementById('affiliate-stat-pending').textContent = `S$${parseFloat(stats.pending_payouts).toFixed(2)}`;
+    document.getElementById('affiliate-stat-paid').textContent = `S$${parseFloat(stats.paid_payouts).toFixed(2)}`;
+    document.getElementById('affiliate-stat-signups').textContent = stats.referred_signups;
+
+    // Load earnings history and referrals
+    const listRes = await fetch('/api/affiliate/earnings');
+    if (!listRes.ok) throw new Error('Failed to load earnings records.');
+    const listData = await listRes.json();
+
+    // Render Referred Signups Table
+    const refTbody = document.getElementById('affiliate-referrals-tbody');
+    const refEmpty = document.getElementById('affiliate-referrals-empty');
+    if (refTbody) {
+      refTbody.innerHTML = '';
+      if (listData.referrals && listData.referrals.length > 0) {
+        if (refEmpty) refEmpty.style.display = 'none';
+        listData.referrals.forEach(ref => {
+          const row = document.createElement('tr');
+          const planText = ref.subscription_tier.charAt(0).toUpperCase() + ref.subscription_tier.slice(1);
+          const cycleText = ref.billing_cycle.charAt(0).toUpperCase() + ref.billing_cycle.slice(1);
+          row.innerHTML = `
+            <td><strong>${escapeHtml(ref.company_name || ref.name)}</strong></td>
+            <td><span class="lead-stage-pill subscriber">${planText}</span></td>
+            <td>${cycleText}</td>
+            <td>${new Date(ref.signup_date).toLocaleDateString()}</td>
+          `;
+          refTbody.appendChild(row);
+        });
+      } else {
+        if (refEmpty) refEmpty.style.display = 'block';
+      }
+    }
+
+    // Render Earnings Table
+    const earnTbody = document.getElementById('affiliate-earnings-tbody');
+    const earnEmpty = document.getElementById('affiliate-earnings-empty');
+    if (earnTbody) {
+      earnTbody.innerHTML = '';
+      if (listData.earnings && listData.earnings.length > 0) {
+        if (earnEmpty) earnEmpty.style.display = 'none';
+        listData.earnings.forEach(earn => {
+          const row = document.createElement('tr');
+          const statusClass = earn.status === 'paid' ? 'status-dot green' : 'status-dot yellow';
+          const statusLabel = earn.status.charAt(0).toUpperCase() + earn.status.slice(1);
+          row.innerHTML = `
+            <td><strong>${escapeHtml(earn.referred_company || earn.referred_name)}</strong></td>
+            <td>S$${parseFloat(earn.payment_amount).toFixed(2)}</td>
+            <td><strong style="color: #10b981;">S$${parseFloat(earn.amount).toFixed(2)}</strong></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="${statusClass}"></span>
+                <span style="font-size:0.8rem;">${statusLabel}</span>
+              </div>
+            </td>
+            <td>${new Date(earn.created_at).toLocaleDateString()}</td>
+          `;
+          earnTbody.appendChild(row);
+        });
+      } else {
+        if (earnEmpty) earnEmpty.style.display = 'block';
+      }
+    }
+
+    initIcons();
+
+  } catch (err) {
+    console.error('[Affiliate Refresh Stats Error]', err);
+  }
+}
+
+window.copyAffiliateLink = function() {
+  const linkDisplay = document.getElementById('affiliate-link-display');
+  if (linkDisplay) {
+    linkDisplay.select();
+    linkDisplay.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(linkDisplay.value);
+    showToast('Copied!', 'Referral link copied to clipboard.', 'success');
+  }
+};
+
+// Handle affiliate opt-in form submit
+document.addEventListener('DOMContentLoaded', () => {
+  const joinForm = document.getElementById('form-join-affiliate');
+  if (joinForm) {
+    joinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const codeInput = document.getElementById('join-affiliate-code');
+      const paypalInput = document.getElementById('join-affiliate-paypal');
+      const btn = e.target.querySelector('button[type="submit"]');
+
+      const affiliateCode = codeInput ? codeInput.value.trim() : '';
+      const paypalEmail = paypalInput ? paypalInput.value.trim() : '';
+
+      if (!affiliateCode || !paypalEmail) return;
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Registering...';
+      }
+
+      try {
+        const res = await fetch('/api/affiliate/join-tenant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ affiliateCode, paypalEmail })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast('Success!', 'Welcome to the Affiliate Program!', 'success');
+          await fetchAffiliateData();
+        } else {
+          showToast('Failed to join', data.error || 'Check details and try again.', 'error');
+        }
+      } catch (err) {
+        showToast('Connection Error', 'Failed to connect to affiliate service.', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Join Affiliate Program & Get Link';
+        }
+      }
+    });
+  }
+});
+
+// Admin Console: Load all Affiliate Payouts data
+async function loadAdminPayoutsData() {
+  const tbody = document.getElementById('admin-affiliate-payouts-tbody');
+  const emptyEl = document.getElementById('admin-payouts-empty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4">Loading payout records...</td></tr>';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/admin/affiliate-payouts');
+    if (!res.ok) throw new Error('Failed to load payouts data.');
+    const data = await res.json();
+
+    tbody.innerHTML = '';
+    if (data.payouts && data.payouts.length > 0) {
+      if (emptyEl) emptyEl.style.display = 'none';
+      data.payouts.forEach(p => {
+        const row = document.createElement('tr');
+        const statusLabel = p.status.toUpperCase();
+        let statusBadge = `<span class="lead-stage-pill lead">${statusLabel}</span>`; // pending
+        if (p.status === 'paid') {
+          statusBadge = `<span class="lead-stage-pill customer">${statusLabel}</span>`;
+        } else if (p.status === 'cancelled') {
+          statusBadge = `<span class="lead-stage-pill subscriber" style="background-color:rgba(239,68,68,0.15);color:#ef4444;border-color:rgba(239,68,68,0.3);">${statusLabel}</span>`;
+        }
+
+        let actions = '';
+        if (p.status === 'pending') {
+          actions = `
+            <button class="btn btn-secondary btn-sm" onclick="updateAdminPayoutStatus(${p.id}, 'paid')" style="padding:4px 8px;font-size:0.75rem;background:#10b981;color:#000;border:none;">
+              <i data-lucide="check" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:2px;"></i> Mark Paid
+            </button>
+          `;
+        } else if (p.status === 'paid') {
+          actions = `
+            <button class="btn btn-secondary btn-sm" onclick="updateAdminPayoutStatus(${p.id}, 'pending')" style="padding:4px 8px;font-size:0.75rem;">
+              Revert Pending
+            </button>
+          `;
+        }
+
+        row.innerHTML = `
+          <td><strong>${escapeHtml(p.affiliate_name)}</strong></td>
+          <td>${escapeHtml(p.affiliate_email)}</td>
+          <td><code style="color:#fbbf24;">${escapeHtml(p.paypal_email || 'none')}</code></td>
+          <td>${escapeHtml(p.referred_company)}</td>
+          <td><strong style="color:#10b981;">S$${parseFloat(p.amount).toFixed(2)}</strong></td>
+          <td>${new Date(p.created_at).toLocaleDateString()}</td>
+          <td>${statusBadge}</td>
+          <td class="text-right">${actions}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    } else {
+      if (emptyEl) emptyEl.style.display = 'block';
+    }
+
+    initIcons();
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-red">Failed to load payouts.</td></tr>';
+    console.error('[Admin Payouts Load Error]', err);
+  }
+}
+window.loadAdminPayoutsData = loadAdminPayoutsData;
+
+async function updateAdminPayoutStatus(earningId, status) {
+  try {
+    const res = await fetch(`/api/admin/affiliate-payouts/${earningId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    if (res.ok) {
+      showToast('Payout Updated', `Marked payout status as ${status}.`, 'success');
+      await loadAdminPayoutsData();
+    } else {
+      const data = await res.json();
+      showToast('Update Failed', data.error || 'Could not update payout status.', 'error');
+    }
+  } catch (err) {
+    showToast('Error', 'Connection failed updating payout status.', 'error');
+  }
+}
+window.updateAdminPayoutStatus = updateAdminPayoutStatus;
 
 

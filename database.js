@@ -616,11 +616,45 @@ export const initDb = async () => {
   } catch (err) {
     // Already exists
   }
+  // 26. Affiliates Table
+  await run(`
+    CREATE TABLE IF NOT EXISTS affiliates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER UNIQUE,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      affiliate_code TEXT UNIQUE NOT NULL,
+      paypal_email TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+    )
+  `);
+
+  // 27. Affiliate Earnings Table
+  await run(`
+    CREATE TABLE IF NOT EXISTS affiliate_earnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      affiliate_id INTEGER NOT NULL,
+      referred_tenant_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      commission_rate REAL DEFAULT 0.30,
+      payment_amount REAL NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(affiliate_id) REFERENCES affiliates(id) ON DELETE CASCADE,
+      FOREIGN KEY(referred_tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Migrations: Alter tenants table to add referred_by_affiliate_id
   try {
-    await run("ALTER TABLE appointments ADD COLUMN price REAL DEFAULT 0");
+    await run("ALTER TABLE tenants ADD COLUMN referred_by_affiliate_id INTEGER DEFAULT NULL");
   } catch (err) {
     // Already exists
   }
+
+
 
   // Backfill existing tenants into tenant_users as owner role to ensure compatibility
   try {
@@ -1207,7 +1241,7 @@ export const updateTenantProfile = async (id, { name, email, password_hash }) =>
   return { id, name, email };
 };
 
-export const registerTenant = async ({ name, email, password, company_name }) => {
+export const registerTenant = async ({ name, email, password, company_name, referredBy }) => {
   const existingTenant = await get('SELECT id FROM tenants WHERE email = ?', [email]);
   const existingUser = await get('SELECT id FROM tenant_users WHERE email = ?', [email]);
   if (existingTenant || existingUser) {
@@ -1217,11 +1251,20 @@ export const registerTenant = async ({ name, email, password, company_name }) =>
   // Hash password with bcrypt
   const passwordHash = await bcrypt.hash(password, 12);
 
+  // Check referred_by code to find affiliate_id
+  let referredByAffiliateId = null;
+  if (referredBy) {
+    const affiliate = await get('SELECT id FROM affiliates WHERE affiliate_code = ?', [referredBy]);
+    if (affiliate) {
+      referredByAffiliateId = affiliate.id;
+    }
+  }
+
   // Insert Tenant
   const result = await run(`
-    INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status)
-    VALUES (?, ?, ?, ?, 'free', 'active')
-  `, [name, email, passwordHash, company_name]);
+    INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status, referred_by_affiliate_id)
+    VALUES (?, ?, ?, ?, 'free', 'active', ?)
+  `, [name, email, passwordHash, company_name, referredByAffiliateId]);
 
   const tenantId = result.id;
 
@@ -1368,7 +1411,7 @@ export const authenticateTenant = async (email, password) => {
 // =============================================
 // GOOGLE OAUTH
 // =============================================
-export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
+export const findOrCreateGoogleUser = async ({ googleId, email, name, referredBy }) => {
   // Look up by google_id first
   let user = await get('SELECT * FROM tenant_users WHERE google_id = ?', [googleId]);
   if (!user) {
@@ -1386,7 +1429,17 @@ export const findOrCreateGoogleUser = async ({ googleId, email, name }) => {
   // Create new account
   const randomPw = crypto.randomBytes(24).toString('hex');
   const hash = await bcrypt.hash(randomPw, 12);
-  const tRes = await run(`INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, 'free', 'active')`, [name, email, hash, name]);
+
+  // Check referred_by code to find affiliate_id
+  let referredByAffiliateId = null;
+  if (referredBy) {
+    const affiliate = await get('SELECT id FROM affiliates WHERE affiliate_code = ?', [referredBy]);
+    if (affiliate) {
+      referredByAffiliateId = affiliate.id;
+    }
+  }
+
+  const tRes = await run(`INSERT INTO tenants (name, email, password_hash, company_name, subscription_tier, subscription_status, referred_by_affiliate_id) VALUES (?, ?, ?, ?, 'free', 'active', ?)`, [name, email, hash, name, referredByAffiliateId]);
   const tenantId = tRes.id;
   const defHours = JSON.stringify({ monday:{active:true,start:'09:00',end:'17:00'}, tuesday:{active:true,start:'09:00',end:'17:00'}, wednesday:{active:true,start:'09:00',end:'17:00'}, thursday:{active:true,start:'09:00',end:'17:00'}, friday:{active:true,start:'09:00',end:'17:00'}, saturday:{active:false,start:'10:00',end:'14:00'}, sunday:{active:false,start:'10:00',end:'14:00'} });
   await run(`INSERT INTO settings (tenant_id, company_name, business_hours, services_offered, openai_model, system_prompt, twilio_phone_number, transfer_phone_number, resources_list, voice, voice_accent, agent_name, working_hours, break_periods, appointment_gap, max_call_duration, max_no_speech_timeout) VALUES (?, ?, 'Mon-Fri 9am-6pm', 'General Services', 'gpt-4o-realtime-preview-2024-12-17', 'You are a helpful receptionist.', '', '', '', 'alloy', 'default', 'Aura', ?, '[]', 15, 10, 30)`, [tenantId, name, defHours]);
@@ -3736,4 +3789,105 @@ export const getTenantCallCostTotals = async (tenant_id) => {
   `, [tenant_id]);
   return { total_openai: row?.total_openai || 0, total_twilio: row?.total_twilio || 0 };
 };
+
+// =============================================================
+// AFFILIATE MARKETING OPERATIONS
+// =============================================================
+
+export const createAffiliate = async ({ tenant_id, name, email, password_hash, affiliate_code, paypal_email }) => {
+  const existing = await get('SELECT id FROM affiliates WHERE email = ?', [email]);
+  if (existing) {
+    throw new Error('Email is already registered as an affiliate.');
+  }
+  const codeExisting = await get('SELECT id FROM affiliates WHERE affiliate_code = ?', [affiliate_code]);
+  if (codeExisting) {
+    throw new Error('Affiliate referral code is already taken.');
+  }
+
+  const result = await run(`
+    INSERT INTO affiliates (tenant_id, name, email, password_hash, affiliate_code, paypal_email)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [tenant_id || null, name, email, password_hash, affiliate_code, paypal_email || '']);
+
+  return { id: result.id, tenant_id, name, email, affiliate_code, paypal_email };
+};
+
+export const authenticateAffiliate = async (email, password) => {
+  const affiliate = await get('SELECT * FROM affiliates WHERE email = ?', [email]);
+  if (!affiliate) throw new Error('Invalid email or password.');
+
+  const passwordValid = await bcrypt.compare(password, affiliate.password_hash);
+  if (!passwordValid) throw new Error('Invalid email or password.');
+
+  return affiliate;
+};
+
+export const getAffiliateByTenantId = async (tenantId) => {
+  return await get('SELECT * FROM affiliates WHERE tenant_id = ?', [tenantId]);
+};
+
+export const getAffiliateByCode = async (code) => {
+  return await get('SELECT * FROM affiliates WHERE affiliate_code = ?', [code]);
+};
+
+export const getAffiliateById = async (id) => {
+  return await get('SELECT * FROM affiliates WHERE id = ?', [id]);
+};
+
+export const getAffiliateStats = async (affiliateId) => {
+  // Referred tenants signed up
+  const signups = await get('SELECT COUNT(*) as count FROM tenants WHERE referred_by_affiliate_id = ?', [affiliateId]);
+  
+  // Commission amounts
+  const earnings = await get(`
+    SELECT 
+      COALESCE(SUM(amount), 0) as total_earned,
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_payouts,
+      COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as paid_payouts
+    FROM affiliate_earnings
+    WHERE affiliate_id = ?
+  `, [affiliateId]);
+
+  return {
+    referred_signups: signups.count || 0,
+    total_earned: earnings.total_earned || 0,
+    pending_payouts: earnings.pending_payouts || 0,
+    paid_payouts: earnings.paid_payouts || 0
+  };
+};
+
+export const getAffiliateEarningsList = async (affiliateId) => {
+  return await all(`
+    SELECT e.*, t.company_name as referred_company, t.name as referred_name, t.created_at as signup_date
+    FROM affiliate_earnings e
+    JOIN tenants t ON e.referred_tenant_id = t.id
+    WHERE e.affiliate_id = ?
+    ORDER BY e.created_at DESC
+  `, [affiliateId]);
+};
+
+export const getAffiliateReferralsList = async (affiliateId) => {
+  return await all(`
+    SELECT id, name, company_name, subscription_tier, billing_cycle, created_at as signup_date
+    FROM tenants
+    WHERE referred_by_affiliate_id = ?
+    ORDER BY created_at DESC
+  `, [affiliateId]);
+};
+
+export const getAllAffiliatePayoutsForAdmin = async () => {
+  return await all(`
+    SELECT e.*, a.name as affiliate_name, a.email as affiliate_email, a.paypal_email, t.company_name as referred_company
+    FROM affiliate_earnings e
+    JOIN affiliates a ON e.affiliate_id = a.id
+    JOIN tenants t ON e.referred_tenant_id = t.id
+    ORDER BY e.created_at DESC
+  `);
+};
+
+export const updatePayoutStatus = async (earningId, status) => {
+  await run('UPDATE affiliate_earnings SET status = ? WHERE id = ?', [status, earningId]);
+  return { id: earningId, status };
+};
+
 

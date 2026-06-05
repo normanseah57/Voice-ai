@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Affiliate Program Portal — VoiceDesk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <style>
+    :root {
+      --color-primary: #06b6d4;
+      --color-secondary: #8b5cf6;
+      --color-success: #10b981;
+      --color-warning: #f59e0b;
+      --color-danger: #ef4444;
+      --bg-dark: #0a0f1d;
+      --text-muted: #94a3b8;
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --bg-glass: rgba(255, 255, 255, 0.03);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-dark);
+      color: #e2e8f0;
+      min-height: 100vh;
+      background-image: radial-gradient(ellipse at top, rgba(6,182,212,0.1) 0%, transparent 60%),
+                        radial-gradient(ellipse at bottom, rgba(139,92,246,0.06) 0%, transparent 60%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-glass);
+      padding-bottom: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      box-shadow: 0 0 20px rgba(6,182,212,0.4);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      letter-spacing: -0.5px;
+    }
+    .brand-title span { color: var(--color-success); }
+
+    .btn-logout {
+      background: transparent;
+      border: 1px solid var(--border-glass);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-logout:hover {
+      color: white;
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    /* Auth Panel */
+    .auth-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      max-width: 460px;
+      margin: 60px auto;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .auth-header {
+      padding: 32px 32px 10px;
+      text-align: center;
+    }
+
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-glass);
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    .auth-tab.active {
+      color: white;
+      border-bottom: 2px solid var(--color-primary);
+      background: rgba(255,255,255,0.01);
+    }
+
+    .auth-body {
+      padding: 32px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-glass);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: white;
+      font-size: 0.9rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .form-input:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 10px rgba(6,182,212,0.15);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      color: white;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Dashboard view */
+    .dashboard-panel {
+      display: none;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .promo-banner {
+      background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15));
+      border: 1px solid var(--border-glass);
+      padding: 24px;
+      border-radius: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .promo-banner h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    .promo-banner p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .metric-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .metric-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .metric-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .metric-icon.green { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
+    .metric-icon.blue { background: rgba(6, 182, 212, 0.1); color: var(--color-primary); }
+    .metric-icon.purple { background: rgba(139, 92, 246, 0.1); color: var(--color-secondary); }
+    .metric-icon.cyan { background: rgba(16, 185, 129, 0.1); color: #06b6d4; }
+
+    .metric-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 4px;
+    }
+
+    .tables-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 24px;
+    }
+
+    .table-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .table-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: white;
+      border-bottom: 1px solid var(--border-glass);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+
+    .table-wrapper {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-glass);
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.02);
+      color: var(--text-muted);
+    }
+    tr:last-child td { border-bottom: none; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .status-dot.green { background: var(--color-success); box-shadow: 0 0 8px var(--color-success); }
+    .status-dot.yellow { background: var(--color-warning); box-shadow: 0 0 8px var(--color-warning); }
+
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-glass);
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: white;
+      font-size: 0.88rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      animation: slideIn 0.3s ease forwards;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .empty-placeholder {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+    .empty-placeholder svg {
+      opacity: 0.3;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-logo"></div>
+        <div class="brand-title">Voice<span>Desk</span> Affiliate</div>
+      </div>
+      <button class="btn-logout" id="btn-logout" style="display: none;" onclick="logoutAffiliate()">
+        <i data-lucide="log-out"></i> Sign Out
+      </button>
+    </header>
+
+    <!-- Auth View -->
+    <div class="auth-card" id="auth-view">
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</div>
+        <div class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Create Partner Account</div>
+      </div>
+      <div class="auth-body">
+        
+        <!-- LOGIN FORM -->
+        <form id="form-login" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="login-email">Email Address</label>
+            <input type="email" id="login-email" required placeholder="name@company.com" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" required placeholder="••••••••" class="form-input">
+          </div>
+          <button type="submit" class="btn" id="btn-login-submit">
+            Sign In <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+          </button>
+        </form>
+
+        <!-- SIGNUP FORM -->
+        <form id="form-signup" onsubmit="handleSignup(event)" style="display: none;">
+          <div class="form-group">
+            <label for="signup-name">Full Name</label>
+            <input type="text" id="signup-name" required placeholder="e.g. John Doe" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="signup-email">Email Address</label>
+            <input type="email" id="signup-email" required placeholder="name@company.com" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="signup-password">Password (Min 8 characters)</label>
+            <input type="password" id="signup-password" required minlength="8" placeholder="Create password" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="signup-code">Custom Referral Code (Slug)</label>
+            <div style="display: flex; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); border-radius: 8px; overflow: hidden;">
+              <span style="padding: 12px 14px; font-size: 0.85rem; color: var(--text-muted); border-right: 1px solid var(--border-glass); background: rgba(255,255,255,0.01);">?ref=</span>
+              <input type="text" id="signup-code" required placeholder="e.g. partner-john" style="flex:1; border:none; outline:none; background:transparent; padding:12px; color:white; font-size:0.9rem;">
+            </div>
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Alphanumeric and dashes only.</small>
+          </div>
+          <div class="form-group">
+            <label for="signup-paypal">PayPal Email for Payouts</label>
+            <input type="email" id="signup-paypal" required placeholder="paypal@partner.com" class="form-input">
+          </div>
+          <button type="submit" class="btn" id="btn-signup-submit">
+            Create Partner Account <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div class="dashboard-panel" id="dashboard-view">
+      <!-- Promo Banner -->
+      <div class="promo-banner">
+        <div>
+          <h2>Your Partner Dashboard</h2>
+          <p>Share your link, refer annual signups, and earn 30% recurring commission.</p>
+        </div>
+        <div style="display: flex; gap: 8px; flex: 1; max-width: 480px; min-width: 280px; margin-top: 10px;">
+          <input type="text" id="referral-link" readonly class="form-input" style="font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.4);">
+          <button class="btn" onclick="copyLink()" style="width: auto; padding: 0 16px; height: 42px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-glass); flex-shrink: 0;">
+            <i data-lucide="copy" style="width: 16px; height: 16px;"></i> Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">Total Earned</span>
+            <div class="metric-icon green"><i data-lucide="dollar-sign"></i></div>
+          </div>
+          <div class="metric-value" id="stat-earned">S$0.00</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">Pending Payout</span>
+            <div class="metric-icon blue"><i data-lucide="clock"></i></div>
+          </div>
+          <div class="metric-value" id="stat-pending">S$0.00</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">Paid Commissions</span>
+            <div class="metric-icon purple"><i data-lucide="check-circle-2"></i></div>
+          </div>
+          <div class="metric-value" id="stat-paid">S$0.00</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">Referred Signups</span>
+            <div class="metric-icon cyan"><i data-lucide="users"></i></div>
+          </div>
+          <div class="metric-value" id="stat-signups">0</div>
+        </div>
+      </div>
+
+      <!-- Tables Grid -->
+      <div class="tables-section">
+        <!-- Referrals -->
+        <div class="table-card">
+          <h3>Referred Workspaces</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Plan</th>
+                  <th>Cycle</th>
+                  <th>Signup Date</th>
+                </tr>
+              </thead>
+              <tbody id="referrals-tbody">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+            <div class="empty-placeholder" id="referrals-empty" style="display: none;">
+              <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+              <p>No referrals found yet</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Earnings -->
+        <div class="table-card">
+          <h3>Payout Ledger</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Referred Company</th>
+                  <th>Commission</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="earnings-tbody">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+            <div class="empty-placeholder" id="earnings-empty" style="display: none;">
+              <i data-lucide="dollar-sign" style="width: 24px; height: 24px;"></i>
+              <p>No earnings history recorded</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let affToken = localStorage.getItem('aff_token');
+    let currentAffiliate = JSON.parse(localStorage.getItem('aff_user'));
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (affToken && currentAffiliate) {
+        showDashboard();
+      }
+      if (window.lucide) window.lucide.createIcons();
+    });
+
+    function showToast(text) {
+      const c = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = text;
+      c.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function switchAuthTab(tab) {
+      const tabL = document.getElementById('tab-login');
+      const tabS = document.getElementById('tab-signup');
+      const formL = document.getElementById('form-login');
+      const formS = document.getElementById('form-signup');
+      
+      if (tab === 'login') {
+        tabL.classList.add('active');
+        tabS.classList.remove('active');
+        formL.style.display = 'block';
+        formS.style.display = 'none';
+      } else {
+        tabS.classList.add('active');
+        tabL.classList.remove('active');
+        formS.style.display = 'block';
+        formL.style.display = 'none';
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const btn = document.getElementById('btn-login-submit');
+
+      btn.disabled = true;
+      btn.textContent = 'Authenticating...';
+
+      try {
+        const res = await fetch('/api/affiliate/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          affToken = data.token;
+          currentAffiliate = data.affiliate;
+          localStorage.setItem('aff_token', affToken);
+          localStorage.setItem('aff_user', JSON.stringify(currentAffiliate));
+          showToast('Login successful!');
+          showDashboard();
+        } else {
+          showToast(data.error || 'Login failed. Please check credentials.');
+        }
+      } catch (err) {
+        showToast('Connection error connecting to API.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const affiliateCode = document.getElementById('signup-code').value.trim();
+      const paypalEmail = document.getElementById('signup-paypal').value.trim();
+      const btn = document.getElementById('btn-signup-submit');
+
+      btn.disabled = true;
+      btn.textContent = 'Registering partner...';
+
+      try {
+        const res = await fetch('/api/affiliate/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, affiliateCode, paypalEmail })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast('Registration successful! Please sign in.');
+          switchAuthTab('login');
+          document.getElementById('login-email').value = email;
+          document.getElementById('login-password').focus();
+        } else {
+          showToast(data.error || 'Registration failed.');
+        }
+      } catch (err) {
+        showToast('Connection error connecting to API.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Partner Account';
+      }
+    }
+
+    function showDashboard() {
+      document.getElementById('auth-view').style.display = 'none';
+      document.getElementById('btn-logout').style.display = 'flex';
+      const dash = document.getElementById('dashboard-view');
+      dash.style.display = 'flex';
+
+      // Set referral link
+      document.getElementById('referral-link').value = `${window.location.origin}/landing.html?ref=${currentAffiliate.affiliate_code}`;
+      
+      loadDashboardStats();
+    }
+
+    async function loadDashboardStats() {
+      try {
+        const headers = { 'Authorization': `Bearer ${affToken}` };
+        
+        // Load stats
+        const statsRes = await fetch('/api/affiliate/stats', { headers });
+        if (statsRes.ok) {
+          const s = await statsRes.json();
+          document.getElementById('stat-earned').textContent = `S$${parseFloat(s.stats.total_earned).toFixed(2)}`;
+          document.getElementById('stat-pending').textContent = `S$${parseFloat(s.stats.pending_payouts).toFixed(2)}`;
+          document.getElementById('stat-paid').textContent = `S$${parseFloat(s.stats.paid_payouts).toFixed(2)}`;
+          document.getElementById('stat-signups').textContent = s.stats.referred_signups;
+        }
+
+        // Load earnings & referrals list
+        const earnRes = await fetch('/api/affiliate/earnings', { headers });
+        if (earnRes.ok) {
+          const l = await earnRes.json();
+          
+          // Render referrals
+          const refTbody = document.getElementById('referrals-tbody');
+          const refEmpty = document.getElementById('referrals-empty');
+          refTbody.innerHTML = '';
+          if (l.referrals && l.referrals.length > 0) {
+            refEmpty.style.display = 'none';
+            l.referrals.forEach(ref => {
+              const row = document.createElement('tr');
+              const planText = ref.subscription_tier.toUpperCase();
+              const cycleText = ref.billing_cycle.toUpperCase();
+              row.innerHTML = `
+                <td><strong>${escapeHtml(ref.company_name || ref.name)}</strong></td>
+                <td>${planText}</td>
+                <td>${cycleText}</td>
+                <td>${new Date(ref.signup_date).toLocaleDateString()}</td>
+              `;
+              refTbody.appendChild(row);
+            });
+          } else {
+            refEmpty.style.display = 'block';
+          }
+
+          // Render earnings
+          const earnTbody = document.getElementById('earnings-tbody');
+          const earnEmpty = document.getElementById('earnings-empty');
+          earnTbody.innerHTML = '';
+          if (l.earnings && l.earnings.length > 0) {
+            earnEmpty.style.display = 'none';
+            l.earnings.forEach(earn => {
+              const row = document.createElement('tr');
+              const statusClass = earn.status === 'paid' ? 'status-dot green' : 'status-dot yellow';
+              const statusLabel = earn.status.charAt(0).toUpperCase() + earn.status.slice(1);
+              row.innerHTML = `
+                <td><strong>${escapeHtml(earn.referred_company || earn.referred_name)}</strong></td>
+                <td><strong style="color:#10b981;">S$${parseFloat(earn.amount).toFixed(2)}</strong></td>
+                <td>
+                  <div class="status-badge">
+                    <span class="${statusClass}"></span>
+                    <span>${statusLabel}</span>
+                  </div>
+                </td>
+                <td>${new Date(earn.created_at).toLocaleDateString()}</td>
+              `;
+              earnTbody.appendChild(row);
+            });
+          } else {
+            earnEmpty.style.display = 'block';
+          }
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+      } catch (err) {
+        console.error('Failed to load stats', err);
+      }
+    }
+
+    function copyLink() {
+      const refEl = document.getElementById('referral-link');
+      refEl.select();
+      refEl.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(refEl.value);
+      showToast('Copied Link!');
+    }
+
+    function logoutAffiliate() {
+      localStorage.removeItem('aff_token');
+      localStorage.removeItem('aff_user');
+      window.location.reload();
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
