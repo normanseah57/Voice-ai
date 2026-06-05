@@ -219,6 +219,7 @@ const loginLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { error: 'Too many login attempts from this IP. Please try again in 15 minutes.' }
 });
 
@@ -227,6 +228,7 @@ const signupLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { error: 'Too many signup attempts from this IP. Please try again in an hour.' }
 });
 
@@ -235,8 +237,10 @@ const forgotPasswordLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { error: 'Too many password reset requests. Please try again in 15 minutes.' }
 });
+
 
 // Initialize Resend email client
 const resendClient = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
