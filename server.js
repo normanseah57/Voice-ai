@@ -214,6 +214,15 @@ import Stripe from 'stripe';
 
 dotenv.config();
 
+// Helper to check if mock telephony mode is enabled/forced
+function isMockEnabled() {
+  return (
+    process.env.NODE_ENV === 'test' || 
+    process.env.RAILWAY_ENVIRONMENT === 'test' || 
+    process.env.MOCK_TELEPHONY === 'true'
+  );
+}
+
 // JWT helpers
 const JWT_SECRET = process.env.JWT_SECRET || 'vd_fallback_secret_change_me';
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -307,7 +316,7 @@ async function sendPaymentReminderWhatsApp(tenant, phone, daysLeft) {
     return;
   }
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const isMock = !accountSid || !accountSid.startsWith('AC');
+  const isMock = isMockEnabled() || !accountSid || !accountSid.startsWith('AC');
   const dueDate = new Date(tenant.next_payment_due).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const urgencyEmoji = daysLeft === 1 ? '🚨' : '⚠️';
   const body = `${urgencyEmoji} *VoiceDesk Payment Reminder*\n\nHi ${tenant.company_name},\n\nYour VoiceDesk subscription payment is due in *${daysLeft} day${daysLeft > 1 ? 's' : ''}* on *${dueDate}*.\n\nPlease make payment to avoid automatic account suspension.\n\n— VoiceDesk Billing Team`;
@@ -338,7 +347,18 @@ app.use(cors());
 
 // Force HTTPS redirect in production (based on load balancer headers)
 app.use((req, res, next) => {
-  if (req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'))) {
+  if (
+    req.headers.host && 
+    (
+      req.headers.host.includes('localhost') || 
+      req.headers.host.includes('127.0.0.1') ||
+      req.headers.host.includes('lhr.life') ||
+      req.headers.host.includes('tunnelmole.net') ||
+      req.headers.host.includes('loca.lt') ||
+      req.headers.host.includes('ngrok-free.app') ||
+      req.headers.host.includes('ngrok.io')
+    )
+  ) {
     return next();
   }
   console.log(`[Redirect Check] host=${req.headers.host}, protocol=${req.protocol}, x-forwarded-proto=${req.headers['x-forwarded-proto']}`);
@@ -670,7 +690,7 @@ function getTwilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   
-  if (accountSid && accountSid.startsWith('AC') && authToken) {
+  if (accountSid && accountSid.startsWith('AC') && authToken && !isMockEnabled()) {
     return twilio(accountSid, authToken);
   }
   
@@ -686,7 +706,24 @@ function getTwilioClient() {
         console.log(`[Twilio Mock] Create Call: From=${opts.from}, To=${opts.to}, Url="${opts.url}"`);
         return { sid: 'CAmock_' + Math.random().toString(36).substring(2, 10) };
       }
-    }
+    },
+    incomingPhoneNumbers: {
+      create: async (opts) => {
+        console.log(`[Twilio Mock] Purchased phone number ${opts.phoneNumber || 'auto'} and pointed to ${opts.voiceUrl}`);
+        return { 
+          sid: 'PNmock_' + Math.random().toString(36).substring(2, 10), 
+          phoneNumber: opts.phoneNumber || '+18005550199',
+          voiceUrl: opts.voiceUrl
+        };
+      }
+    },
+    availablePhoneNumbers: () => ({
+      local: {
+        list: async () => {
+          return [{ phoneNumber: '+1800555' + Math.floor(1000 + Math.random() * 9000) }];
+        }
+      }
+    })
   };
 }
 
@@ -696,7 +733,7 @@ function getSignalWireClient() {
   const apiToken = process.env.SIGNALWIRE_API_TOKEN;
   const spaceUrl = process.env.SIGNALWIRE_SPACE_URL;
 
-  if (projectId && apiToken && spaceUrl) {
+  if (projectId && apiToken && spaceUrl && !isMockEnabled()) {
     return signalwire(projectId, apiToken, { signalwireSpaceUrl: spaceUrl });
   }
 
@@ -2055,7 +2092,7 @@ async function autoAssignPhoneNumberForTenant(tenantId) {
     const PORT = process.env.PORT || 5050;
     const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
     const client = getSignalWireClient();
-    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+    const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
 
     let selectedNumber = '';
     if (isMock) {
@@ -2945,7 +2982,7 @@ app.post('/api/call/outbound', requireAuth, async (req, res) => {
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const signalwireProject = process.env.SIGNALWIRE_PROJECT_ID;
-  const isMock = (!accountSid || !accountSid.startsWith('AC')) && !signalwireProject;
+  const isMock = isMockEnabled() || (!accountSid || !accountSid.startsWith('AC')) && !signalwireProject;
   
   // Resolve tenant's specific number for Caller ID fallback
   const settings = await getSettings(req.tenantId);
@@ -2988,7 +3025,7 @@ app.get('/api/telephony/search-numbers', requireAuth, async (req, res) => {
   
   try {
     const client = getSignalWireClient();
-    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+    const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
     
     if (isMock) {
       // Mock some available numbers for local development/testing
@@ -3022,7 +3059,7 @@ app.post('/api/telephony/provision-number', requireAuth, async (req, res) => {
 
   try {
     const client = getSignalWireClient();
-    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+    const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
 
     if (!isMock) {
       // Programmatically purchase the number on behalf of the tenant
@@ -3053,7 +3090,7 @@ app.post('/api/telephony/auto-assign', requireAuth, async (req, res) => {
 
   try {
     const client = getSignalWireClient();
-    const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+    const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
 
     let selectedNumber = '';
 
@@ -3235,7 +3272,7 @@ async function executeCampaignAsync(tenantId, campaign, targets) {
     // 2. Process SMS/WhatsApp Broadcast
     if (channels.includes('whatsapp') && contact.phone) {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const isMock = !accountSid || !accountSid.startsWith('AC');
+      const isMock = isMockEnabled() || !accountSid || !accountSid.startsWith('AC');
       const smsBody = campaign.sms_body.replace(/\{\{name\}\}/g, contact.name).replace(/\{\{company_name\}\}/g, companyName);
 
       if (isMock) {
@@ -3260,7 +3297,7 @@ async function executeCampaignAsync(tenantId, campaign, targets) {
     // 3. Process Outbound Call Broadcast
     if (channels.includes('call') && contact.phone) {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const isMock = !accountSid || !accountSid.startsWith('AC');
+      const isMock = isMockEnabled() || !accountSid || !accountSid.startsWith('AC');
       const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER;
       const ngrokUrl = process.env.NGROK_URL;
 
@@ -4356,7 +4393,7 @@ mediaStreamWss.on('connection', (ws) => {
         durationLimitTimeout = setTimeout(async () => {
           console.log(`Call ${callSid} auto-terminated: exceeded max duration of ${maxDurationMins} minutes.`);
           const client = getSignalWireClient();
-          const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+          const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
           if (!isMock && callSid) {
             try {
               await client.calls(callSid).update({ status: 'completed' });
@@ -4378,7 +4415,7 @@ mediaStreamWss.on('connection', (ws) => {
             silenceTimeout = setTimeout(async () => {
               console.log(`Call ${callSid} auto-terminated: caller silence exceeded ${maxSilenceSecs} seconds.`);
               const client = getSignalWireClient();
-              const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+              const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
               if (!isMock && callSid) {
                 try {
                   await client.calls(callSid).update({ status: 'completed' });
@@ -4759,7 +4796,7 @@ mediaStreamWss.on('connection', (ws) => {
                   console.log(`Initiating call transfer to human for Tenant ${tenantId}, CallSid=${callSid}, Reason: ${reason}, Department: ${department}`);
                   
                   const client = getSignalWireClient();
-                  const isMock = (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
+                  const isMock = isMockEnabled() || (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) && !process.env.SIGNALWIRE_PROJECT_ID;
                   const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
 
                   if (!isMock) {
@@ -5081,12 +5118,55 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+// Automatically update Twilio phone number webhook with current tunnel URL in local development
+async function updateTwilioWebhooks(tunnelUrl) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!accountSid || !accountSid.startsWith('AC') || !authToken || !twilioNumber) {
+    console.log('[Twilio Webhook Auto-Update] Skipped: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_PHONE_NUMBER is not set.');
+    return;
+  }
+
+  if (isMockEnabled()) {
+    console.log('[Twilio Webhook Auto-Update] Skipped: Mock telephony mode is active.');
+    return;
+  }
+
+  try {
+    const twilioClient = getTwilioClient();
+    console.log(`[Twilio Webhook Auto-Update] Searching for Twilio number ${twilioNumber}...`);
+    const numbers = await twilioClient.incomingPhoneNumbers.list({
+      phoneNumber: twilioNumber,
+      limit: 1
+    });
+
+    if (numbers.length > 0) {
+      const numberSid = numbers[0].sid;
+      console.log(`[Twilio Webhook Auto-Update] Found Twilio Number SID: ${numberSid}. Updating webhook to ${tunnelUrl}/incoming-call...`);
+      await twilioClient.incomingPhoneNumbers(numberSid).update({
+        voiceUrl: `${tunnelUrl}/incoming-call`,
+        voiceMethod: 'POST'
+      });
+      console.log(`[Twilio Webhook Auto-Update] Successfully updated voice webhook URL for ${twilioNumber}`);
+    } else {
+      console.warn(`[Twilio Webhook Auto-Update] Warning: Phone number ${twilioNumber} not found in this Twilio account.`);
+    }
+  } catch (err) {
+    console.error('[Twilio Webhook Auto-Update] Failed to update Twilio webhook:', err.message);
+  }
+}
+
 // Initialize database and start HTTP Server
 initDb().then(async () => {
   // Skip SSH tunnel on Railway/production — Railway provides a public HTTPS URL natively
   const isProduction = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PUBLIC_DOMAIN;
   if (!isProduction) {
     await startSshTunnel();
+    if (process.env.NGROK_URL) {
+      await updateTwilioWebhooks(process.env.NGROK_URL);
+    }
   } else {
     const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
     if (railwayDomain) {
