@@ -1167,7 +1167,7 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
     const previousTier = tenant.subscription_tier;
     const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
 
-    // Affiliate Commission credit check - only applicable for new signups upgrading from free tier
+    // Affiliate Commission credit check - only applicable for the initial yearly purchase of a new signup
     if (tenant.referred_by_affiliate_id && cycle === 'annual' && previousTier === 'free') {
       try {
         const affiliate = await get('SELECT tenant_id FROM affiliates WHERE id = ?', [tenant.referred_by_affiliate_id]);
