@@ -425,7 +425,7 @@
                 <i data-lucide="phone-off"></i>
               </div>
               <h3>No Active Calls Detected</h3>
-              <p class="text-muted">The AI Receptionist is idle. Dial the Twilio phone number or start an outbound call to see live streaming logs.</p>
+              <p class="text-muted">The AI Front Office Manager is idle. Dial the Twilio phone number or start an outbound call to see live streaming logs.</p>
               <div style="display: flex; gap: 12px; justify-content: center;" class="mt-4">
                 <button class="btn btn-secondary" id="btn-quick-outbound">
                   <i data-lucide="phone-call"></i> Start Call Now
@@ -838,7 +838,7 @@
           <div class="wizard-header-section" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <div>
               <h2>Tenant Onboarding</h2>
-              <p>Complete steps to configure and activate your AI receptionist.</p>
+              <p>Complete steps to configure and activate your AI Front Office Manager.</p>
             </div>
             <!-- Basic vs Advanced Settings Toggle (Super Admin only â€” hidden by default) -->
             <div class="settings-group-tabs" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; padding: 4px; gap: 4px;">
@@ -886,7 +886,7 @@
               <div class="stepper-item" data-step="4">
                 <div class="stepper-circle"></div>
                 <div class="stepper-text">
-                  <span class="stepper-title">AI Receptionist</span>
+                  <span class="stepper-title">AI Front Office Manager</span>
                   <span class="stepper-subtitle">Configure your AI agent & voice</span>
                 </div>
               </div>
@@ -954,7 +954,7 @@
                     </div>
                     <div class="info-bubble">
                       <h4 style="color: white; margin-top: 0;">Welcome to VoiceDesk Onboarding!</h4>
-                      <p>Your tenant profile is active. Let's configure your AI receptionist so you can start booking appointments and handling calls.</p>
+                      <p>Your tenant profile is active. Let's configure your AI Front Office Manager so you can start booking appointments and handling calls.</p>
                       
                       <div class="credential-checklist mt-4">
                         <div class="check-item">
@@ -996,7 +996,7 @@
                         <option value="restaurant">Restaurant / Table Seating Reservation</option>
                         <option value="hotel">ðŸ¨ Hotel / Room Reservation</option>
                       </select>
-                      <small class="text-muted">Changes the terminology and dynamic scheduling rules of the AI Receptionist.</small>
+                      <small class="text-muted">Changes the terminology and dynamic scheduling rules of the AI Front Office Manager.</small>
                     </div>
                     <div class="form-group mb-4">
                       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -1049,7 +1049,7 @@
 
                       <!-- Hidden text input to satisfy legacy saveWizardSettings value serialization -->
                       <input type="hidden" id="settings-services" class="form-input" value="Active Catalog">
-                      <small class="text-muted" style="display: block; margin-top: 4px;">Set up your services catalog. The AI receptionist uses these details for client inquiries and scheduling.</small>
+                      <small class="text-muted" style="display: block; margin-top: 4px;">Set up your services catalog. The AI Front Office Manager uses these details for client inquiries and scheduling.</small>
                     </div>
                   </div>
 
@@ -1096,14 +1096,14 @@
                         <i data-lucide="bot"></i>
                       </div>
                       <div class="wizard-step-header-text">
-                        <h3>Step 3: AI Receptionist</h3>
+                        <h3>Step 3: AI Front Office Manager</h3>
                         <p>Configure the system prompt, model and voice attributes.</p>
                       </div>
                     </div>
 
                     <!-- AI Receptionist Name -->
                     <div class="form-group mb-4">
-                      <label for="settings-agent-name">AI Receptionist Name</label>
+                      <label for="settings-agent-name">AI Front Office Manager Name</label>
                       <input type="text" id="settings-agent-name" class="form-input" required placeholder="e.g. Aura">
                     </div>
 
@@ -1584,7 +1584,7 @@
                       <h4 style="color: white; margin-top: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
                         <i data-lucide="zap" style="color: var(--color-primary); width: 16px; height: 16px;"></i> Ready for Production
                       </h4>
-                      <p>Your Voice AI Receptionist agent is fully configured. You can test it by clicking the Web Call button in the bottom simulator, or call your inbound Twilio number.</p>
+                      <p>Your Voice AI Front Office Manager agent is fully configured. You can test it by clicking the Web Call button in the bottom simulator, or call your inbound Twilio number.</p>
                     </div>
                   </div>
 
@@ -1626,7 +1626,7 @@
                       </div>
                       <div class="wizard-step-header-text">
                         <h3>Step 11: Knowledge Base</h3>
-                        <p>Train your AI receptionist on your website content.</p>
+                        <p>Train your AI Front Office Manager on your website content.</p>
                       </div>
                     </div>
 
@@ -4020,7 +4020,7 @@
       <div style="background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15)); padding: 24px 28px 20px; border-bottom: 1px solid var(--border-glass); display: flex; align-items: center; justify-content: space-between;">
         <div>
           <h3 id="auth-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Sign In to VoiceDesk</h3>
-          <p style="margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted);">Secure access to your AI receptionist</p>
+          <p style="margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted);">Secure access to your AI Front Office Manager</p>
         </div>
         <button class="btn-close" onclick="closeAuthModal()"><i data-lucide="x"></i></button>
       </div>
@@ -4240,7 +4240,7 @@
             </div>
           </div>
           <div class="form-group">
-            <label for="campaign-call-prompt">AI Voice Objective (Tell the AI receptionist what to pitch or ask during the outbound call)</label>
+            <label for="campaign-call-prompt">AI Voice Objective (Tell the AI Front Office Manager what to pitch or ask during the outbound call)</label>
             <textarea id="campaign-call-prompt" class="form-input" rows="4" placeholder="Call the customer to offer a spring discount code: SPRING20. Offer to schedule an appointment right now if they are interested. Be polite and helpful."></textarea>
           </div>
         </div>
