@@ -2946,7 +2946,11 @@ app.post('/api/call/outbound', requireAuth, async (req, res) => {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const signalwireProject = process.env.SIGNALWIRE_PROJECT_ID;
   const isMock = (!accountSid || !accountSid.startsWith('AC')) && !signalwireProject;
-  const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER;
+  
+  // Resolve tenant's specific number for Caller ID fallback
+  const settings = await getSettings(req.tenantId);
+  const tenantNumber = settings && settings.twilio_phone_number ? settings.twilio_phone_number.trim() : '';
+  const fromNumber = (tenantNumber !== '') ? tenantNumber : (process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER);
   const ngrokUrl = process.env.NGROK_URL;
 
   if (!isMock && (!fromNumber || !ngrokUrl)) {
@@ -3808,7 +3812,10 @@ app.post('/incoming-whatsapp', async (req, res) => {
       return;
     }
 
-    const fromNumber = process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || '+15550001111';
+    // Resolve tenant's specific number for WhatsApp callback Caller ID
+    const settings = await getSettings(tenantId);
+    const tenantNumber = settings && settings.twilio_phone_number ? settings.twilio_phone_number.trim() : '';
+    const fromNumber = (tenantNumber !== '') ? tenantNumber : (process.env.SIGNALWIRE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || '+15550001111');
     const ngrokUrl = process.env.NGROK_URL || `http://localhost:${PORT}`;
 
     const twilioClient = getTwilioClient();
