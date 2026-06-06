@@ -497,6 +497,7 @@ formTriggerOutbound.addEventListener('submit', async (e) => {
   e.preventDefault();
   const phoneNumber = outboundPhoneInput.value.trim();
   const customerName = outboundNameInput.value.trim();
+  const customPrompt = document.getElementById('outbound-custom-prompt') ? document.getElementById('outbound-custom-prompt').value.trim() : '';
 
   if (!phoneNumber) return;
 
@@ -509,7 +510,7 @@ formTriggerOutbound.addEventListener('submit', async (e) => {
     const response = await fetch('/api/call/outbound', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phoneNumber, customerName })
+      body: JSON.stringify({ phoneNumber, customerName, customPrompt })
     });
     
     const result = await response.json();

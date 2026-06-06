@@ -2967,7 +2967,7 @@ app.get('/api/calls', requireAuth, async (req, res) => {
 
 // Outbound Call scoping
 app.post('/api/call/outbound', requireAuth, async (req, res) => {
-  const { phoneNumber } = req.body;
+  const { phoneNumber, customPrompt } = req.body;
   if (!phoneNumber) {
     return res.status(400).json({ error: 'Phone number is required' });
   }
@@ -3002,9 +3002,12 @@ app.post('/api/call/outbound', requireAuth, async (req, res) => {
   try {
     const client = getSignalWireClient();
     // Pass tenantId inside TwiML URL so the callback scopes it
-    const webhookUrl = `${activeNgrokUrl}/outbound-call-twiml?phoneNumber=${encodeURIComponent(phoneNumber)}&tenantId=${req.tenantId}`;
+    let webhookUrl = `${activeNgrokUrl}/outbound-call-twiml?phoneNumber=${encodeURIComponent(phoneNumber)}&tenantId=${req.tenantId}`;
+    if (customPrompt) {
+      webhookUrl += `&campaignPrompt=${encodeURIComponent(customPrompt)}`;
+    }
     
-    console.log(`Initiating outbound call for Tenant ${req.tenantId} to ${phoneNumber}...`);
+    console.log(`Initiating outbound call for Tenant ${req.tenantId} to ${phoneNumber}${customPrompt ? ' with custom objective prompt' : ''}...`);
     const call = await client.calls.create({
       url: webhookUrl,
       to: phoneNumber,
