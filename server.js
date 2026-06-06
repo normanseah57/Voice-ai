@@ -5091,7 +5091,22 @@ function startSshTunnel() {
 
     lt.on('close', (code) => {
       console.log(`Tunnel process disconnected (code ${code})`);
-      if (!resolved) resolve(null);
+      if (!resolved) {
+        resolve(null);
+      } else {
+        // Auto-reconnect if the server is still active and it's not a manual exit
+        console.log('Local tunnel disconnected unexpectedly. Reconnecting in 3 seconds...');
+        setTimeout(async () => {
+          try {
+            const newUrl = await startSshTunnel();
+            if (newUrl) {
+              await updateTwilioWebhooks(newUrl);
+            }
+          } catch (err) {
+            console.error('Failed to auto-reconnect local tunnel:', err.message);
+          }
+        }, 3000);
+      }
     });
 
     // Timeout fallback after 20 seconds
