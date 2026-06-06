@@ -1170,20 +1170,24 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
     // Affiliate Commission credit check - only applicable for new signups upgrading from free tier
     if (tenant.referred_by_affiliate_id && cycle === 'annual' && previousTier === 'free') {
       try {
-        const existingEarning = await get('SELECT id FROM affiliate_earnings WHERE referred_tenant_id = ?', [tenant.id]);
-        if (!existingEarning) {
-          let basePrice = 0;
-          if (tier === 'starter') basePrice = 79 * 12;
-          else if (tier === 'professional') basePrice = 799 * 12;
-          else if (tier === 'enterprise') basePrice = 24000;
+        const affiliate = await get('SELECT tenant_id FROM affiliates WHERE id = ?', [tenant.referred_by_affiliate_id]);
+        // Guard against self-upgrades (sitting tenant can refer others but cannot earn commission on themselves)
+        if (affiliate && affiliate.tenant_id !== tenant.id) {
+          const existingEarning = await get('SELECT id FROM affiliate_earnings WHERE referred_tenant_id = ?', [tenant.id]);
+          if (!existingEarning) {
+            let basePrice = 0;
+            if (tier === 'starter') basePrice = 79 * 12;
+            else if (tier === 'professional') basePrice = 799 * 12;
+            else if (tier === 'enterprise') basePrice = 24000;
 
-          if (basePrice > 0) {
-            const commission = basePrice * 0.30;
-            await run(`
-              INSERT INTO affiliate_earnings (affiliate_id, referred_tenant_id, amount, commission_rate, payment_amount, status)
-              VALUES (?, ?, ?, 0.30, ?, 'pending')
-            `, [tenant.referred_by_affiliate_id, tenant.id, commission, basePrice]);
-            console.log(`[Affiliate] Commission of $${commission} generated for Affiliate ID ${tenant.referred_by_affiliate_id} from Tenant ID ${tenant.id}`);
+            if (basePrice > 0) {
+              const commission = basePrice * 0.30;
+              await run(`
+                INSERT INTO affiliate_earnings (affiliate_id, referred_tenant_id, amount, commission_rate, payment_amount, status)
+                VALUES (?, ?, ?, 0.30, ?, 'pending')
+              `, [tenant.referred_by_affiliate_id, tenant.id, commission, basePrice]);
+              console.log(`[Affiliate] Commission of $${commission} generated for Affiliate ID ${tenant.referred_by_affiliate_id} from Tenant ID ${tenant.id}`);
+            }
           }
         }
       } catch (affErr) {

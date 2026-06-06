@@ -1254,8 +1254,8 @@ export const registerTenant = async ({ name, email, password, company_name, refe
   // Check referred_by code to find affiliate_id
   let referredByAffiliateId = null;
   if (referredBy) {
-    const affiliate = await get('SELECT id FROM affiliates WHERE affiliate_code = ?', [referredBy]);
-    if (affiliate) {
+    const affiliate = await get('SELECT id, email FROM affiliates WHERE affiliate_code = ?', [referredBy]);
+    if (affiliate && affiliate.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
       referredByAffiliateId = affiliate.id;
     }
   }
@@ -1433,8 +1433,8 @@ export const findOrCreateGoogleUser = async ({ googleId, email, name, referredBy
   // Check referred_by code to find affiliate_id
   let referredByAffiliateId = null;
   if (referredBy) {
-    const affiliate = await get('SELECT id FROM affiliates WHERE affiliate_code = ?', [referredBy]);
-    if (affiliate) {
+    const affiliate = await get('SELECT id, email FROM affiliates WHERE affiliate_code = ?', [referredBy]);
+    if (affiliate && affiliate.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
       referredByAffiliateId = affiliate.id;
     }
   }
