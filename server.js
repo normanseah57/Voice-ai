@@ -317,7 +317,7 @@ async function sendPaymentReminderWhatsApp(tenant, phone, daysLeft) {
     return;
   }
   try {
-    const client = getSignalWireClient();
+    const client = getTwilioClient();
     const fromWhatsApp = `whatsapp:${process.env.TWILIO_PHONE_NUMBER || '+14155238886'}`;
     await client.messages.create({ from: fromWhatsApp, to: `whatsapp:${phone}`, body });
     console.log(`[WhatsApp Reminder] Sent ${daysLeft}-day reminder to ${phone}`);
