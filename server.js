@@ -5053,25 +5053,25 @@ server.on('upgrade', (request, socket, head) => {
 
 let tunnelProcess = null;
 
-// Start a public HTTPS tunnel via tunnelmole for webhook forwarding in local dev
+// Start a public HTTPS tunnel via localtunnel for webhook forwarding in local dev
 function startSshTunnel() {
   return new Promise((resolve) => {
     const ngrokUrl = process.env.NGROK_URL;
-    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or tunnelmole.net)
+    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or loca.lt)
     if (ngrokUrl && !ngrokUrl.includes('localhost') && !ngrokUrl.includes('127.0.0.1')) {
       console.log(`Using existing public NGROK_URL: ${ngrokUrl}`);
       return resolve(ngrokUrl);
     }
 
-    console.log('Spawning automated public HTTPS tunnel via tunnelmole...');
-    const tmole = spawn('npx', ['tunnelmole', PORT.toString()], { shell: true });
+    console.log('Spawning automated public HTTPS tunnel via localtunnel...');
+    const lt = spawn('npx', ['localtunnel', '--port', PORT.toString()], { shell: true });
 
-    tunnelProcess = tmole;
+    tunnelProcess = lt;
     let resolved = false;
 
-    tmole.stdout.on('data', (data) => {
+    lt.stdout.on('data', (data) => {
       const output = data.toString();
-      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.tunnelmole\.net/);
+      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.loca\.lt/);
       if (match && !resolved) {
         const tunnelUrl = match[0];
         console.log(`\n🎉 Public Tunnel Active: ${tunnelUrl}`);
@@ -5082,14 +5082,14 @@ function startSshTunnel() {
       }
     });
 
-    tmole.stderr.on('data', (data) => {
+    lt.stderr.on('data', (data) => {
       const errOutput = data.toString().trim();
       if (errOutput) {
         console.log(`[Tunnel Info] ${errOutput}`);
       }
     });
 
-    tmole.on('close', (code) => {
+    lt.on('close', (code) => {
       console.log(`Tunnel process disconnected (code ${code})`);
       if (!resolved) resolve(null);
     });
