@@ -539,6 +539,11 @@
     let currentAffiliate = JSON.parse(localStorage.getItem('aff_user'));
 
     document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get('tab');
+      if (tab === 'signup') {
+        switchAuthTab('signup');
+      }
       if (affToken && currentAffiliate) {
         showDashboard();
       }

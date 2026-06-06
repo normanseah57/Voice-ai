@@ -1260,3 +1260,22 @@ window.showInviteAcceptStep = async function(token) {
     showToast('Failed to fetch invitation details.', 'error');
   }
 };
+
+// ── Affiliate Info Modal Handlers ──
+window.openAffiliateInfoModal = function() {
+  const modal = document.getElementById('affiliate-info-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    if (window.lucide) window.lucide.createIcons();
+  }
+};
+
+window.closeAffiliateInfoModal = function() {
+  const modal = document.getElementById('affiliate-info-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.goToAffiliateRegistration = function() {
+  window.location.href = '/affiliate.html?tab=signup';
+};
+

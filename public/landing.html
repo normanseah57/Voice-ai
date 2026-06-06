@@ -126,6 +126,7 @@
       <div class="landing-nav-actions">
         <a href="#features" class="nav-link">Features</a>
         <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="#" class="nav-link" onclick="event.preventDefault(); openAffiliateInfoModal()">Affiliates</a>
         <button class="btn btn-secondary" onclick="openAuthModal('login')">Sign In</button>
         <button class="btn btn-primary" onclick="openRequestDemoModal()">Request Demo</button>
       </div>
@@ -793,6 +794,64 @@
         <i data-lucide="phone" style="width: 24px; height: 24px; color: black; fill: black;"></i>
       </div>
     </main>
+  </div>
+
+  <!-- Modal: Affiliate Program Information & Onboarding -->
+  <div class="modal-overlay" id="affiliate-info-modal" onclick="if(event.target===this) closeAffiliateInfoModal()" style="z-index: 99999; display: none; align-items: center; justify-content: center;">
+    <div class="modal-card glass" style="width: 520px; max-height: 90vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="flex-shrink: 0; border-bottom: 1px solid var(--border-glass); padding: 20px 25px; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="color: white; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 10px;">
+          <i data-lucide="share-2" style="color: var(--color-primary); width: 22px; height: 22px;"></i>
+          VoiceDesk Partner Program
+        </h3>
+        <button class="btn-close" onclick="closeAffiliateInfoModal()" style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 25px; color: var(--text-muted); text-align: left;">
+        <p style="margin: 0; font-size: 0.95rem; line-height: 1.5; color: white;">
+          Earn high recurring commissions by introducing local clinics, spas, salons, and businesses to VoiceDesk.
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Benefit 1 -->
+          <div style="display: flex; gap: 12px; align-items: start;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); color: var(--color-success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <i data-lucide="percent" style="width: 16px; height: 16px;"></i>
+            </div>
+            <div>
+              <strong style="color: white; font-size: 0.95rem; display: block; margin-bottom: 2px;">30% Commission Rate</strong>
+              <span style="font-size: 0.85rem; line-height: 1.4; display: block;">Earn 30% from the annual base subscription fee on every new customer you refer (e.g. S$2,876.40 for Pro Annual).</span>
+            </div>
+          </div>
+
+          <!-- Benefit 2 -->
+          <div style="display: flex; gap: 12px; align-items: start;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(6, 182, 212, 0.1); color: var(--color-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <i data-lucide="calendar" style="width: 16px; height: 16px;"></i>
+            </div>
+            <div>
+              <strong style="color: white; font-size: 0.95rem; display: block; margin-bottom: 2px;">Annual Cycle Condition</strong>
+              <span style="font-size: 0.85rem; line-height: 1.4; display: block;">New signups must subscribe or upgrade to an annual billing plan (minimum 12-month period requirement) to trigger commission.</span>
+            </div>
+          </div>
+
+          <!-- Benefit 3 -->
+          <div style="display: flex; gap: 12px; align-items: start;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(139, 92, 246, 0.1); color: var(--color-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+              <i data-lucide="layout" style="width: 16px; height: 16px;"></i>
+            </div>
+            <div>
+              <strong style="color: white; font-size: 0.95rem; display: block; margin-bottom: 2px;">Real-Time Tracking & Payouts</strong>
+              <span style="font-size: 0.85rem; line-height: 1.4; display: block;">Get access to a dedicated partner dashboard, copy your link or code, track clicks and registrations, and check pending/paid status in real-time.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px; border-top: 1px solid var(--border-glass); padding-top: 20px; display: flex; flex-direction: column; gap: 12px;">
+          <button class="btn btn-primary" onclick="goToAffiliateRegistration()" style="width: 100%; height: 45px; font-weight: 600; font-size: 0.95rem;">Join Affiliate Program & Sign Up</button>
+          <button class="btn btn-secondary" onclick="closeAffiliateInfoModal()" style="width: 100%; height: 42px; background: transparent; border: 1px solid var(--border-glass); color: var(--text-muted); font-size: 0.88rem;">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modal: Request For A Demo Option Picker -->
