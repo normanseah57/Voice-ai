@@ -5053,30 +5053,25 @@ server.on('upgrade', (request, socket, head) => {
 
 let tunnelProcess = null;
 
-// Start a public HTTPS tunnel via localhost.run for webhook forwarding in local dev
+// Start a public HTTPS tunnel via tunnelmole for webhook forwarding in local dev
 function startSshTunnel() {
   return new Promise((resolve) => {
     const ngrokUrl = process.env.NGROK_URL;
-    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or lhr.life)
+    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or tunnelmole.net)
     if (ngrokUrl && !ngrokUrl.includes('localhost') && !ngrokUrl.includes('127.0.0.1')) {
       console.log(`Using existing public NGROK_URL: ${ngrokUrl}`);
       return resolve(ngrokUrl);
     }
 
-    console.log('Spawning automated public HTTPS tunnel via localhost.run...');
-    const ssh = spawn('ssh', [
-      '-o', 'StrictHostKeyChecking=no',
-      '-o', 'ServerAliveInterval=30',
-      '-R', `80:127.0.0.1:${PORT}`,
-      'nokey@localhost.run'
-    ]);
+    console.log('Spawning automated public HTTPS tunnel via tunnelmole...');
+    const tmole = spawn('npx', ['tunnelmole', PORT.toString()], { shell: true });
 
-    tunnelProcess = ssh;
+    tunnelProcess = tmole;
     let resolved = false;
 
-    ssh.stdout.on('data', (data) => {
+    tmole.stdout.on('data', (data) => {
       const output = data.toString();
-      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.lhr\.life/);
+      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.tunnelmole\.net/);
       if (match && !resolved) {
         const tunnelUrl = match[0];
         console.log(`\n🎉 Public Tunnel Active: ${tunnelUrl}`);
@@ -5087,25 +5082,25 @@ function startSshTunnel() {
       }
     });
 
-    ssh.stderr.on('data', (data) => {
+    tmole.stderr.on('data', (data) => {
       const errOutput = data.toString().trim();
-      if (errOutput && !errOutput.includes('Pseudo-terminal')) {
+      if (errOutput) {
         console.log(`[Tunnel Info] ${errOutput}`);
       }
     });
 
-    ssh.on('close', (code) => {
+    tmole.on('close', (code) => {
       console.log(`Tunnel process disconnected (code ${code})`);
       if (!resolved) resolve(null);
     });
 
-    // Timeout fallback after 12 seconds
+    // Timeout fallback after 20 seconds
     setTimeout(() => {
       if (!resolved) {
         console.warn('Tunnel setup timed out. Twilio outbound calls might fail without a public proxy.');
         resolve(null);
       }
-    }, 12000);
+    }, 20000);
   });
 }
 
