@@ -5156,25 +5156,27 @@ async function updateTwilioWebhooks(tunnelUrl) {
 
 // Initialize database and start HTTP Server
 initDb().then(async () => {
-  // Skip SSH tunnel on Railway/production — Railway provides a public HTTPS URL natively
   const isProduction = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (!isProduction) {
-    await startSshTunnel();
-    if (process.env.NGROK_URL) {
-      await updateTwilioWebhooks(process.env.NGROK_URL);
-    }
-  } else {
+  if (isProduction) {
     const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
     if (railwayDomain) {
       process.env.NGROK_URL = `https://${railwayDomain}`;
       console.log(`Production mode: Using Railway domain https://${railwayDomain}`);
     }
   }
-  server.listen(PORT, '0.0.0.0', () => {
+
+  server.listen(PORT, '0.0.0.0', async () => {
     console.log(`\n======================================================`);
     console.log(`Voice AI SaaS Server listening on port ${PORT}`);
     console.log(`- Web portal dashboard: http://localhost:${PORT}`);
-    if (process.env.NGROK_URL) {
+    
+    if (!isProduction) {
+      const tunnelUrl = await startSshTunnel();
+      if (tunnelUrl) {
+        await updateTwilioWebhooks(tunnelUrl);
+        console.log(`- Public HTTPS URL: ${tunnelUrl}`);
+      }
+    } else if (process.env.NGROK_URL) {
       console.log(`- Public HTTPS URL: ${process.env.NGROK_URL}`);
     }
     console.log(`======================================================\n`);
@@ -5198,15 +5200,14 @@ initDb().then(async () => {
 
   // ── Self-ping keep-alive: prevents Railway cold starts ──
   // Hits /health every 4 minutes so Railway never sleeps the server
-  const APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
-    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-    : process.env.NGROK_URL || `http://localhost:${PORT}`;
-
   import('node:https').then(({ default: https }) => {
     import('node:http').then(({ default: http }) => {
       setInterval(() => {
         try {
-          const url = new URL(`${APP_URL}/health`);
+          const activeUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+            ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+            : process.env.NGROK_URL || `http://localhost:${PORT}`;
+          const url = new URL(`${activeUrl}/health`);
           const mod = url.protocol === 'https:' ? https : http;
           const req = mod.get({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: '/health', headers: { 'User-Agent': 'VoiceDesk-KeepAlive/1.0' } }, (res) => {
             res.resume();
@@ -5214,7 +5215,7 @@ initDb().then(async () => {
           req.on('error', () => {}); // silent on network hiccup
         } catch (_) {}
       }, 240000); // every 4 minutes
-      console.log(`[Keep-Alive] Self-ping active → ${APP_URL}/health every 4 min`);
+      console.log(`[Keep-Alive] Self-ping active`);
     });
   });
 
