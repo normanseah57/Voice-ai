@@ -1265,14 +1265,14 @@ window.showInviteAcceptStep = async function(token) {
 window.openAffiliateInfoModal = function() {
   const modal = document.getElementById('affiliate-info-modal');
   if (modal) {
-    modal.style.display = 'flex';
+    modal.classList.add('active');
     if (window.lucide) window.lucide.createIcons();
   }
 };
 
 window.closeAffiliateInfoModal = function() {
   const modal = document.getElementById('affiliate-info-modal');
-  if (modal) modal.style.display = 'none';
+  if (modal) modal.classList.remove('active');
 };
 
 window.goToAffiliateRegistration = function() {
