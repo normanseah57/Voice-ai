@@ -1164,10 +1164,11 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
       return res.status(400).json({ error: `Cannot upgrade: Selected plan is equal to or lower than your current subscription tier.` });
     }
 
+    const previousTier = tenant.subscription_tier;
     const usage = await updateTenantSubscription(req.tenantId, tier, cycle);
 
-    // Affiliate Commission credit check
-    if (tenant.referred_by_affiliate_id && cycle === 'annual') {
+    // Affiliate Commission credit check - only applicable for new signups upgrading from free tier
+    if (tenant.referred_by_affiliate_id && cycle === 'annual' && previousTier === 'free') {
       try {
         const existingEarning = await get('SELECT id FROM affiliate_earnings WHERE referred_tenant_id = ?', [tenant.id]);
         if (!existingEarning) {
