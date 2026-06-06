@@ -1182,11 +1182,14 @@ app.post('/api/saas/billing/upgrade', requireAuth, async (req, res) => {
 
             if (basePrice > 0) {
               const commission = basePrice * 0.30;
+              const defaultStripeFeeRate = 0.015;
+              const transactionFee = commission * defaultStripeFeeRate;
+              const netAmount = commission - transactionFee;
               await run(`
-                INSERT INTO affiliate_earnings (affiliate_id, referred_tenant_id, amount, commission_rate, payment_amount, status)
-                VALUES (?, ?, ?, 0.30, ?, 'pending')
-              `, [tenant.referred_by_affiliate_id, tenant.id, commission, basePrice]);
-              console.log(`[Affiliate] Commission of $${commission} generated for Affiliate ID ${tenant.referred_by_affiliate_id} from Tenant ID ${tenant.id}`);
+                INSERT INTO affiliate_earnings (affiliate_id, referred_tenant_id, amount, commission_rate, payment_amount, status, stripe_fee_rate, transaction_fee, net_amount)
+                VALUES (?, ?, ?, 0.30, ?, 'pending', ?, ?, ?)
+              `, [tenant.referred_by_affiliate_id, tenant.id, commission, basePrice, defaultStripeFeeRate, transactionFee, netAmount]);
+              console.log(`[Affiliate] Commission of $${commission} (Net: $${netAmount}, Fee: $${transactionFee}) generated for Affiliate ID ${tenant.referred_by_affiliate_id} from Tenant ID ${tenant.id}`);
             }
           }
         }
@@ -1444,12 +1447,19 @@ app.get('/api/admin/affiliate-payouts', requireAuth, requireAdmin, async (req, r
 // Admin update payout status
 app.post('/api/admin/affiliate-payouts/:id/status', requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, stripeFeeRate } = req.body;
   if (!['pending', 'paid', 'cancelled'].includes(status)) {
     return res.status(400).json({ error: 'Invalid payout status.' });
   }
   try {
-    const result = await updatePayoutStatus(parseInt(id), status);
+    let feeRate = null;
+    if (stripeFeeRate !== undefined && stripeFeeRate !== null) {
+      feeRate = parseFloat(stripeFeeRate);
+      if (isNaN(feeRate) || feeRate < 0 || feeRate > 1) {
+        return res.status(400).json({ error: 'Invalid stripeFeeRate. Must be a decimal number between 0 and 1.' });
+      }
+    }
+    const result = await updatePayoutStatus(parseInt(id), status, feeRate);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });

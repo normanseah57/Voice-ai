@@ -11918,7 +11918,9 @@ async function refreshAffiliateStats() {
           row.innerHTML = `
             <td><strong>${escapeHtml(earn.referred_company || earn.referred_name)}</strong></td>
             <td>S$${parseFloat(earn.payment_amount).toFixed(2)}</td>
-            <td><strong style="color: #10b981;">S$${parseFloat(earn.amount).toFixed(2)}</strong></td>
+            <td>S$${parseFloat(earn.amount).toFixed(2)}</td>
+            <td class="text-muted">S$${parseFloat(earn.transaction_fee || 0).toFixed(2)} <span style="font-size:0.75rem;">(${((earn.stripe_fee_rate || 0.015) * 100).toFixed(1)}%)</span></td>
+            <td><strong style="color: #10b981;">S$${parseFloat(earn.net_amount || 0).toFixed(2)}</strong></td>
             <td>
               <div style="display:flex;align-items:center;gap:6px;">
                 <span class="${statusClass}"></span>
@@ -12043,7 +12045,9 @@ async function loadAdminPayoutsData() {
           <td>${escapeHtml(p.affiliate_email)}</td>
           <td><code style="color:#fbbf24;">${escapeHtml(p.paypal_email || 'none')}</code></td>
           <td>${escapeHtml(p.referred_company)}</td>
-          <td><strong style="color:#10b981;">S$${parseFloat(p.amount).toFixed(2)}</strong></td>
+          <td>S$${parseFloat(p.amount).toFixed(2)}</td>
+          <td class="text-muted">S$${parseFloat(p.transaction_fee || 0).toFixed(2)} <span style="font-size:0.7rem;">(${((p.stripe_fee_rate || 0.015) * 100).toFixed(1)}%)</span></td>
+          <td><strong style="color:#10b981;">S$${parseFloat(p.net_amount || 0).toFixed(2)}</strong></td>
           <td>${new Date(p.created_at).toLocaleDateString()}</td>
           <td>${statusBadge}</td>
           <td class="text-right">${actions}</td>
@@ -12063,11 +12067,23 @@ async function loadAdminPayoutsData() {
 window.loadAdminPayoutsData = loadAdminPayoutsData;
 
 async function updateAdminPayoutStatus(earningId, status) {
+  let stripeFeeRate = null;
+  if (status === 'paid') {
+    const rateStr = prompt('Enter prevailing Stripe transaction/payout fee percentage to deduct (e.g. 1.5 for 1.5%, 2.0 for 2%):', '1.5');
+    if (rateStr === null) return; // cancelled
+    const rateVal = parseFloat(rateStr);
+    if (isNaN(rateVal) || rateVal < 0 || rateVal > 100) {
+      alert('Invalid fee percentage. Payout status update cancelled.');
+      return;
+    }
+    stripeFeeRate = rateVal / 100;
+  }
+
   try {
     const res = await fetch(`/api/admin/affiliate-payouts/${earningId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, stripeFeeRate })
     });
     if (res.ok) {
       showToast('Payout Updated', `Marked payout status as ${status}.`, 'success');

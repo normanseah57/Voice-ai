@@ -439,7 +439,7 @@
       <div class="promo-banner">
         <div>
           <h2>Your Partner Dashboard</h2>
-          <p>Share your link, refer new annual signups, and earn a 30% one-time commission (credited strictly to you, not the referee).</p>
+          <p>Share your link, refer new annual signups, and earn a 30% one-time commission (credited strictly to you, not the referee, net of prevailing Stripe transaction and payout fees).</p>
         </div>
         <div style="display: flex; gap: 8px; flex: 1; max-width: 480px; min-width: 280px; margin-top: 10px;">
           <input type="text" id="referral-link" readonly class="form-input" style="font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.4);">
@@ -515,7 +515,9 @@
               <thead>
                 <tr>
                   <th>Referred Company</th>
-                  <th>Commission</th>
+                  <th>Gross</th>
+                  <th>Stripe Fee</th>
+                  <th>Net Payout</th>
                   <th>Status</th>
                   <th>Date</th>
                 </tr>
@@ -712,7 +714,9 @@
               const statusLabel = earn.status.charAt(0).toUpperCase() + earn.status.slice(1);
               row.innerHTML = `
                 <td><strong>${escapeHtml(earn.referred_company || earn.referred_name)}</strong></td>
-                <td><strong style="color:#10b981;">S$${parseFloat(earn.amount).toFixed(2)}</strong></td>
+                <td>S$${parseFloat(earn.amount).toFixed(2)}</td>
+                <td class="text-muted" style="font-size:0.8rem;">S$${parseFloat(earn.transaction_fee || 0).toFixed(2)} <span style="font-size:0.75rem;">(${((earn.stripe_fee_rate || 0.015) * 100).toFixed(1)}%)</span></td>
+                <td><strong style="color:#10b981;">S$${parseFloat(earn.net_amount || 0).toFixed(2)}</strong></td>
                 <td>
                   <div class="status-badge">
                     <span class="${statusClass}"></span>

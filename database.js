@@ -641,6 +641,9 @@ export const initDb = async () => {
       commission_rate REAL DEFAULT 0.30,
       payment_amount REAL NOT NULL,
       status TEXT DEFAULT 'pending',
+      stripe_fee_rate REAL DEFAULT 0.015,
+      transaction_fee REAL DEFAULT 0.0,
+      net_amount REAL DEFAULT 0.0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(affiliate_id) REFERENCES affiliates(id) ON DELETE CASCADE,
       FOREIGN KEY(referred_tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -652,6 +655,30 @@ export const initDb = async () => {
     await run("ALTER TABLE tenants ADD COLUMN referred_by_affiliate_id INTEGER DEFAULT NULL");
   } catch (err) {
     // Already exists
+  }
+
+  // Migrations: Alter affiliate_earnings to add Stripe fee and net payout columns
+  try {
+    await run("ALTER TABLE affiliate_earnings ADD COLUMN stripe_fee_rate REAL DEFAULT 0.015");
+  } catch (err) { /* Already exists */ }
+  try {
+    await run("ALTER TABLE affiliate_earnings ADD COLUMN transaction_fee REAL DEFAULT 0.0");
+  } catch (err) { /* Already exists */ }
+  try {
+    await run("ALTER TABLE affiliate_earnings ADD COLUMN net_amount REAL DEFAULT 0.0");
+  } catch (err) { /* Already exists */ }
+
+  // Backfill existing affiliate_earnings records if their net_amount is 0.0
+  try {
+    const unbackfilled = await all("SELECT id, amount, stripe_fee_rate FROM affiliate_earnings");
+    for (const r of unbackfilled) {
+      const feeRate = r.stripe_fee_rate || 0.015;
+      const fee = r.amount * feeRate;
+      const net = r.amount - fee;
+      await run("UPDATE affiliate_earnings SET stripe_fee_rate = ?, transaction_fee = ?, net_amount = ? WHERE id = ? AND net_amount = 0.0", [feeRate, fee, net, r.id]);
+    }
+  } catch (err) {
+    console.error("Failed to backfill affiliate_earnings:", err.message);
   }
 
 
@@ -3838,12 +3865,12 @@ export const getAffiliateStats = async (affiliateId) => {
   // Referred tenants signed up
   const signups = await get('SELECT COUNT(*) as count FROM tenants WHERE referred_by_affiliate_id = ?', [affiliateId]);
   
-  // Commission amounts
+  // Commission amounts (total_earned represents gross, pending/paid represent net payouts)
   const earnings = await get(`
     SELECT 
       COALESCE(SUM(amount), 0) as total_earned,
-      COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_payouts,
-      COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as paid_payouts
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN net_amount ELSE 0 END), 0) as pending_payouts,
+      COALESCE(SUM(CASE WHEN status = 'paid' THEN net_amount ELSE 0 END), 0) as paid_payouts
     FROM affiliate_earnings
     WHERE affiliate_id = ?
   `, [affiliateId]);
@@ -3885,7 +3912,21 @@ export const getAllAffiliatePayoutsForAdmin = async () => {
   `);
 };
 
-export const updatePayoutStatus = async (earningId, status) => {
+export const updatePayoutStatus = async (earningId, status, stripeFeeRate = null) => {
+  if (status === 'paid' && stripeFeeRate !== null) {
+    const earning = await get('SELECT amount FROM affiliate_earnings WHERE id = ?', [earningId]);
+    if (earning) {
+      const gross = earning.amount;
+      const transactionFee = gross * stripeFeeRate;
+      const netAmount = gross - transactionFee;
+      await run(`
+        UPDATE affiliate_earnings 
+        SET status = ?, stripe_fee_rate = ?, transaction_fee = ?, net_amount = ? 
+        WHERE id = ?
+      `, [status, stripeFeeRate, transactionFee, netAmount, earningId]);
+      return { id: earningId, status, stripe_fee_rate: stripeFeeRate, transaction_fee: transactionFee, net_amount: netAmount };
+    }
+  }
   await run('UPDATE affiliate_earnings SET status = ? WHERE id = ?', [status, earningId]);
   return { id: earningId, status };
 };
