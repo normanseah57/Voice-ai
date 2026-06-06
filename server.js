@@ -4055,7 +4055,6 @@ app.post('/incoming-call', async (req, res) => {
     // Connect to WebSocket passing tenantId
     res.send(`
       <Response>
-        <Say>Thank you for calling. Please note that this call is recorded and transcribed for quality and verification purposes.</Say>
         <Connect>
           <Stream url="wss://${domain}/media-stream">
             <Parameter name="tenantId" value="${tenantId}" />
@@ -4104,7 +4103,6 @@ app.post('/outbound-call-twiml', async (req, res) => {
 
   res.send(`
     <Response>
-      <Say>Hello. This is an automated call from our virtual voice assistant. Please note that this call is recorded and transcribed for quality purposes.</Say>
       <Connect>
         <Stream url="wss://${domain}/media-stream">
           <Parameter name="tenantId" value="${tenantId}" />
