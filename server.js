@@ -5129,6 +5129,7 @@ function startSshTunnel() {
 }
 
 let tunnelMonitorInterval = null;
+let consecutiveFailures = 0;
 
 function recreateTunnel() {
   if (tunnelProcess) {
@@ -5145,6 +5146,8 @@ function startTunnelMonitor() {
   }
 
   console.log('[Tunnel Monitor] Starting health monitor for public URL...');
+  consecutiveFailures = 0;
+
   tunnelMonitorInterval = setInterval(() => {
     const tunnelUrl = process.env.NGROK_URL;
     if (!tunnelUrl || tunnelUrl.includes('localhost') || tunnelUrl.includes('127.0.0.1')) {
@@ -5154,6 +5157,9 @@ function startTunnelMonitor() {
     if (!tunnelProcess) {
       return;
     }
+
+    // Skip health check restart if there is an active media stream call to prevent dropping active calls
+    const activeCalls = mediaStreamWss && mediaStreamWss.clients ? mediaStreamWss.clients.size : 0;
 
     try {
       const urlObj = new URL(`${tunnelUrl}/health`);
@@ -5172,19 +5178,19 @@ function startTunnelMonitor() {
         res.on('end', () => {
           resolved = true;
           if (res.statusCode !== 200) {
-            console.warn(`[Tunnel Monitor] Health check failed with status ${res.statusCode}. Restarting tunnel...`);
-            recreateTunnel();
+            handleFailure(`Health check failed with status ${res.statusCode}`);
             return;
           }
           try {
             const parsed = JSON.parse(rawData);
             if (parsed.status !== 'ok') {
-              console.warn(`[Tunnel Monitor] Health check returned unexpected payload: ${rawData}. Restarting tunnel...`);
-              recreateTunnel();
+              handleFailure(`Health check returned unexpected payload: ${rawData}`);
+            } else {
+              // Reset failures on success
+              consecutiveFailures = 0;
             }
           } catch (e) {
-            console.warn(`[Tunnel Monitor] Health check returned non-JSON response. Restarting tunnel...`);
-            recreateTunnel();
+            handleFailure(`Health check returned non-JSON response`);
           }
         });
       });
@@ -5193,20 +5199,33 @@ function startTunnelMonitor() {
         req.destroy();
         if (!resolved) {
           resolved = true;
-          console.warn(`[Tunnel Monitor] Health check timed out. Restarting tunnel...`);
-          recreateTunnel();
+          handleFailure(`Health check timed out`);
         }
       });
 
       req.on('error', (err) => {
         if (!resolved) {
           resolved = true;
-          console.warn(`[Tunnel Monitor] Health check connection error (${err.message}). Restarting tunnel...`);
-          recreateTunnel();
+          handleFailure(`Health check connection error (${err.message})`);
         }
       });
     } catch (err) {
       console.error(`[Tunnel Monitor] Failed to parse health check URL:`, err.message);
+    }
+
+    function handleFailure(reason) {
+      consecutiveFailures++;
+      console.warn(`[Tunnel Monitor] ${reason} (consecutive failure ${consecutiveFailures}/2).`);
+      
+      if (consecutiveFailures >= 2) {
+        if (activeCalls > 0) {
+          console.warn(`[Tunnel Monitor] Stale tunnel detected, but active call is running (${activeCalls} call(s)). Postponing restart to avoid dropping active call.`);
+          return;
+        }
+        console.warn(`[Tunnel Monitor] 2 consecutive failures. Restarting tunnel...`);
+        recreateTunnel();
+        consecutiveFailures = 0;
+      }
     }
   }, 30000); // Check every 30 seconds
 }
