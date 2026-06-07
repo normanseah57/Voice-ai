@@ -747,7 +747,7 @@ export const initDb = async () => {
     }
 
     // Upgrade Google OAuth email to Super Admin status if it exists
-    await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");
+    await run("UPDATE tenants SET is_admin = 1 WHERE email IN ('normansiah.sg@gmail.com', 'normanseah.sg@gmail.com')");
     console.log('Super Admin configuration verified.');
   } catch (err) {
     console.error('Failed to initialize super admin account:', err);

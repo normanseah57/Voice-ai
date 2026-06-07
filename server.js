@@ -864,7 +864,7 @@ app.get('/api/auth/debug-reset', async (req, res) => {
 
     // Explicitly run resets here to be 100% sure they run on the active database instance
     await run("UPDATE tenants SET password_hash = 'admin123', is_admin = 1 WHERE email = 'admin@aurasaas.com'");
-    await run("UPDATE tenants SET is_admin = 1 WHERE email = 'normansiah.sg@gmail.com'");
+    await run("UPDATE tenants SET is_admin = 1 WHERE email IN ('normansiah.sg@gmail.com', 'normanseah.sg@gmail.com')");
 
     const tenants = await all('SELECT id, name, email, is_admin FROM tenants');
     const users = await all('SELECT id, tenant_id, name, email, role, password_hash, password_is_hashed FROM tenant_users');
