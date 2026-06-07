@@ -4482,7 +4482,7 @@ mediaStreamWss.on('connection', (ws) => {
         openaiWs.on('open', async () => {
           console.log(`Connected to OpenAI Realtime API for call ${callSid}`);
           
-          let systemInstructions = '';
+          let systemInstructions = `CURRENT DATE & TIME CONTEXT:\n- Today's date is: ${new Date().toISOString().split('T')[0]}\n- Current local time is: ${new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}\n- Current day of the week is: ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}\n\n`;
 
           // Accent & Language Specific Instructions (Prepended for priority)
           if (settings.voice_accent === 'singlish') {
