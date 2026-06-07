@@ -5128,6 +5128,89 @@ function startSshTunnel() {
   });
 }
 
+let tunnelMonitorInterval = null;
+
+function recreateTunnel() {
+  if (tunnelProcess) {
+    console.log('[Tunnel Monitor] Killing stale/dead tunnel process...');
+    delete process.env.NGROK_URL; // Clear immediately to avoid redundant checks
+    tunnelProcess.kill();
+  }
+}
+
+// Start a background interval to check tunnel health every 30 seconds
+function startTunnelMonitor() {
+  if (tunnelMonitorInterval) {
+    clearInterval(tunnelMonitorInterval);
+  }
+
+  console.log('[Tunnel Monitor] Starting health monitor for public URL...');
+  tunnelMonitorInterval = setInterval(() => {
+    const tunnelUrl = process.env.NGROK_URL;
+    if (!tunnelUrl || tunnelUrl.includes('localhost') || tunnelUrl.includes('127.0.0.1')) {
+      return;
+    }
+    
+    if (!tunnelProcess) {
+      return;
+    }
+
+    try {
+      const urlObj = new URL(`${tunnelUrl}/health`);
+      const client = urlObj.protocol === 'https:' ? https : http;
+      
+      let resolved = false;
+      const req = client.get({
+        hostname: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+        path: '/health',
+        headers: { 'User-Agent': 'VoiceDesk-TunnelMonitor/1.0' },
+        timeout: 10000 // 10s timeout
+      }, (res) => {
+        let rawData = '';
+        res.on('data', (chunk) => { rawData += chunk; });
+        res.on('end', () => {
+          resolved = true;
+          if (res.statusCode !== 200) {
+            console.warn(`[Tunnel Monitor] Health check failed with status ${res.statusCode}. Restarting tunnel...`);
+            recreateTunnel();
+            return;
+          }
+          try {
+            const parsed = JSON.parse(rawData);
+            if (parsed.status !== 'ok') {
+              console.warn(`[Tunnel Monitor] Health check returned unexpected payload: ${rawData}. Restarting tunnel...`);
+              recreateTunnel();
+            }
+          } catch (e) {
+            console.warn(`[Tunnel Monitor] Health check returned non-JSON response. Restarting tunnel...`);
+            recreateTunnel();
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        if (!resolved) {
+          resolved = true;
+          console.warn(`[Tunnel Monitor] Health check timed out. Restarting tunnel...`);
+          recreateTunnel();
+        }
+      });
+
+      req.on('error', (err) => {
+        if (!resolved) {
+          resolved = true;
+          console.warn(`[Tunnel Monitor] Health check connection error (${err.message}). Restarting tunnel...`);
+          recreateTunnel();
+        }
+      });
+    } catch (err) {
+      console.error(`[Tunnel Monitor] Failed to parse health check URL:`, err.message);
+    }
+  }, 30000); // Check every 30 seconds
+}
+
 // Clean up child tunnel process on exit
 process.on('SIGINT', () => {
   if (tunnelProcess) tunnelProcess.kill();
@@ -5242,6 +5325,7 @@ initDb().then(async () => {
         await updateTwilioWebhooks(tunnelUrl);
         await updateSignalWireWebhooks(tunnelUrl);
         console.log(`- Public HTTPS URL: ${tunnelUrl}`);
+        startTunnelMonitor();
       }
     } else if (process.env.NGROK_URL) {
       console.log(`- Public HTTPS URL: ${process.env.NGROK_URL}`);
