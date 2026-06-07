@@ -4554,15 +4554,31 @@ mediaStreamWss.on('connection', (ws) => {
           systemInstructions += `\n\nIDENTITY & BUSINESS OVERRIDE:\n- Your name is "${agentName}". You must ALWAYS refer to yourself as "${agentName}". Never call yourself "Aura" unless your configured name is indeed "Aura".\n- You represent "${companyName}". Always refer to the business as "${companyName}". Never refer to the business as "Aura Wellness Spa" unless the business name is set to that.`;
 
           // Add Payment Policy / Instructions dynamically
-          if (settings.booking_payment_method === 'upfront') {
+          const isHotel = settings.system_mode === 'hotel';
+          const tenant = await getTenantById(tenantId);
+          const hasPaymentAddon = tenant && tenant.addon_payment_gateway === 1;
+
+          if (isHotel) {
+            if (settings.booking_payment_method === 'upfront' && hasPaymentAddon) {
+              systemInstructions += `\n\nPAYMENT POLICY / INSTRUCTIONS:
+- This business requires upfront payment/deposit to confirm bookings.
+- Inform the customer that a secure checkout payment link will be sent to their mobile phone immediately to finalize their booking.
+- Assure them their booking slot is held, but they must complete the payment via the link to fully confirm it.`;
+            } else {
+              systemInstructions += `\n\nPAYMENT POLICY / INSTRUCTIONS:
+- This business allows customers to pay after their stay (Pay Later / Settle Post-Service).
+- Inform the customer that their booking is fully confirmed and they can settle the payment in person after their stay is completed.`;
+            }
+          } else if (hasPaymentAddon && settings.booking_payment_method === 'upfront') {
             systemInstructions += `\n\nPAYMENT POLICY / INSTRUCTIONS:
 - This business requires upfront payment/deposit to confirm bookings.
-- Inform the customer that a secure checkout payment link (supporting Cards and PayNow) will be sent to their mobile phone immediately to finalize their booking.
+- Inform the customer that a secure checkout payment link will be sent to their mobile phone immediately to finalize their booking.
 - Assure them their booking slot is held, but they must complete the payment via the link to fully confirm it.`;
           } else {
             systemInstructions += `\n\nPAYMENT POLICY / INSTRUCTIONS:
-- This business allows customers to pay after their service (Pay Later / Settle Post-Service).
-- Inform the customer that their booking is fully confirmed and they can settle the payment (via Card, Cash, or PayNow) in person or via link after their service is completed.`;
+- No payment or deposit is required to book or confirm this appointment.
+- Do NOT mention secure payment links, credit cards, or upfront payments.
+- Inform the customer that their booking is fully confirmed.`;
           }
 
           // Character-specific Dialect / Accent Injector
