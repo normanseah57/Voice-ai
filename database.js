@@ -2213,9 +2213,16 @@ export const addAppointment = async (tenant_id, { customer_name, customer_phone,
   let googleEmail = null;
 
   try {
-    const user = await get('SELECT * FROM tenant_users WHERE tenant_id = ? AND LOWER(name) = ?', [tenant_id, assignedResource.toLowerCase()]);
-    if (user && user.google_calendar_connected === 1) {
-      gcalSynced = await createGoogleCalendarEvent(user.id, {
+    let targetUser = await get('SELECT * FROM tenant_users WHERE tenant_id = ? AND LOWER(name) = ?', [tenant_id, assignedResource.toLowerCase()]);
+    if (!targetUser || targetUser.google_calendar_connected !== 1) {
+      const owner = await get("SELECT * FROM tenant_users WHERE tenant_id = ? AND role = 'owner'", [tenant_id]);
+      if (owner && owner.google_calendar_connected === 1) {
+        targetUser = owner;
+      }
+    }
+
+    if (targetUser && targetUser.google_calendar_connected === 1) {
+      gcalSynced = await createGoogleCalendarEvent(targetUser.id, {
         id: result.id,
         customer_name,
         customer_phone,
@@ -2225,8 +2232,8 @@ export const addAppointment = async (tenant_id, { customer_name, customer_phone,
         notes
       });
       if (gcalSynced) {
-        googleEmail = user.google_calendar_email;
-        await logTenantActivity(tenant_id, 'settings_update', `[Google Calendar Sync] Synced appointment for ${customer_name} to ${user.name}'s Google Calendar (${user.google_calendar_email})`);
+        googleEmail = targetUser.google_calendar_email;
+        await logTenantActivity(tenant_id, 'settings_update', `[Google Calendar Sync] Synced appointment for ${customer_name} to ${targetUser.name}'s Google Calendar (${targetUser.google_calendar_email})`);
       }
     }
   } catch (err) {
