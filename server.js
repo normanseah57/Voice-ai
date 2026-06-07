@@ -734,7 +734,8 @@ function getSignalWireClient() {
   const spaceUrl = process.env.SIGNALWIRE_SPACE_URL;
 
   if (projectId && apiToken && spaceUrl && !isMockEnabled()) {
-    return signalwire(projectId, apiToken, { signalwireSpaceUrl: spaceUrl });
+    const spaceHost = spaceUrl.includes('/api/laml') ? spaceUrl : `${spaceUrl}/api/laml`;
+    return signalwire(projectId, apiToken, { signalwireSpaceUrl: spaceHost });
   }
 
   // Fallback to Twilio client if SignalWire credentials are not set
@@ -915,7 +916,7 @@ app.post('/api/auth/login/2fa', async (req, res) => {
     if (!decoded.is2FAStep) return res.status(400).json({ error: 'Invalid token type.' });
     const user = await getTotpUser(decoded.userId);
     if (!user || !user.totp_secret) return res.status(400).json({ error: '2FA not configured.' });
-    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 1 });
+    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 6 });
     if (!valid) return res.status(401).json({ error: 'Invalid authenticator code. Please try again.' });
     // Issue full session JWT using tenantId/userId from temp token
     const token = issueJWT({ tenantId: decoded.tenantId, userId: decoded.userId });
@@ -1055,7 +1056,7 @@ app.get('/api/auth/2fa/setup', requireAuth, async (req, res) => {
 app.post('/api/auth/2fa/enable', requireAuth, async (req, res) => {
   const { secret, code } = req.body;
   if (!secret || !code) return res.status(400).json({ error: 'Secret and code are required.' });
-  const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token: code, window: 1 });
+  const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token: code, window: 6 });
   if (!valid) return res.status(400).json({ error: 'Invalid code. Please try again with your authenticator app.' });
   try {
     await enableTotp(req.userId, secret);
@@ -1072,7 +1073,7 @@ app.post('/api/auth/2fa/disable', requireAuth, async (req, res) => {
   try {
     const user = await getTotpUser(req.userId);
     if (!user?.totp_secret) return res.status(400).json({ error: '2FA is not enabled.' });
-    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 1 });
+    const valid = speakeasy.totp.verify({ secret: user.totp_secret, encoding: 'base32', token: code, window: 6 });
     if (!valid) return res.status(400).json({ error: 'Invalid code. 2FA not disabled.' });
     await disableTotp(req.userId);
     res.json({ success: true, message: '2FA disabled.' });
@@ -5053,25 +5054,30 @@ server.on('upgrade', (request, socket, head) => {
 
 let tunnelProcess = null;
 
-// Start a public HTTPS tunnel via localtunnel for webhook forwarding in local dev
+// Start a public HTTPS tunnel via localhost.run for webhook forwarding in local dev
 function startSshTunnel() {
   return new Promise((resolve) => {
     const ngrokUrl = process.env.NGROK_URL;
-    // Skip if NGROK_URL is set to a real external address (e.g. ngrok-free.app or loca.lt)
+    // Skip if NGROK_URL is set to a real external address
     if (ngrokUrl && !ngrokUrl.includes('localhost') && !ngrokUrl.includes('127.0.0.1')) {
       console.log(`Using existing public NGROK_URL: ${ngrokUrl}`);
       return resolve(ngrokUrl);
     }
 
-    console.log('Spawning automated public HTTPS tunnel via localtunnel...');
-    const lt = spawn('npx', ['localtunnel', '--port', PORT.toString()], { shell: true });
+    console.log('Spawning automated public HTTPS tunnel via localhost.run...');
+    const lt = spawn('ssh', [
+      '-tt',
+      '-o', 'StrictHostKeyChecking=no',
+      '-R', `80:127.0.0.1:${PORT}`,
+      'nokey@localhost.run'
+    ]);
 
     tunnelProcess = lt;
     let resolved = false;
 
     lt.stdout.on('data', (data) => {
       const output = data.toString();
-      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.loca\.lt/);
+      const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.lhr\.life/);
       if (match && !resolved) {
         const tunnelUrl = match[0];
         console.log(`\n🎉 Public Tunnel Active: ${tunnelUrl}`);
@@ -5094,6 +5100,8 @@ function startSshTunnel() {
       if (!resolved) {
         resolve(null);
       } else {
+        // Clear the dynamic NGROK_URL so that startSshTunnel will spawn a new one
+        delete process.env.NGROK_URL;
         // Auto-reconnect if the server is still active and it's not a manual exit
         console.log('Local tunnel disconnected unexpectedly. Reconnecting in 3 seconds...');
         setTimeout(async () => {
@@ -5101,6 +5109,7 @@ function startSshTunnel() {
             const newUrl = await startSshTunnel();
             if (newUrl) {
               await updateTwilioWebhooks(newUrl);
+              await updateSignalWireWebhooks(newUrl);
             }
           } catch (err) {
             console.error('Failed to auto-reconnect local tunnel:', err.message);
@@ -5169,6 +5178,48 @@ async function updateTwilioWebhooks(tunnelUrl) {
   }
 }
 
+// Automatically update SignalWire phone number webhook with current tunnel URL in local development
+async function updateSignalWireWebhooks(tunnelUrl) {
+  const projectId = process.env.SIGNALWIRE_PROJECT_ID;
+  const apiToken = process.env.SIGNALWIRE_API_TOKEN;
+  const spaceUrl = process.env.SIGNALWIRE_SPACE_URL;
+  const signalwireNumber = process.env.SIGNALWIRE_PHONE_NUMBER;
+
+  if (!projectId || !apiToken || !spaceUrl || !signalwireNumber) {
+    console.log('[SignalWire Webhook Auto-Update] Skipped: SIGNALWIRE_PROJECT_ID, SIGNALWIRE_API_TOKEN, SIGNALWIRE_SPACE_URL, or SIGNALWIRE_PHONE_NUMBER is not set.');
+    return;
+  }
+
+  if (isMockEnabled()) {
+    console.log('[SignalWire Webhook Auto-Update] Skipped: Mock telephony mode is active.');
+    return;
+  }
+
+  try {
+    console.log(`[SignalWire Webhook Auto-Update] Searching for SignalWire number ${signalwireNumber}...`);
+    const spaceHost = spaceUrl.includes('/api/laml') ? spaceUrl : `${spaceUrl}/api/laml`;
+    const client = signalwire(projectId, apiToken, { signalwireSpaceUrl: spaceHost });
+    const numbers = await client.incomingPhoneNumbers.list({
+      phoneNumber: signalwireNumber,
+      limit: 1
+    });
+
+    if (numbers.length > 0) {
+      const numberSid = numbers[0].sid;
+      console.log(`[SignalWire Webhook Auto-Update] Found SignalWire Number SID: ${numberSid}. Updating webhook to ${tunnelUrl}/incoming-call...`);
+      await client.incomingPhoneNumbers(numberSid).update({
+        voiceUrl: `${tunnelUrl}/incoming-call`,
+        voiceMethod: 'POST'
+      });
+      console.log(`[SignalWire Webhook Auto-Update] Successfully updated voice webhook URL for ${signalwireNumber}`);
+    } else {
+      console.warn(`[SignalWire Webhook Auto-Update] Warning: Phone number ${signalwireNumber} not found in this SignalWire account.`);
+    }
+  } catch (err) {
+    console.error('[SignalWire Webhook Auto-Update] Failed to update SignalWire webhook:', err.message);
+  }
+}
+
 // Initialize database and start HTTP Server
 initDb().then(async () => {
   const isProduction = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PUBLIC_DOMAIN;
@@ -5189,6 +5240,7 @@ initDb().then(async () => {
       const tunnelUrl = await startSshTunnel();
       if (tunnelUrl) {
         await updateTwilioWebhooks(tunnelUrl);
+        await updateSignalWireWebhooks(tunnelUrl);
         console.log(`- Public HTTPS URL: ${tunnelUrl}`);
       }
     } else if (process.env.NGROK_URL) {
