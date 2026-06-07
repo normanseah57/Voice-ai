@@ -96,8 +96,9 @@ const originalFetch = window.fetch;
 window.fetch = async function (url, options = {}) {
   const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : '');
 
-  if (urlStr.startsWith('/api/') && !urlStr.startsWith('/api/auth/')) {
+  if (urlStr.startsWith('/api/') && (!urlStr.startsWith('/api/auth/') || urlStr.startsWith('/api/auth/2fa/'))) {
     options.headers = options.headers || {};
+
     const authVal = saasToken ? (saasToken.startsWith('Bearer ') ? saasToken : `Bearer ${saasToken}`) : null;
     if (authVal) {
       if (options.headers instanceof Headers) {
