@@ -3135,15 +3135,29 @@ function escapeHtml(unsafe) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
+  let str = dateStr;
+  const isDateTime = dateStr.includes(':');
+  if (isDateTime && !dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-')) {
+    str = dateStr.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(str);
   if (isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  
+  const options = { month: 'short', day: 'numeric', year: 'numeric' };
+  if (!isDateTime) {
+    options.timeZone = 'UTC';
+  }
+  return d.toLocaleDateString('en-US', options);
 }
 
 function formatRelativeTime(dateStr) {
   if (!dateStr) return '';
+  let str = dateStr;
+  if (dateStr.includes(':') && !dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-')) {
+    str = dateStr.replace(' ', 'T') + 'Z';
+  }
   const now = new Date();
-  const date = new Date(dateStr);
+  const date = new Date(str);
   const diffMs = now - date;
   const diffSecs = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffSecs / 60);
@@ -3162,7 +3176,12 @@ function formatRelativeTime(dateStr) {
 
 function formatTime(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
+  let str = dateStr;
+  if (dateStr.includes(':') && !dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-')) {
+    str = dateStr.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 

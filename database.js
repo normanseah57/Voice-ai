@@ -2666,7 +2666,7 @@ export const updateCallSummary = async (call_sid, summary) => {
 };
 
 export const getCallLogs = async (tenant_id) => {
-  return await all('SELECT * FROM calls WHERE tenant_id = ? ORDER BY created_at DESC', [tenant_id]);
+  return await all("SELECT id, tenant_id, call_sid, direction, phone_number, status, duration, summary, transcript, openai_cost, twilio_cost, strftime('%Y-%m-%dT%H:%M:%SZ', created_at) AS created_at FROM calls WHERE tenant_id = ? ORDER BY created_at DESC", [tenant_id]);
 };
 
 export const appendCallTranscript = async (call_sid, speaker, text) => {
@@ -2936,7 +2936,7 @@ export const logTenantActivity = async (tenantId, activityType, description) => 
 };
 
 export const getPlatformActivities = async () => {
-  return await all('SELECT * FROM tenant_activities ORDER BY created_at DESC LIMIT 50');
+  return await all("SELECT id, tenant_id, company_name, activity_type, description, strftime('%Y-%m-%dT%H:%M:%SZ', created_at) AS created_at FROM tenant_activities ORDER BY created_at DESC LIMIT 50");
 };
 
 // ==========================================
@@ -3679,10 +3679,10 @@ export const getAllAppointmentsWithTenant = async () => {
 
 export const getAllCallsWithTenant = async () => {
   return await all(`
-    SELECT c.*, t.name as tenant_name, t.company_name as tenant_company 
+    SELECT c.id, c.tenant_id, c.call_sid, c.direction, c.phone_number, c.status, c.duration, c.summary, c.transcript, c.openai_cost, c.twilio_cost, strftime('%Y-%m-%dT%H:%M:%SZ', c.created_at) AS created_at, t.name as tenant_name, t.company_name as tenant_company 
     FROM calls c 
     JOIN tenants t ON c.tenant_id = t.id 
-    ORDER BY c.start_time DESC
+    ORDER BY c.created_at DESC
   `);
 };
 
@@ -3743,7 +3743,7 @@ export const updateCampaignStatus = async (tenant_id, id, status) => {
 
 export const getCampaignLogs = async (tenant_id, campaign_id) => {
   return await all(`
-    SELECT l.*, c.name as contact_name, c.phone as contact_phone, c.email as contact_email 
+    SELECT l.id, l.tenant_id, l.campaign_id, l.contact_id, l.channel, l.status, l.details, strftime('%Y-%m-%dT%H:%M:%SZ', l.processed_at) AS processed_at, c.name as contact_name, c.phone as contact_phone, c.email as contact_email 
     FROM campaign_logs l
     JOIN contacts c ON l.contact_id = c.id
     WHERE l.tenant_id = ? AND l.campaign_id = ?
