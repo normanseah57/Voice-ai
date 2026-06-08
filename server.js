@@ -2,6 +2,7 @@ import express from 'express';
 import compression from 'compression';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
+import https from 'https';
 import url from 'url';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -327,7 +328,7 @@ async function sendPaymentReminderWhatsApp(tenant, phone, daysLeft) {
   }
   try {
     const client = getTwilioClient();
-    const fromWhatsApp = `whatsapp:${process.env.TWILIO_PHONE_NUMBER || '+14155238886'}`;
+    const fromWhatsApp = `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`;
     await client.messages.create({ from: fromWhatsApp, to: `whatsapp:${phone}`, body });
     console.log(`[WhatsApp Reminder] Sent ${daysLeft}-day reminder to ${phone}`);
   } catch (err) {
@@ -4931,7 +4932,7 @@ mediaStreamWss.on('connection', (ws) => {
           
           // Send live WhatsApp via Twilio if configured
           const accountSid = process.env.TWILIO_ACCOUNT_SID;
-          const fromWhatsApp = `whatsapp:${process.env.TWILIO_PHONE_NUMBER || '+14155238886'}`;
+          const fromWhatsApp = `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`;
           if (accountSid && accountSid.startsWith('AC') && tenantPhone) {
             try {
               const client = getTwilioClient();
