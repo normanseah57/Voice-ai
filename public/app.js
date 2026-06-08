@@ -94,37 +94,67 @@ window._gotoPage = function(paginationId, page) {
 // Global Fetch Interceptor for SaaS Scoped API Calls
 const originalFetch = window.fetch;
 window.fetch = async function (url, options = {}) {
-  const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : '');
+  let urlStr = '';
+  let isRequest = false;
 
-  if (urlStr.startsWith('/api/') && (!urlStr.startsWith('/api/auth/') || urlStr.startsWith('/api/auth/2fa/'))) {
-    options.headers = options.headers || {};
+  if (url instanceof Request) {
+    urlStr = url.url;
+    isRequest = true;
+  } else {
+    urlStr = typeof url === 'string' ? url : String(url);
+  }
 
-    const authVal = saasToken ? (saasToken.startsWith('Bearer ') ? saasToken : `Bearer ${saasToken}`) : null;
-    if (authVal) {
-      if (options.headers instanceof Headers) {
-        options.headers.set('Authorization', authVal);
-      } else if (Array.isArray(options.headers)) {
-        options.headers.push(['Authorization', authVal]);
-      } else {
-        options.headers['Authorization'] = authVal;
+  let urlObj;
+  try {
+    urlObj = new URL(urlStr, window.location.origin);
+  } catch (e) {
+    // Fallback if URL cannot be parsed
+  }
+
+  const pathname = urlObj ? urlObj.pathname : '';
+
+  if (pathname.startsWith('/api/') && (!pathname.startsWith('/api/auth/') || pathname.startsWith('/api/auth/2fa/'))) {
+    if (isRequest) {
+      options.headers = options.headers || {};
+      const newHeaders = new Headers(options.headers);
+      for (const [key, value] of url.headers.entries()) {
+        if (!newHeaders.has(key)) {
+          newHeaders.set(key, value);
+        }
       }
-    }
-    // Inject Impersonation header if active
-    if (window.impersonateTenantId) {
-      if (options.headers instanceof Headers) {
-        options.headers.set('X-Impersonate-Tenant-Id', window.impersonateTenantId);
-      } else if (Array.isArray(options.headers)) {
-        options.headers.push(['X-Impersonate-Tenant-Id', window.impersonateTenantId]);
-      } else {
-        options.headers['X-Impersonate-Tenant-Id'] = window.impersonateTenantId;
+      const authVal = saasToken ? (saasToken.startsWith('Bearer ') ? saasToken : `Bearer ${saasToken}`) : null;
+      if (authVal) newHeaders.set('Authorization', authVal);
+      if (window.impersonateTenantId) {
+        newHeaders.set('X-Impersonate-Tenant-Id', window.impersonateTenantId);
+      }
+      url = new Request(url, { headers: newHeaders });
+    } else {
+      options.headers = options.headers || {};
+      const authVal = saasToken ? (saasToken.startsWith('Bearer ') ? saasToken : `Bearer ${saasToken}`) : null;
+      if (authVal) {
+        if (options.headers instanceof Headers) {
+          options.headers.set('Authorization', authVal);
+        } else if (Array.isArray(options.headers)) {
+          options.headers.push(['Authorization', authVal]);
+        } else {
+          options.headers['Authorization'] = authVal;
+        }
+      }
+      if (window.impersonateTenantId) {
+        if (options.headers instanceof Headers) {
+          options.headers.set('X-Impersonate-Tenant-Id', window.impersonateTenantId);
+        } else if (Array.isArray(options.headers)) {
+          options.headers.push(['X-Impersonate-Tenant-Id', window.impersonateTenantId]);
+        } else {
+          options.headers['X-Impersonate-Tenant-Id'] = window.impersonateTenantId;
+        }
       }
     }
   }
 
   const response = await originalFetch(url, options);
   if (response.status === 401) {
-    // Don't auto-logout on auth endpoints
-    if (!urlStr.includes('/api/auth/')) logout();
+    if (!pathname.includes('/api/auth/')) logout();
   }
   return response;
 };
@@ -10549,30 +10579,94 @@ window.handleGlobalTenantFilterChange = function(changedSelect) {
 // Reload wizard settings when Super Admin switches tenant on the settings page
 window.loadSettingsForSelectedTenant = async function() {
   try {
-    const res = await fetch('/api/settings');
-    if (!res.ok) return;
-    const s = await res.json();
-    window.lastLoadedSettings = s;
+    // 1. Fetch settings (which also sets DOM fields for company, agent, working hours, break periods, system mode, payment gateways, etc.)
+    await fetchSettings();
 
-    // Repopulate all wizard form fields with the selected tenant's settings
-    if (settingsCompany)    settingsCompany.value    = s.company_name || '';
-    if (settingsAgentName)  settingsAgentName.value  = s.agent_name   || '';
-    if (settingsHours)      settingsHours.value      = s.business_hours || '';
-    if (settingsServices)   settingsServices.value   = s.services_offered || '';
-    if (settingsModel)      settingsModel.value      = s.openai_model || 'gpt-4o-mini-realtime-preview';
-    if (settingsVoice)      settingsVoice.value      = s.voice || 'alloy';
-    if (settingsAccent)     settingsAccent.value     = s.voice_accent || 'default';
-    if (settingsTwilio)     settingsTwilio.value     = s.twilio_phone_number || '';
-    if (settingsTransfer)   settingsTransfer.value   = s.transfer_phone_number || '';
-    if (settingsResources)  settingsResources.value  = s.resources_list || '';
-    if (settingsPrompt)     settingsPrompt.value     = s.system_prompt || '';
-    if (settingsWebsiteUrl) settingsWebsiteUrl.value = s.website_url || '';
-    if (settingsMaxDuration) settingsMaxDuration.value = s.max_call_duration || 10;
-    if (settingsSilenceTimeout) settingsSilenceTimeout.value = s.max_no_speech_timeout || 30;
+    // 2. Fetch services catalog (loads the services spreadsheet catalog)
+    await fetchServicesCatalog();
+
+    // 3. Update addon switches in settings page based on impersonated tenant profile
+    try {
+      const profileRes = await fetch('/api/profile');
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        
+        const whatsappToggle = document.getElementById('settings-addon-whatsapp');
+        const whatsappStatus = document.getElementById('addon-whatsapp-status');
+        if (whatsappToggle) {
+          const active = profile.addon_whatsapp === 1;
+          whatsappToggle.checked = active;
+          if (whatsappStatus) {
+            whatsappStatus.textContent = active ? 'Status: Active (+$10/mo)' : 'Status: Inactive';
+            whatsappStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+        }
+
+        const crmToggle = document.getElementById('settings-addon-crm');
+        const crmStatus = document.getElementById('addon-crm-status');
+        if (crmToggle) {
+          const active = profile.addon_crm === 1;
+          crmToggle.checked = active;
+          if (crmStatus) {
+            crmStatus.textContent = active ? 'Status: Active (+$50/mo)' : 'Status: Inactive';
+            crmStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+        }
+
+        const accountingToggle = document.getElementById('settings-addon-accounting');
+        const accountingStatus = document.getElementById('addon-accounting-status');
+        if (accountingToggle) {
+          const active = profile.addon_accounting === 1;
+          accountingToggle.checked = active;
+          if (accountingStatus) {
+            accountingStatus.textContent = active ? 'Status: Active (+$20/mo)' : 'Status: Inactive';
+            accountingStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+        }
+
+        const stripeToggle = document.getElementById('settings-addon-stripe');
+        const stripeStatus = document.getElementById('addon-stripe-status');
+        const stripeKeysContainer = document.getElementById('stripe-keys-config');
+        const paymentProviderHiddenInput = document.getElementById('settings-payment-provider');
+        if (stripeToggle) {
+          const active = profile.addon_payment_gateway === 1;
+          stripeToggle.checked = active;
+          if (stripeKeysContainer) stripeKeysContainer.style.display = active ? 'flex' : 'none';
+          if (stripeStatus) {
+            stripeStatus.textContent = active ? 'Status: Active (+$5/mo)' : 'Status: Inactive';
+            stripeStatus.style.color = active ? '#10b981' : '#94a3b8';
+          }
+          if (paymentProviderHiddenInput) {
+            paymentProviderHiddenInput.value = active ? 'stripe' : 'sandbox';
+          }
+        }
+
+        const deptToggle = document.getElementById('settings-addon-departments');
+        const deptStatus = document.getElementById('addon-departments-status');
+        const deptGridContainer = document.getElementById('departments-addon-grid-container');
+        const globalTransferGroup = document.getElementById('global-transfer-number-group');
+        if (deptToggle) {
+          const active = profile.addon_department_routing === 1;
+          deptToggle.checked = active;
+          if (deptGridContainer) deptGridContainer.style.display = active ? 'flex' : 'none';
+          if (globalTransferGroup) globalTransferGroup.style.display = active ? 'none' : 'block';
+          if (active) {
+            loadDepartmentsList();
+          } else {
+            if (deptStatus) {
+              deptStatus.textContent = 'Status: Inactive';
+              deptStatus.style.color = '#94a3b8';
+            }
+          }
+        }
+      }
+    } catch (eProfile) {
+      console.warn('[Admin] Failed to load tenant profile addons:', eProfile);
+    }
 
     updateOnboardingProgress();
     showWizardStep(2); // Reset to first step for the newly selected tenant
-    showToast('Settings Loaded', `Loaded settings for selected tenant.`, 'success');
+    showToast('Settings Loaded', `Loaded settings and services catalog for selected tenant.`, 'success');
   } catch (e) {
     console.error('[Admin] Failed to load tenant settings:', e);
   }
